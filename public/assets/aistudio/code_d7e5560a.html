@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+
+<html dir="rtl" lang="ar"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;font-family:'Cairo',sans-serif;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{"colors":{"tertiary-fixed-dim":"#4edea3","surface":"#faf8ff","on-primary-fixed":"#00174b","tertiary-fixed":"#6ffbbe","outline-variant":"#c3c6d7","secondary-container":"#6063ee","on-error":"#ffffff","tertiary-container":"#007d55","on-tertiary-fixed":"#002113","on-primary-container":"#eeefff","surface-container-highest":"#dae2fd","inverse-primary":"#b4c5ff","surface-container":"#eaedff","surface-variant":"#dae2fd","secondary":"#4648d4","primary-container":"#2563eb","primary-fixed-dim":"#b4c5ff","on-tertiary":"#ffffff","on-error-container":"#93000a","surface-container-lowest":"#ffffff","surface-dim":"#d2d9f4","on-tertiary-container":"#bdffdb","on-secondary-fixed":"#07006c","on-background":"#131b2e","on-tertiary-fixed-variant":"#005236","error":"#ba1a1a","on-secondary-container":"#fffbff","secondary-fixed-dim":"#c0c1ff","background":"#faf8ff","on-primary":"#ffffff","on-secondary-fixed-variant":"#2f2ebe","inverse-on-surface":"#eef0ff","on-primary-fixed-variant":"#003ea8","outline":"#737686","inverse-surface":"#283044","surface-container-high":"#e2e7ff","on-secondary":"#ffffff","surface-bright":"#faf8ff","primary-fixed":"#dbe1ff","surface-container-low":"#f2f3ff","surface-tint":"#0053db","on-surface-variant":"#434655","tertiary":"#006242","on-surface":"#131b2e","error-container":"#ffdad6","secondary-fixed":"#e1e0ff","primary":"#004ac6"},"borderRadius":{"DEFAULT":"0.125rem","lg":"0.25rem","xl":"0.5rem","full":"0.75rem"},"spacing":{"gutter-sm":"0.75rem","gutter":"1rem","space-md":"0.75rem","space-xl":"1.5rem","space-xs":"0.25rem","gutter-lg":"1.5rem","space-sm":"0.5rem","margin":"1.5rem","margin-mobile":"1rem","space-lg":"1rem","space-2xl":"2rem","space-xxs":"0.125rem"},"fontFamily":{"headline-lg-mobile":["Cairo"],"headline-md":["Cairo"],"body-lg":["Cairo"],"headline-sm":["Cairo"],"headline-lg":["Cairo"],"body-md":["Cairo"],"metric-display":["Cairo"],"headline-xl-mobile":["Cairo"],"label-sm":["Cairo"],"title-md":["Cairo"],"label-md":["Cairo"],"label-lg":["Cairo"],"body-sm":["Cairo"],"title-sm":["Cairo"],"headline-xl":["Cairo"]},"fontSize":{"headline-lg-mobile":["18px",{"lineHeight":"26px","fontWeight":"700"}],"headline-md":["20px",{"lineHeight":"28px","fontWeight":"600"}],"body-lg":["14px",{"lineHeight":"22px","fontWeight":"400"}],"headline-sm":["16px",{"lineHeight":"24px","fontWeight":"600"}],"headline-lg":["24px",{"lineHeight":"32px","fontWeight":"700"}],"body-md":["13px",{"lineHeight":"20px","fontWeight":"400"}],"metric-display":["28px",{"lineHeight":"34px","fontWeight":"700"}],"headline-xl-mobile":["22px",{"lineHeight":"30px","fontWeight":"700"}],"label-sm":["11px",{"lineHeight":"14px","fontWeight":"600"}],"title-md":["15px",{"lineHeight":"22px","fontWeight":"600"}],"label-md":["12px",{"lineHeight":"16px","fontWeight":"500"}],"label-lg":["13px",{"lineHeight":"18px","fontWeight":"500"}],"body-sm":["12px",{"lineHeight":"18px","fontWeight":"400"}],"title-sm":["14px",{"lineHeight":"20px","fontWeight":"600"}],"headline-xl":["30px",{"lineHeight":"38px","fontWeight":"700"}]}}}};</script></head><body class="bg-surface font-body-md text-on-surface antialiased pb-20"><aside class="fixed right-0 top-0 h-full w-[260px] bg-surface-container-lowest z-50 flex flex-col justify-between shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="flex flex-col flex-1 overflow-y-auto"><div class="h-16 px-space-lg flex items-center justify-between shrink-0"><div class="flex items-center gap-space-sm"><img alt="Logo" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida/ALJJyrD0QY7cJpdKYC7iA8LQ5YaqLTf3rIPtrgVfaanG3bKga9XsYSMSu4wO3TXck8znjSg1Kn4scXq9UC5uUPx7e5kHSGS4G2RJ4I_VyvkcBjfbUk0A6306vmYiJ5IbncsSCdPWe3-59u7F6RGbQGP0wMReFqFt9DMn9xzk-JAamDH7X2Ndrt5XSrzGfPAMbHlEjIvykRaARV99nB7vY4j9XkPs-Z0yWocqIrGF2NytprelAg"/><div class="flex flex-col"><span class="font-title-md text-title-md text-on-surface">رواق CRM</span><span class="font-label-sm text-label-sm text-outline">منظومة الأعمال الذكية</span></div></div><button class="text-outline hover:text-on-surface hover:bg-surface-container p-space-xs rounded-lg transition-colors" type="button"><span class="material-symbols-outlined text-[20px]">dock_to_right</span></button></div><div class="px-space-md py-space-sm"><nav class="space-y-space-xxs" data-active-classes="bg-surface-container text-primary font-title-sm font-semibold rounded-xl"><a class="flex items-center justify-between px-space-md py-space-sm rounded-xl text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors font-title-sm text-title-sm" data-path="dashboard" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[20px]" style='font-variation-settings: "FILL" 0;'>dashboard</span><span>لوحة القيادة</span></div></a><a class="flex items-center justify-between px-space-md py-space-sm rounded-xl bg-surface-container text-primary font-title-sm text-title-sm font-semibold shadow-sm transition-colors" data-path="leads" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[20px]" style='font-variation-settings: "FILL" 1;'>filter_alt</span><span>العملاء المحتملين</span></div><span class="px-space-xs py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm">24 جديد</span></a><a class="flex items-center justify-between px-space-md py-space-sm rounded-xl text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors font-title-sm text-title-sm" data-path="contacts" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[20px]">group</span><span>جهات الاتصال</span></div></a><a class="flex items-center justify-between px-space-md py-space-sm rounded-xl text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors font-title-sm text-title-sm" data-path="accounts" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[20px]">domain</span><span>الشركات والحسابات</span></div></a><a class="flex items-center justify-between px-space-md py-space-sm rounded-xl text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors font-title-sm text-title-sm" data-path="deals" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[20px]">monetization_on</span><span>الصفقات والمبيعات</span></div></a><a class="flex items-center justify-between px-space-md py-space-sm rounded-xl text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors font-title-sm text-title-sm" data-path="activities" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[20px]">calendar_today</span><span>المهام والأنشطة</span></div><span class="px-space-xs py-0.5 rounded-full bg-error-container text-on-error-container font-label-sm text-label-sm">5 عاجل</span></a><a class="flex items-center justify-between px-space-md py-space-sm rounded-xl text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors font-title-sm text-title-sm" data-path="reports" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[20px]">bar_chart</span><span>التقارير والتحليلات</span></div></a></nav></div></div><div class="p-space-md space-y-space-sm shrink-0 bg-surface-container-lowest shadow-[0_-1px_4px_rgba(0,0,0,0.02)]"><nav data-active-classes="bg-surface-container text-primary font-title-sm font-semibold rounded-xl"><a class="flex items-center justify-between px-space-md py-space-sm rounded-xl text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors font-title-sm text-title-sm" data-path="settings" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[20px]">settings</span><span>الإعدادات والنظام</span></div></a></nav><div class="flex items-center justify-between p-space-sm rounded-xl bg-surface-container-low"><div class="flex items-center gap-space-sm"><div class="relative"><img alt="Profile" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida/ALJJyrD0QY7cJpdKYC7iA8LQ5YaqLTf3rIPtrgVfaanG3bKga9XsYSMSu4wO3TXck8znjSg1Kn4scXq9UC5uUPx7e5kHSGS4G2RJ4I_VyvkcBjfbUk0A6306vmYiJ5IbncsSCdPWe3-59u7F6RGbQGP0wMReFqFt9DMn9xzk-JAamDH7X2Ndrt5XSrzGfPAMbHlEjIvykRaARV99nB7vY4j9XkPs-Z0yWocqIrGF2NytprelAg"/><span class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-tertiary ring-2 ring-surface-container-lowest"></span></div><div class="flex flex-col"><span class="font-label-lg text-label-lg text-on-surface leading-tight">طارق العتيبي</span><span class="font-label-sm text-label-sm text-outline leading-tight">مدير مبيعات</span></div></div><button class="text-outline hover:text-on-surface transition-colors" type="button"><span class="material-symbols-outlined text-[18px]">more_vert</span></button></div></div></aside><div class="pr-[260px]"><header class="fixed top-0 right-[260px] left-0 h-16 bg-surface-container-lowest/90 backdrop-blur-xl z-40 px-space-xl flex items-center justify-between shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="flex items-center gap-space-lg"><div class="relative w-[420px]"><span class="material-symbols-outlined absolute right-space-sm top-1/2 -translate-y-1/2 text-outline text-[20px]">search</span><input class="w-full pr-10 pl-20 py-space-sm bg-surface-container-low text-on-surface placeholder:text-outline text-body-sm font-body-sm rounded-xl focus:outline-none focus:ring-1 focus:ring-primary" placeholder="ابحث عن عميل، صفقة، أو اكتب أمراً..." type="text"/><kbd class="absolute left-space-sm top-1/2 -translate-y-1/2 px-space-xs py-0.5 text-label-sm font-label-sm bg-surface-container-lowest text-outline rounded shadow-sm">Ctrl+K</kbd></div><div class="flex items-center gap-space-sm"><button class="flex items-center gap-space-xs px-space-md py-space-sm bg-surface-container-low text-primary font-title-sm text-title-sm rounded-xl hover:bg-surface-container transition-all" type="button"><span class="material-symbols-outlined text-[18px]">bolt</span><span>صفقة سريعة</span></button></div></div><div class="flex items-center gap-space-md"><div class="flex items-center gap-space-xs px-space-sm py-1 rounded-full bg-surface-container-low"><span class="w-2 h-2 rounded-full bg-tertiary animate-pulse"></span><span class="font-label-sm text-label-sm text-tertiary-container font-medium">مزامنة فورية نشطة</span></div><button class="flex items-center gap-space-xs px-space-md py-1 rounded-full bg-tertiary-fixed text-on-tertiary-fixed hover:bg-tertiary-fixed-dim font-label-sm text-label-sm transition-colors shadow-xs cursor-pointer" title="فتح صندوق المحادثات الموحد" type="button"><span class="material-symbols-outlined text-[16px]">forum</span><span>صندوق المحادثات الموحد</span><span class="px-1.5 py-0.2 rounded-full bg-tertiary text-on-tertiary font-bold text-[10px]">4</span></button><button class="relative p-space-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container rounded-lg transition-colors" type="button"><span class="material-symbols-outlined text-[22px]">notifications</span><span class="absolute top-1 right-1 w-4 h-4 bg-error text-on-error font-label-sm text-[10px] rounded-full flex items-center justify-center font-bold">3</span></button><div class="flex items-center gap-space-xs pr-space-xs"><img alt="Profile" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida/ALJJyrD0QY7cJpdKYC7iA8LQ5YaqLTf3rIPtrgVfaanG3bKga9XsYSMSu4wO3TXck8znjSg1Kn4scXq9UC5uUPx7e5kHSGS4G2RJ4I_VyvkcBjfbUk0A6306vmYiJ5IbncsSCdPWe3-59u7F6RGbQGP0wMReFqFt9DMn9xzk-JAamDH7X2Ndrt5XSrzGfPAMbHlEjIvykRaARV99nB7vY4j9XkPs-Z0yWocqIrGF2NytprelAg"/><span class="material-symbols-outlined text-[18px] text-outline">expand_more</span></div></div></header><main class="relative pt-16 bg-surface min-h-screen px-space-xl py-space-xl"><div class="flex flex-col w-full">
+<!-- Module Sub-Header & Controls Bar -->
+<div class="w-full bg-surface-container-lowest shadow-sm px-space-xl py-space-md mb-space-lg rounded-xl border border-surface-container">
+<div class="flex flex-col lg:flex-row lg:items-center justify-between gap-space-md">
+<div class="flex items-center gap-space-md">
+<div class="w-12 h-12 rounded-xl bg-surface-container-high flex items-center justify-center text-primary shadow-xs">
+<span class="material-symbols-outlined text-[26px]" style='font-variation-settings: "FILL" 1;'>filter_alt</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-space-sm">
+<h1 class="text-xl font-bold text-slate-900 leading-tight">العملاء المحتملين (Leads)</h1>
+<span class="px-space-xs py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm font-semibold">48 سجل متاح</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">إدارة وتأهيل جهات الاتصال التجارية وتتبع فرص التحويل</p>
+</div>
+</div>
+<div class="flex items-center gap-space-sm justify-start lg:justify-end">
+<!-- 4-icon View Switcher -->
+<div class="flex items-center p-0.5 bg-surface-container-low rounded-lg shadow-xs">
+<button class="p-1.5 text-on-surface-variant hover:text-on-surface rounded-md transition-colors" title="عرض جدول البيانات" type="button">
+<span class="material-symbols-outlined text-[18px]">table_rows</span>
+</button>
+<button class="p-1.5 bg-primary text-on-primary rounded-md shadow-xs flex items-center justify-center font-bold" title="عرض كانبان المراحل (نشط)" type="button">
+<span class="material-symbols-outlined text-[18px]" style='font-variation-settings: "FILL" 1;'>view_kanban</span>
+</button>
+<button class="p-1.5 text-on-surface-variant hover:text-on-surface rounded-md transition-colors" title="عرض متعدد الأجزاء" type="button">
+<span class="material-symbols-outlined text-[18px]">view_sidebar</span>
+</button>
+<button class="p-1.5 text-on-surface-variant hover:text-on-surface rounded-md transition-colors" title="بطاقات التحليلات" type="button">
+<span class="material-symbols-outlined text-[18px]">analytics</span>
+</button>
+</div>
+<!-- Crisp Filter Button (40x40px) -->
+<button class="w-10 h-10 rounded-lg border border-slate-200 bg-white text-slate-700 flex items-center justify-center hover:bg-slate-50 transition-colors shadow-xs" title="تصفية النتائج" type="button">
+<span class="material-symbols-outlined text-[20px]">tune</span>
+</button>
+<!-- Action Split Button -->
+<div class="inline-flex rounded-lg shadow-sm">
+<button class="flex items-center gap-space-xs px-space-md py-1.5 bg-primary hover:bg-on-primary-fixed-variant text-on-primary rounded-r-lg font-title-sm text-title-sm transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px]">person_add</span>
+<span>عميل جديد</span>
+</button>
+<button class="px-space-xs py-1.5 bg-primary hover:bg-on-primary-fixed-variant text-on-primary rounded-l-lg transition-colors border-r border-white/20" type="button">
+<span class="material-symbols-outlined text-[18px]">expand_more</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Row 2: Filter Pills & Metrics -->
+<div class="mt-space-md pt-space-sm flex flex-wrap items-center justify-between gap-space-md border-t border-surface-container">
+<div class="flex items-center gap-2 flex-wrap">
+<button class="px-3.5 py-1.5 rounded-full bg-primary text-on-primary text-sm font-semibold shadow-xs transition-colors" type="button">الكل (48)</button>
+<button class="px-3.5 py-1.5 rounded-full bg-surface-container-low hover:bg-surface-container text-on-surface-variant text-sm font-medium shadow-xs transition-colors" type="button">عملائي (18)</button>
+<button class="px-3.5 py-1.5 rounded-full bg-surface-container-low hover:bg-surface-container text-on-surface-variant text-sm font-medium shadow-xs transition-colors" type="button">لم يُرد عليهم (7)</button>
+<button class="px-3.5 py-1.5 rounded-full bg-error-container text-on-error-container text-sm font-semibold shadow-xs transition-colors" type="button">ساخن (12) 🔥</button>
+<button class="px-3.5 py-1.5 rounded-full bg-surface-container-low hover:bg-surface-container text-on-surface-variant text-sm font-medium shadow-xs transition-colors" type="button">مكرر محتمل (2)</button>
+<button class="px-3.5 py-1.5 rounded-full border border-dashed border-slate-300 hover:border-primary text-slate-600 hover:text-primary text-sm font-medium bg-transparent hover:bg-surface-container-low transition-colors flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[16px]">add</span>
+<span>إضافة فلتر مخصص</span>
+</button>
+</div>
+<div class="flex items-center gap-space-lg flex-wrap">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-secondary text-[18px]">speed</span>
+<span class="font-label-md text-label-md text-on-surface-variant">متوسط سرعة الاستجابة:</span>
+<span class="font-title-sm text-title-sm text-on-surface font-bold">14 دقيقة</span>
+<span class="text-tertiary font-label-sm text-label-sm bg-tertiary-fixed/30 px-1.5 py-0.5 rounded font-semibold">ممتاز</span>
+</div>
+<div class="w-px h-3.5 bg-outline-variant"></div>
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-tertiary text-[18px]">trending_up</span>
+<span class="font-label-md text-label-md text-on-surface-variant">معدل التحويل التراكمي:</span>
+<span class="font-title-sm text-title-sm text-on-surface font-bold">26.4%</span>
+<span class="text-tertiary font-label-sm text-label-sm bg-tertiary-fixed/30 px-1.5 py-0.5 rounded font-semibold">+3.2%</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Main Kanban Board Canvas -->
+<div class="w-full grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 items-start">
+<!-- ==================== COLUMN 1: NEW (جديد) ==================== -->
+<div class="flex flex-col bg-surface-container-low rounded-xl p-space-sm shadow-sm">
+<!-- Column Header -->
+<div class="relative bg-surface-container-lowest p-space-md rounded-lg shadow-xs overflow-hidden mb-space-sm">
+<div class="absolute top-0 right-0 left-0 h-1 bg-secondary-container"></div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-secondary-container text-[20px]">inbox</span>
+<h2 class="font-title-md text-title-md text-on-surface">جديد (New)</h2>
+<span class="px-2 py-0.5 rounded-full bg-surface-container-high text-primary font-label-sm text-label-sm font-bold">14</span>
+</div>
+<div class="flex items-center gap-1">
+<button class="p-1 hover:bg-surface-container text-outline hover:text-on-surface rounded transition-colors" title="إضافة عميل محتمل في هذه المرحلة" type="button">
+<span class="material-symbols-outlined text-[18px]">add</span>
+</button>
+<button class="p-1 hover:bg-surface-container text-outline hover:text-on-surface rounded transition-colors" title="خيارات القائمة" type="button">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+</div>
+</div>
+<div class="flex items-center justify-between mt-2 pt-2 border-t border-surface-container"><div class="flex items-center justify-between w-full"><span class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-1"><span class="material-symbols-outlined text-[15px] text-secondary">schedule</span>متوسط الاستجابة: 8 دقائق</span><span class="px-2 py-0.5 rounded-full bg-surface-container-high text-primary font-label-sm text-label-sm font-semibold">29% من التدفق</span></div></div>
+</div>
+<!-- Lead Cards Column Body -->
+<div class="flex flex-col gap-space-sm">
+<!-- Lead Card 1.1 (CHECKED) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-xs hover:shadow-md transition-all cursor-grab active:cursor-grabbing group border border-blue-500 ring-1 ring-blue-500/20 bg-blue-50/10">
+<div class="flex items-start justify-between gap-2">
+<div class="flex items-center gap-2">
+<!-- Checked Box (Top-Left in RTL view) -->
+<div class="w-4 h-4 rounded bg-[#2563EB] flex items-center justify-center shrink-0 cursor-pointer shadow-xs">
+<svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" stroke-width="2.5" viewbox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+</div>
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors text-[16px]">drag_indicator</span>
+<h3 class="font-title-sm text-title-sm text-on-surface font-bold hover:text-primary transition-colors">م. عبد الله السبيعي</h3>
+</div>
+<div class="flex items-center gap-1 shrink-0">
+<span class="px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm flex items-center gap-0.5"><span class="material-symbols-outlined text-[13px] text-outline">location_on</span>الرياض</span>
+<span class="px-2 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm font-bold shadow-xs">94% 🔥</span>
+</div>
+</div>
+<div class="mt-2 space-y-space-xxs pr-6">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface font-medium" dir="ltr">+966 50 123 4567</span>
+<span class="px-1.5 py-0.5 rounded bg-surface-container text-primary font-label-sm text-label-sm flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">hub</span>3 نقاط اتصال</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1"><span class="material-symbols-outlined text-[14px] text-outline">campaign</span>إعلان ميتا - رواد الأعمال Q2</p>
+<div class="p-1.5 rounded-lg bg-surface-container-low text-on-surface-variant font-body-sm text-body-sm border border-surface-container"><span class="text-outline font-semibold">آخر رسالة:</span> "هل يتوفر ربط فوري مع ZATCA؟"</div>
+</div>
+<div class="mt-3 pt-2.5 border-t border-surface-container flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="px-2 py-0.5 rounded bg-tertiary-fixed-dim/40 text-on-tertiary-fixed font-label-sm text-label-sm flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">chat</span>واتساب</span>
+<span class="font-label-sm text-label-sm text-outline">منذ 10 د</span>
+</div>
+<div class="flex items-center gap-space-xs">
+<div class="relative" title="المسؤول: طارق العتيبي">
+<img alt="طارق العتيبي" class="w-6 h-6 rounded-full object-cover shadow-xs" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD00DzPBgTUWxHN_33QU0qaadDOvKpJ9mX6W5CRmecU549DRlA62O9e2BZ6J3mmrnwdT504KWXitrvPnFaPMuNyUQglksmhvGZXf_yoju37LN6BAvCT__cQ0KWv5w4b7YHQov9e-IMHvhWH4GS260yGgdJr4DZXqz1eWH0t1r3KPJaQyyBb5A3-DL-To9XOt1C65yXJ6PvUh5-iCtlE4Ue2lLLFcrpalEE3ev3qivLv"/>
+</div>
+<button class="p-1 rounded-md bg-tertiary text-on-tertiary hover:opacity-90 transition-opacity flex items-center justify-center shadow-xs" title="فتح محادثة واتساب فورية" type="button"><span class="material-symbols-outlined text-[16px]">send</span></button>
+<button class="p-1 rounded-md bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors flex items-center justify-center shadow-xs" title="اتصال هاتفي" type="button"><span class="material-symbols-outlined text-[16px]">call</span></button>
+</div>
+</div>
+</div>
+<!-- Lead Card 1.2 (CHECKED) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-xs hover:shadow-md transition-all cursor-grab active:cursor-grabbing group border border-blue-500 ring-1 ring-blue-500/20 bg-blue-50/10">
+<div class="flex items-start justify-between gap-2">
+<div class="flex items-center gap-2">
+<!-- Checked Box -->
+<div class="w-4 h-4 rounded bg-[#2563EB] flex items-center justify-center shrink-0 cursor-pointer shadow-xs">
+<svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" stroke-width="2.5" viewbox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+</div>
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors text-[16px]">drag_indicator</span>
+<h3 class="font-title-sm text-title-sm text-on-surface font-bold hover:text-primary transition-colors">سارة ناصر المنصور</h3>
+</div>
+<div class="flex items-center gap-1 shrink-0">
+<span class="px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm flex items-center gap-0.5"><span class="material-symbols-outlined text-[13px] text-outline">location_on</span>جدة</span>
+<span class="px-2 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm font-bold">88%</span>
+</div>
+</div>
+<div class="mt-2 space-y-space-xxs pr-6">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface font-medium" dir="ltr">+966 54 876 5432</span>
+<span class="px-1.5 py-0.5 rounded bg-surface-container text-primary font-label-sm text-label-sm flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">hub</span>2 نقاط اتصال</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1"><span class="material-symbols-outlined text-[14px] text-outline">campaign</span>حملة سناب شات - الرياض</p>
+<div class="p-1.5 rounded-lg bg-surface-container-low text-on-surface-variant font-body-sm text-body-sm border border-surface-container"><span class="text-outline font-semibold">آخر رسالة:</span> "نرغب في باقة سنوية لـ 15 مستخدم"</div>
+</div>
+<div class="mt-3 pt-2.5 border-t border-surface-container flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="px-2 py-0.5 rounded bg-surface-container-high text-on-surface font-label-sm text-label-sm flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">photo_camera</span>سناب شات</span>
+<span class="font-label-sm text-label-sm text-outline">منذ 25 د</span>
+</div>
+<div class="flex items-center gap-space-xs">
+<div class="relative" title="المسؤول: ريم الدوسري">
+<img alt="ريم الدوسري" class="w-6 h-6 rounded-full object-cover shadow-xs" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBqg0eHJ41qKGU_RLLFL0irBOQocRKcjPaeL1o70nicRkUDeUF3tN2UGV-5JNYqwGE4dxaWY-l-Ag31zG_tu7PUBzSpOB-0uASBxr5o-JvXPaScDL0grZinrEd61bSPlUQjJVd7yzFyZyJgoqJ1KaoiPxASheY6otG4fvGO1JWBG81Yw0gjRAkOVOur-fDBqkuisn-nsIPuXizvifw5g65BaLRGSaQWMYRVuruWQb2x"/>
+</div>
+<button class="p-1 rounded-md bg-secondary text-on-secondary hover:opacity-90 transition-opacity flex items-center justify-center shadow-xs" title="بدء محادثة مباشرة" type="button"><span class="material-symbols-outlined text-[16px]">chat</span></button>
+<button class="p-1 rounded-md bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors flex items-center justify-center shadow-xs" title="اتصال هاتفي" type="button"><span class="material-symbols-outlined text-[16px]">call</span></button>
+</div>
+</div>
+</div>
+<!-- Lead Card 1.3 (UNCHECKED) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-xs hover:shadow-md transition-all cursor-grab active:cursor-grabbing group">
+<div class="flex items-start justify-between gap-2">
+<div class="flex items-center gap-2">
+<!-- Unchecked Box -->
+<div class="w-4 h-4 rounded border border-slate-300 bg-white shrink-0 cursor-pointer shadow-xs hover:border-primary"></div>
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors text-[16px]">drag_indicator</span>
+<h3 class="font-title-sm text-title-sm text-on-surface font-bold hover:text-primary transition-colors">فهد عبد العزيز الدوسري</h3>
+</div>
+<div class="flex items-center gap-1 shrink-0">
+<span class="px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm flex items-center gap-0.5"><span class="material-symbols-outlined text-[13px] text-outline">location_on</span>الدمام</span>
+<span class="px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm font-semibold">79%</span>
+</div>
+</div>
+<div class="mt-2 space-y-space-xxs pr-6">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface font-medium" dir="ltr">+966 56 345 6789</span>
+<span class="px-1.5 py-0.5 rounded bg-surface-container text-primary font-label-sm text-label-sm flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">hub</span>2 نقاط اتصال</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1"><span class="material-symbols-outlined text-[14px] text-outline">campaign</span>إعلان بحث جوجل (Google Ads)</p>
+<div class="p-1.5 rounded-lg bg-surface-container-low text-on-surface-variant font-body-sm text-body-sm border border-surface-container"><span class="text-outline font-semibold">آخر رسالة:</span> "سجل اهتمام عبر نموذج استشارة مجانية"</div>
+</div>
+<div class="mt-3 pt-2.5 border-t border-surface-container flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="px-2 py-0.5 rounded bg-surface-container-high text-on-surface font-label-sm text-label-sm flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">language</span>نموذج ويب</span>
+<span class="font-label-sm text-label-sm text-outline">منذ 45 د</span>
+</div>
+<div class="flex items-center gap-space-xs">
+<div class="relative" title="المسؤول: طارق العتيبي">
+<img alt="طارق العتيبي" class="w-6 h-6 rounded-full object-cover shadow-xs" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDQ71GhfAH73AmICTXswajS0LPG0rPy-dwF0JYqhxY8sfCMcRUVF3X0uQhCpfEu3NdqelKE2sz7gdMFzxyHY6YXGM8tj4S3Vl5byX0wjvVwlW5N2EsfgYgGjPAuvNJ1v_XKUz9PPd3XxVO19QJC35Sb4cj6CbwWPN8TinKGzzRRhAYOhj8pMJR0xkiF1yGf2QzwyxXwsbwINqGFTWETqDXO09qr-YPNSHss0yD2IIfJ"/>
+</div>
+<button class="p-1 rounded-md bg-primary text-on-primary hover:opacity-90 transition-opacity flex items-center justify-center shadow-xs" title="اتصال هاتفي سريع" type="button"><span class="material-symbols-outlined text-[16px]">call</span></button>
+<button class="p-1 rounded-md bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors flex items-center justify-center shadow-xs" title="محادثة" type="button"><span class="material-symbols-outlined text-[16px]">chat</span></button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- ==================== COLUMN 2: CONTACTED (تم التواصل) ==================== -->
+<div class="flex flex-col bg-surface-container-low rounded-xl p-space-sm shadow-sm">
+<!-- Column Header -->
+<div class="relative bg-surface-container-lowest p-space-md rounded-lg shadow-xs overflow-hidden mb-space-sm">
+<div class="absolute top-0 right-0 left-0 h-1 bg-secondary"></div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-secondary text-[20px]">forum</span>
+<h2 class="font-title-md text-title-md text-on-surface">تم التواصل (Contacted)</h2>
+<span class="px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm font-bold">18</span>
+</div>
+<div class="flex items-center gap-1">
+<button class="p-1 hover:bg-surface-container text-outline hover:text-on-surface rounded transition-colors" title="إضافة عميل جديد" type="button">
+<span class="material-symbols-outlined text-[18px]">add</span>
+</button>
+<button class="p-1 hover:bg-surface-container text-outline hover:text-on-surface rounded transition-colors" title="خيارات" type="button">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+</div>
+</div>
+<div class="flex items-center justify-between mt-2 pt-2 border-t border-surface-container"><div class="flex items-center justify-between w-full"><span class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-1"><span class="material-symbols-outlined text-[15px] text-secondary">schedule</span>متوسط الاستجابة: 15 دقيقة</span><span class="px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm font-semibold">38% من التدفق</span></div></div>
+</div>
+<!-- Lead Cards Column Body -->
+<div class="flex flex-col gap-space-sm">
+<!-- Lead Card 2.1 (UNCHECKED) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-xs hover:shadow-md transition-all cursor-grab active:cursor-grabbing group">
+<div class="flex items-start justify-between gap-2">
+<div class="flex items-center gap-2">
+<!-- Square Checkbox -->
+<div class="w-4 h-4 rounded border border-slate-300 bg-white shrink-0 cursor-pointer shadow-xs hover:border-primary"></div>
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors text-[16px]">drag_indicator</span>
+<h3 class="font-title-sm text-title-sm text-on-surface font-bold hover:text-primary transition-colors">ريم القحطاني</h3>
+</div>
+<div class="flex items-center gap-1 shrink-0">
+<span class="px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm flex items-center gap-0.5"><span class="material-symbols-outlined text-[13px] text-outline">location_on</span>الرياض</span>
+<span class="px-2 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm font-bold shadow-xs">91% 🔥</span>
+</div>
+</div>
+<div class="mt-2 space-y-space-xxs pr-6">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface font-medium" dir="ltr">+966 55 987 6543</span>
+<span class="px-1.5 py-0.5 rounded bg-surface-container text-primary font-label-sm text-label-sm flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">hub</span>4 نقاط اتصال</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1"><span class="material-symbols-outlined text-[14px] text-outline">campaign</span>إعلان إنستغرام ريلز - باقة الأعمال</p>
+<div class="p-1.5 rounded-lg bg-surface-container-low text-on-surface-variant font-body-sm text-body-sm border border-surface-container"><span class="text-outline font-semibold">آخر رسالة:</span> "تمت مشاركة العرض التقديمي وننتظر الرد"</div>
+</div>
+<div class="mt-3 pt-2.5 border-t border-surface-container flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="px-2 py-0.5 rounded bg-surface-container-high text-on-surface font-label-sm text-label-sm flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">photo_camera</span>إنستغرام</span>
+<span class="font-label-sm text-label-sm text-outline">منذ 15 د</span>
+</div>
+<div class="flex items-center gap-space-xs">
+<div class="relative" title="المسؤول: ليلى الشهري">
+<img alt="ليلى الشهري" class="w-6 h-6 rounded-full object-cover shadow-xs" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDvvlMXXUekZvZHfbubjR6CE-DdFumESBVKdYgBvlBd97qa8Begzskb72HNlRIkvccke0yACTTxKKPS8UB5bMPAWwKCchudCGEriWp9ZxFd3p4aKKTe7a-DBoIZ6hKmsEk--zj3gl0RHi0LxIuU2LZ7-SlENy_auTwUaSi0G5WprCLAqI6ficNSbi8wyPf05i8c1DX1bhGXehfaFRDhk_GbcbO-oQmHHtJ1Oo1AC7d9"/>
+</div>
+<button class="p-1 rounded-md bg-tertiary text-on-tertiary hover:opacity-90 transition-opacity flex items-center justify-center shadow-xs" title="فتح المحادثة الفورية" type="button"><span class="material-symbols-outlined text-[16px]">forum</span></button>
+<button class="p-1 rounded-md bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors flex items-center justify-center shadow-xs" title="اتصال هاتفي" type="button"><span class="material-symbols-outlined text-[16px]">call</span></button>
+</div>
+</div>
+</div>
+<!-- Lead Card 2.2 (UNCHECKED) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-xs hover:shadow-md transition-all cursor-grab active:cursor-grabbing group">
+<div class="flex items-start justify-between gap-2">
+<div class="flex items-center gap-2">
+<!-- Square Checkbox -->
+<div class="w-4 h-4 rounded border border-slate-300 bg-white shrink-0 cursor-pointer shadow-xs hover:border-primary"></div>
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors text-[16px]">drag_indicator</span>
+<h3 class="font-title-sm text-title-sm text-on-surface font-bold hover:text-primary transition-colors">خالد بن مسعود</h3>
+</div>
+<div class="flex items-center gap-1 shrink-0">
+<span class="px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm flex items-center gap-0.5"><span class="material-symbols-outlined text-[13px] text-outline">location_on</span>الخبر</span>
+<span class="px-2 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm font-semibold">82%</span>
+</div>
+</div>
+<div class="mt-2 space-y-space-xxs pr-6">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface font-medium" dir="ltr">+966 50 765 4321</span>
+<span class="px-1.5 py-0.5 rounded bg-surface-container text-primary font-label-sm text-label-sm flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">hub</span>3 نقاط اتصال</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1"><span class="material-symbols-outlined text-[14px] text-outline">campaign</span>إعلان رسائل ماسنجر (Meta Ads)</p>
+<div class="p-1.5 rounded-lg bg-surface-container-low text-on-surface-variant font-body-sm text-body-sm border border-surface-container"><span class="text-outline font-semibold">آخر رسالة:</span> "تم الاتفاق على موعد العرض التجريبي الأربعاء"</div>
+</div>
+<div class="mt-3 pt-2.5 border-t border-surface-container flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="px-2 py-0.5 rounded bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">chat_bubble</span>ماسنجر</span>
+<span class="font-label-sm text-label-sm text-outline">منذ ساعتين</span>
+</div>
+<div class="flex items-center gap-space-xs">
+<div class="relative" title="المسؤول: طارق العتيبي">
+<img alt="طارق العتيبي" class="w-6 h-6 rounded-full object-cover shadow-xs" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD7bJQrexRxwb5qTniQvmOe17aac7HbrYSch86r3l03wXx1Nu6ncCC1i-uCaSVGQVz03rj8SxDBA04ancDcaBwgLNtkQXBJFp7tdWL1_0sZ6KzNnSgDxh9pUVjmOGD2gbRDhDyl737I_qk_8t2eTQOdnf01SrjhxT1APEGgR7r-390AKVymwXFEOjBaFgRJqvBhvb1LzMdKwad6mOr8aNKV8lHPnbDm3krr30o1OBUm"/>
+</div>
+<button class="p-1 rounded-md bg-secondary text-on-secondary hover:opacity-90 transition-opacity flex items-center justify-center shadow-xs" title="متابعة الرد" type="button"><span class="material-symbols-outlined text-[16px]">reply</span></button>
+<button class="p-1 rounded-md bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors flex items-center justify-center shadow-xs" title="اتصال هاتفي" type="button"><span class="material-symbols-outlined text-[16px]">call</span></button>
+</div>
+</div>
+</div>
+<!-- Lead Card 2.3 (UNCHECKED) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-xs hover:shadow-md transition-all cursor-grab active:cursor-grabbing group">
+<div class="flex items-start justify-between gap-2">
+<div class="flex items-center gap-2">
+<!-- Square Checkbox -->
+<div class="w-4 h-4 rounded border border-slate-300 bg-white shrink-0 cursor-pointer shadow-xs hover:border-primary"></div>
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors text-[16px]">drag_indicator</span>
+<h3 class="font-title-sm text-title-sm text-on-surface font-bold hover:text-primary transition-colors">د. حسام الشمري</h3>
+</div>
+<div class="flex items-center gap-1 shrink-0">
+<span class="px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm flex items-center gap-0.5"><span class="material-symbols-outlined text-[13px] text-outline">location_on</span>حائل</span>
+<span class="px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm font-semibold">76%</span>
+</div>
+</div>
+<div class="mt-2 space-y-space-xxs pr-6">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface font-medium" dir="ltr">+966 53 210 9876</span>
+<span class="px-1.5 py-0.5 rounded bg-surface-container text-primary font-label-sm text-label-sm flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">hub</span>2 نقاط اتصال</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1"><span class="material-symbols-outlined text-[14px] text-outline">campaign</span>إعلان واتساب كليك تو شات</p>
+<div class="p-1.5 rounded-lg bg-surface-container-low text-on-surface-variant font-body-sm text-body-sm border border-surface-container"><span class="text-outline font-semibold">آخر رسالة:</span> "طلب تفاصيل الربط مع نظام إدارة العيادات"</div>
+</div>
+<div class="mt-3 pt-2.5 border-t border-surface-container flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="px-2 py-0.5 rounded bg-tertiary-fixed-dim/40 text-on-tertiary-fixed font-label-sm text-label-sm flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">chat</span>واتساب</span>
+<span class="font-label-sm text-label-sm text-outline">منذ 3 س</span>
+</div>
+<div class="flex items-center gap-space-xs">
+<div class="relative" title="المسؤول: ماجد السبيعي">
+<img alt="ماجد السبيعي" class="w-6 h-6 rounded-full object-cover shadow-xs" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAaa2mx74X28nrJgPdg6CjFX2u_ZQwh5diW-JjLT86OOMZIwmKlHt0MBCfkzmyaAt0Fyh2wI14yDY3kXmvfkwQRhuRv5C6shQDaIrRDTjBnFpICzOww0G7mraoG5WEGeNOE9Rc1jzvX2cBY8rJYdmfjWiZ20XjRe3ihncNbu59-b3iBIbYPY7VdSlp9wkQeBkGr4vNEof9lbvj0Uk21V5VvyOUEK00STK8PQQerUjYh"/>
+</div>
+<button class="p-1 rounded-md bg-tertiary text-on-tertiary hover:opacity-90 transition-opacity flex items-center justify-center shadow-xs" title="إرسال رسالة تذكير" type="button"><span class="material-symbols-outlined text-[16px]">forward_to_inbox</span></button>
+<button class="p-1 rounded-md bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors flex items-center justify-center shadow-xs" title="اتصال هاتفي" type="button"><span class="material-symbols-outlined text-[16px]">call</span></button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- ==================== COLUMN 3: QUALIFIED (مؤهل للتحويل) ==================== -->
+<div class="flex flex-col bg-surface-container-low rounded-xl p-space-sm shadow-sm">
+<!-- Column Header -->
+<div class="relative bg-surface-container-lowest p-space-md rounded-lg shadow-xs overflow-hidden mb-space-sm">
+<div class="absolute top-0 right-0 left-0 h-1 bg-tertiary"></div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-tertiary text-[20px]" style='font-variation-settings: "FILL" 1;'>verified</span>
+<h2 class="font-title-md text-title-md text-on-surface">مؤهل للتحويل (Qualified)</h2>
+<span class="px-2 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm font-bold">11</span>
+</div>
+<div class="flex items-center gap-1">
+<button class="p-1 hover:bg-surface-container text-outline hover:text-on-surface rounded transition-colors" title="إضافة عميل مؤهل" type="button">
+<span class="material-symbols-outlined text-[18px]">add</span>
+</button>
+<button class="p-1 hover:bg-surface-container text-outline hover:text-on-surface rounded transition-colors" title="خيارات" type="button">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+</div>
+</div>
+<div class="flex items-center justify-between mt-2 pt-2 border-t border-surface-container"><div class="flex items-center justify-between w-full"><span class="font-label-sm text-label-sm text-tertiary flex items-center gap-1"><span class="material-symbols-outlined text-[15px]">trending_up</span>معدل التحويل: 64%</span><span class="px-2 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm font-semibold">23% من التدفق</span></div></div>
+</div>
+<!-- Lead Cards Column Body -->
+<div class="flex flex-col gap-space-sm">
+<!-- Lead Card 3.1 (UNCHECKED) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-xs hover:shadow-md transition-all cursor-grab active:cursor-grabbing group ring-1 ring-tertiary/20">
+<div class="flex items-start justify-between gap-2">
+<div class="flex items-center gap-2">
+<!-- Square Checkbox -->
+<div class="w-4 h-4 rounded border border-slate-300 bg-white shrink-0 cursor-pointer shadow-xs hover:border-primary"></div>
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors text-[16px]">drag_indicator</span>
+<h3 class="font-title-sm text-title-sm text-on-surface font-bold hover:text-primary transition-colors">منى الزهراني</h3>
+</div>
+<div class="flex items-center gap-1 shrink-0">
+<span class="px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm flex items-center gap-0.5"><span class="material-symbols-outlined text-[13px] text-outline">location_on</span>جدة</span>
+<span class="px-2 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm font-bold shadow-xs">96% 🔥</span>
+</div>
+</div>
+<div class="mt-2 space-y-space-xxs pr-6">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface font-medium" dir="ltr">+966 55 112 2334</span>
+<span class="px-1.5 py-0.5 rounded bg-tertiary-fixed/40 text-on-tertiary-fixed font-label-sm text-label-sm font-semibold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">hub</span>5 نقاط اتصال</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1"><span class="material-symbols-outlined text-[14px] text-outline">campaign</span>إعلان ميتا ليدز - قمة الشركات</p>
+<div class="p-1.5 rounded-lg bg-surface-container-low text-on-surface-variant font-body-sm text-body-sm border border-surface-container"><span class="text-outline font-semibold">آخر رسالة:</span> "بانتظار العرض الفني والمالي لاعتماده"</div>
+</div>
+<div class="mt-3 pt-2.5 border-t border-surface-container flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="px-2 py-0.5 rounded bg-tertiary-fixed-dim/40 text-on-tertiary-fixed font-label-sm text-label-sm flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">chat</span>واتساب</span>
+<span class="font-label-sm text-label-sm text-outline">منذ 8 د</span>
+</div>
+<div class="flex items-center gap-space-xs">
+<div class="relative" title="المسؤول: طارق العتيبي">
+<img alt="طارق العتيبي" class="w-6 h-6 rounded-full object-cover shadow-xs" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAAPLyuYI1TFvjyMLvuk1yy07fsCfhp7FUvPyoUXfz4zf4PS5TVyBqiF8GwmNxNG0ZOzJd4y5-3U1lEYMeQZFoKhBst3mSKLbQzn8dQKNxw3g4MIwp2LsGljDHzAC2uYzNaD2rYRiJrqkxB_fB1tKWDpLj0aOcIFnFKCOgGXyLRR26erdoRkeuXZJuJCtUrXpbnRMw0YplsJXISV8qnIpECc5qhxfoIgDZZk3gkZ71z"/>
+</div>
+<button class="p-1 rounded-md bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors flex items-center justify-center shadow-xs" title="محادثة" type="button"><span class="material-symbols-outlined text-[16px]">forum</span></button>
+<button class="p-1 rounded-md bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors flex items-center justify-center shadow-xs" title="اتصال هاتفي" type="button"><span class="material-symbols-outlined text-[16px]">call</span></button>
+</div>
+</div>
+<button class="w-full mt-1 py-1.5 px-space-sm bg-tertiary hover:bg-on-tertiary-fixed-variant text-on-tertiary rounded-lg font-title-sm text-title-sm font-bold flex items-center justify-center gap-space-xs shadow-xs transition-all" type="button">
+<span class="material-symbols-outlined text-[18px]">bolt</span>
+<span>⚡ تحويل العميل</span>
+</button>
+</div>
+</div>
+<!-- Lead Card 3.2 (UNCHECKED) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-xs hover:shadow-md transition-all cursor-grab active:cursor-grabbing group ring-1 ring-tertiary/20">
+<div class="flex items-start justify-between gap-2">
+<div class="flex items-center gap-2">
+<!-- Square Checkbox -->
+<div class="w-4 h-4 rounded border border-slate-300 bg-white shrink-0 cursor-pointer shadow-xs hover:border-primary"></div>
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors text-[16px]">drag_indicator</span>
+<h3 class="font-title-sm text-title-sm text-on-surface font-bold hover:text-primary transition-colors">م. سلطان الحربي</h3>
+</div>
+<div class="flex items-center gap-1 shrink-0">
+<span class="px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm flex items-center gap-0.5"><span class="material-symbols-outlined text-[13px] text-outline">location_on</span>الرياض</span>
+<span class="px-2 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm font-bold shadow-xs">92% 🔥</span>
+</div>
+</div>
+<div class="mt-2 space-y-space-xxs pr-6">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface font-medium" dir="ltr">+966 50 445 5667</span>
+<span class="px-1.5 py-0.5 rounded bg-tertiary-fixed/40 text-on-tertiary-fixed font-label-sm text-label-sm font-semibold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">hub</span>4 نقاط اتصال</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1"><span class="material-symbols-outlined text-[14px] text-outline">campaign</span>نموذج موقع رواق المباشر (Direct Lead)</p>
+<div class="p-1.5 rounded-lg bg-surface-container-low text-on-surface-variant font-body-sm text-body-sm border border-surface-container"><span class="text-outline font-semibold">آخر رسالة:</span> "تم التأكيد على رغبة الإدارة بالاشتراك الفوري"</div>
+</div>
+<div class="mt-3 pt-2.5 border-t border-surface-container flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="px-2 py-0.5 rounded bg-surface-container-high text-on-surface font-label-sm text-label-sm flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">link</span>مباشر</span>
+<span class="font-label-sm text-label-sm text-outline">منذ 40 د</span>
+</div>
+<div class="flex items-center gap-space-xs">
+<div class="relative" title="المسؤول: ماجد السبيعي">
+<img alt="ماجد السبيعي" class="w-6 h-6 rounded-full object-cover shadow-xs" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBdBF7oSDMIRn5cS2QWh7wG3_E6d50AcX-1hYV24MMGFSbHpJIR2kvjczvUDVwpWNblT8w6jyHiMwuVXiqk3ugTz4Ls3rmtjxzMGzj_UFf6ITOcWfhjBIQkjEobURd22pjSZscY0Z7zHM9x933tKhf9lO33OFu7umAdeSIIWxc-F2JXPmNWKQ50iW1OVxP9pRE9-wiJM8y-wmLxDhrNtFe392hsQghSXQ4ykTjXFyeB"/>
+</div>
+<button class="p-1 rounded-md bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors flex items-center justify-center shadow-xs" title="محادثة" type="button"><span class="material-symbols-outlined text-[16px]">forum</span></button>
+<button class="p-1 rounded-md bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors flex items-center justify-center shadow-xs" title="اتصال هاتفي" type="button"><span class="material-symbols-outlined text-[16px]">call</span></button>
+</div>
+</div>
+<button class="w-full mt-1 py-1.5 px-space-sm bg-tertiary hover:bg-on-tertiary-fixed-variant text-on-tertiary rounded-lg font-title-sm text-title-sm font-bold flex items-center justify-center gap-space-xs shadow-xs transition-all" type="button">
+<span class="material-symbols-outlined text-[18px]">bolt</span>
+<span>⚡ تحويل العميل</span>
+</button>
+</div>
+</div>
+<!-- Lead Card 3.3 (UNCHECKED) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-xs hover:shadow-md transition-all cursor-grab active:cursor-grabbing group">
+<div class="flex items-start justify-between gap-2">
+<div class="flex items-center gap-2">
+<!-- Square Checkbox -->
+<div class="w-4 h-4 rounded border border-slate-300 bg-white shrink-0 cursor-pointer shadow-xs hover:border-primary"></div>
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors text-[16px]">drag_indicator</span>
+<h3 class="font-title-sm text-title-sm text-on-surface font-bold hover:text-primary transition-colors">أحمد إبراهيم العلي</h3>
+</div>
+<div class="flex items-center gap-1 shrink-0">
+<span class="px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm flex items-center gap-0.5"><span class="material-symbols-outlined text-[13px] text-outline">location_on</span>الدمام</span>
+<span class="px-2 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm font-semibold">89%</span>
+</div>
+</div>
+<div class="mt-2 space-y-space-xxs pr-6">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface font-medium" dir="ltr">+966 50 889 9001</span>
+<span class="px-1.5 py-0.5 rounded bg-surface-container text-primary font-label-sm text-label-sm flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">hub</span>3 نقاط اتصال</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1"><span class="material-symbols-outlined text-[14px] text-outline">campaign</span>حملة لينكد إن B2B</p>
+<div class="p-1.5 rounded-lg bg-surface-container-low text-on-surface-variant font-body-sm text-body-sm border border-surface-container"><span class="text-outline font-semibold">آخر رسالة:</span> "طلب اجتماع لمناقشة تخصيص الصلاحيات"</div>
+</div>
+<div class="mt-3 pt-2.5 border-t border-surface-container flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="px-2 py-0.5 rounded bg-surface-container-high text-on-surface font-label-sm text-label-sm flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">work</span>لينكد إن</span>
+<span class="font-label-sm text-label-sm text-outline">منذ ساعة</span>
+</div>
+<div class="flex items-center gap-space-xs">
+<div class="relative" title="المسؤول: ريم الدوسري">
+<img alt="ريم الدوسري" class="w-6 h-6 rounded-full object-cover shadow-xs" src="https://lh3.googleusercontent.com/aida-public/AB6AXuASzeIlb9xl8DLD1A3-7NfCOGCl1ScydR4eQ37SXH9drdyTazDPQlBIQSZUtx6jtmxqqJiddfZhT07fqxLzxXQZ31m6ifszjJjI8afPb986BrTXcI6C5_JK0C_a7OyHw81kxdOGn7q1OiXIpqymE0cA46QPCrO6lBi7PxC4Xi3ZDbjeJxAwrhpJiZ1FdAA4oJlfMdkYLw95wwOwjh3ICRvCKqZm5hvtgJ5eG7WFo7QY"/>
+</div>
+<button class="p-1 rounded-md bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors flex items-center justify-center shadow-xs" title="محادثة" type="button"><span class="material-symbols-outlined text-[16px]">forum</span></button>
+<button class="p-1 rounded-md bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors flex items-center justify-center shadow-xs" title="اتصال هاتفي" type="button"><span class="material-symbols-outlined text-[16px]">call</span></button>
+</div>
+</div>
+<button class="w-full mt-1 py-1.5 px-space-sm bg-tertiary hover:bg-on-tertiary-fixed-variant text-on-tertiary rounded-lg font-title-sm text-title-sm font-bold flex items-center justify-center gap-space-xs shadow-xs transition-all" type="button">
+<span class="material-symbols-outlined text-[18px]">bolt</span>
+<span>⚡ تحويل العميل</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- ==================== COLUMN 4: DISQUALIFIED (غير مهتم / مستبعد) ==================== -->
+<div class="flex flex-col bg-surface-container-low rounded-xl p-space-sm shadow-sm opacity-90 hover:opacity-100 transition-opacity">
+<!-- Column Header -->
+<div class="relative bg-surface-container-lowest p-space-md rounded-lg shadow-xs overflow-hidden mb-space-sm">
+<div class="absolute top-0 right-0 left-0 h-1 bg-outline"></div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-outline text-[20px]">cancel</span>
+<h2 class="font-title-md text-title-md text-on-surface">غير مهتم / مستبعد</h2>
+<span class="px-2 py-0.5 rounded-full bg-error-container text-on-error-container font-label-sm text-label-sm font-bold">5</span>
+</div>
+<div class="flex items-center gap-1">
+<button class="p-1 hover:bg-surface-container text-outline hover:text-on-surface rounded transition-colors" title="خيارات" type="button">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+</div>
+</div>
+<div class="flex items-center justify-between mt-2 pt-2 border-t border-surface-container"><div class="flex items-center justify-between w-full"><span class="font-label-sm text-label-sm text-outline flex items-center gap-1"><span class="material-symbols-outlined text-[15px]">pie_chart</span>معدل الاستبعاد:</span><span class="px-2 py-0.5 rounded-full bg-error-container text-on-error-container font-label-sm text-label-sm font-semibold">10%</span></div></div>
+</div>
+<!-- Lead Cards Column Body -->
+<div class="flex flex-col gap-space-sm">
+<!-- Lead Card 4.1 (UNCHECKED) -->
+<div class="bg-surface-container-lowest/80 rounded-xl p-space-md shadow-xs hover:shadow-md transition-all cursor-grab active:cursor-grabbing group border border-transparent hover:border-surface-container">
+<div class="flex items-start justify-between gap-2">
+<div class="flex items-center gap-2">
+<!-- Square Checkbox -->
+<div class="w-4 h-4 rounded border border-slate-300 bg-white shrink-0 cursor-pointer shadow-xs hover:border-primary"></div>
+<span class="material-symbols-outlined text-outline text-[16px]">drag_indicator</span>
+<h3 class="font-title-sm text-title-sm text-on-surface-variant font-bold line-through">فيصل الهزاع</h3>
+</div>
+<div class="flex items-center gap-1 shrink-0">
+<span class="px-1.5 py-0.5 rounded bg-surface-container-high text-outline font-label-sm text-label-sm flex items-center gap-0.5"><span class="material-symbols-outlined text-[13px] text-outline">location_on</span>مكة</span>
+<span class="px-2 py-0.5 rounded-full bg-error-container text-on-error-container font-label-sm text-label-sm font-semibold">35% (مستبعد)</span>
+</div>
+</div>
+<div class="mt-2 space-y-space-xxs pr-6">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-outline" dir="ltr">+966 50 998 7766</span>
+<span class="px-1.5 py-0.5 rounded bg-surface-container text-outline font-label-sm text-label-sm flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">hub</span>1 نقطة</span>
+</div>
+<p class="font-body-sm text-body-sm text-outline flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">campaign</span>نموذج الموقع - غير مؤهل</p>
+<div class="flex items-center gap-1 mt-1"><span class="px-2 py-0.5 rounded bg-error-container/40 text-on-error-container font-label-sm text-label-sm">ميزانية غير متطابقة</span></div>
+</div>
+<div class="mt-3 pt-2.5 border-t border-surface-container flex items-center justify-between">
+<div class="flex items-center gap-space-xs"><span class="font-label-sm text-label-sm text-outline">منذ يومين</span></div>
+<div class="flex items-center gap-space-xs">
+<div class="relative" title="المسؤول: طارق العتيبي">
+<img alt="طارق العتيبي" class="w-6 h-6 rounded-full object-cover grayscale opacity-70" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD4a7aMfl6RzsXLFhvyXCNJoSxcm5L0IartpKsE5SKuZ2STfv3Ii9P1WRSjN06ZU5whEBTpgwloxwg-c-bdl28v65RH5_y_kfBlYXFZ8Dzb6f-ArpAR_OhFBYCYwEdFf_0PcXfdo9aaVoejF1i67LRHSCr9zW9VYHnboEVrp_jHQqBVg3wyMwujBYekLk2vq6PFrmBIOJuSMi10948KNslnglg3_N6C_hsVuBW49qSS"/>
+</div>
+<button class="px-2 py-1 rounded bg-surface-container hover:bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm transition-colors flex items-center gap-1 shadow-xs" title="استعادة العميل" type="button">
+<span class="material-symbols-outlined text-[14px]">refresh</span>
+<span>استعادة</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Lead Card 4.2 (UNCHECKED) -->
+<div class="bg-surface-container-lowest/80 rounded-xl p-space-md shadow-xs hover:shadow-md transition-all cursor-grab active:cursor-grabbing group border border-transparent hover:border-surface-container">
+<div class="flex items-start justify-between gap-2">
+<div class="flex items-center gap-2">
+<!-- Square Checkbox -->
+<div class="w-4 h-4 rounded border border-slate-300 bg-white shrink-0 cursor-pointer shadow-xs hover:border-primary"></div>
+<span class="material-symbols-outlined text-outline text-[16px]">drag_indicator</span>
+<h3 class="font-title-sm text-title-sm text-on-surface-variant font-bold line-through">وليد المطيري</h3>
+</div>
+<div class="flex items-center gap-1 shrink-0">
+<span class="px-1.5 py-0.5 rounded bg-surface-container-high text-outline font-label-sm text-label-sm flex items-center gap-0.5"><span class="material-symbols-outlined text-[13px] text-outline">location_on</span>الرياض</span>
+<span class="px-2 py-0.5 rounded-full bg-error-container text-on-error-container font-label-sm text-label-sm font-semibold">28% (مستبعد)</span>
+</div>
+</div>
+<div class="mt-2 space-y-space-xxs pr-6">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-outline" dir="ltr">+966 50 334 4556</span>
+<span class="px-1.5 py-0.5 rounded bg-surface-container text-outline font-label-sm text-label-sm flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">hub</span>1 نقطة</span>
+</div>
+<p class="font-body-sm text-body-sm text-outline flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">campaign</span>حملة تجريبية سابقة</p>
+<div class="flex items-center gap-1 mt-1"><span class="px-2 py-0.5 rounded bg-error-container/40 text-on-error-container font-label-sm text-label-sm">لا يوجد رد بعد 5 محاولات</span></div>
+</div>
+<div class="mt-3 pt-2.5 border-t border-surface-container flex items-center justify-between">
+<div class="flex items-center gap-space-xs"><span class="font-label-sm text-label-sm text-outline">منذ 4 أيام</span></div>
+<div class="flex items-center gap-space-xs">
+<div class="relative" title="المسؤول: ماجد السبيعي">
+<img alt="ماجد السبيعي" class="w-6 h-6 rounded-full object-cover grayscale opacity-70" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB5KG8R1-Ntr9AmI1Au22OXt9RdJB8Ng4ykUAfit7x-icEXO64Pf5diUHC73fp52tTfoK8evTv7Lx2UOxrfhRTQn35Utf4tGXKnvUY90J262eYFpgQtrSu3zXdjxAgZ-TKfsmGmFMAaaq6q_pn5F7K_qyUcDnzSgF0sJ3vy6UdhkkHUECv3-3HRwAsaJX5kMBu7qyCwJsEFwo_bpkof4ECyDNwM19nVFMbgw724xrzM"/>
+</div>
+<button class="px-2 py-1 rounded bg-surface-container hover:bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm transition-colors flex items-center gap-1 shadow-xs" title="أرشفة نهائية" type="button">
+<span class="material-symbols-outlined text-[14px]">archive</span>
+<span>أرشفة</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div></main></div>
+<!-- Bottom Floating Bulk Action Bar -->
+<div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+<div class="bg-slate-900 text-white rounded-2xl shadow-2xl px-5 py-3 border border-slate-700/80 flex items-center gap-3 backdrop-blur-md">
+<!-- Selected Count Badge -->
+<div class="flex items-center gap-2">
+<span class="w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center shadow-xs">2</span>
+<span class="text-sm font-semibold whitespace-nowrap text-slate-100">تم تحديد 2 سجلات</span>
+</div>
+<!-- Divider -->
+<div class="w-px h-5 bg-slate-700"></div>
+<!-- Actions -->
+<div class="flex items-center gap-1">
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-200 hover:text-white hover:bg-slate-800 text-xs font-medium transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">edit_note</span>
+<span>تحديث جماعي</span>
+</button>
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-200 hover:text-white hover:bg-slate-800 text-xs font-medium transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">label</span>
+<span>إضافة / إدارة التاغات</span>
+</button>
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-200 hover:text-white hover:bg-slate-800 text-xs font-medium transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">person_switch</span>
+<span>تغيير المالك</span>
+</button>
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-200 hover:text-white hover:bg-slate-800 text-xs font-medium transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">add_task</span>
+<span>إضافة مهمة</span>
+</button>
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-200 hover:text-white hover:bg-slate-800 text-xs font-medium transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">merge</span>
+<span>دمج المحدد</span>
+</button>
+</div>
+<!-- Divider -->
+<div class="w-px h-5 bg-slate-700"></div>
+<!-- Delete / Cancel -->
+<div class="flex items-center gap-1.5">
+<button class="flex items-center gap-1 px-3 py-1.5 rounded-lg text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 text-xs font-medium transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">delete</span>
+<span>حذف للسلة</span>
+</button>
+<button class="px-2.5 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 text-xs font-medium transition-colors" type="button">
+<span>إلغاء Esc</span>
+</button>
+</div>
+</div>
+</div>
+</body></html>

@@ -1,0 +1,6 @@
+{
+  "name": "رواق CRM",
+  "description": "منصة رواق لإدارة علاقات العملاء والمبيعات للمؤسسات باللغة العربية (RTL) مع مزامنة فورية عبر Firebase.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

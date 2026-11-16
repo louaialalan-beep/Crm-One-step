@@ -1,0 +1,563 @@
+<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0" name="viewport"><meta content="web_dashboard" name="shell-type"><link href="https://fonts.googleapis.com" rel="preconnect"><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"><link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{"colors":{"inverse-surface":"#283044","error":"#ba1a1a","on-tertiary-container":"#bdffdb","primary":"#004ac6","on-secondary-container":"#fffbff","primary-fixed":"#dbe1ff","surface-variant":"#dae2fd","on-primary":"#ffffff","secondary-container":"#6063ee","on-surface-variant":"#434655","on-secondary-fixed":"#07006c","on-primary-fixed":"#00174b","surface-container-lowest":"#ffffff","outline-variant":"#c3c6d7","surface-container-high":"#e2e7ff","on-surface":"#131b2e","tertiary-fixed-dim":"#4edea3","on-error":"#ffffff","surface-container":"#eaedff","tertiary":"#006242","surface":"#faf8ff","secondary-fixed":"#e1e0ff","surface-bright":"#faf8ff","on-tertiary":"#ffffff","surface-container-low":"#f2f3ff","tertiary-container":"#007d55","surface-container-highest":"#dae2fd","surface-tint":"#0053db","on-tertiary-fixed":"#002113","on-secondary":"#ffffff","primary-fixed-dim":"#b4c5ff","surface-dim":"#d2d9f4","secondary":"#4648d4","outline":"#737686","on-primary-container":"#eeefff","on-primary-fixed-variant":"#003ea8","on-background":"#131b2e","background":"#faf8ff","error-container":"#ffdad6","inverse-on-surface":"#eef0ff","tertiary-fixed":"#6ffbbe","on-error-container":"#93000a","on-tertiary-fixed-variant":"#005236","on-secondary-fixed-variant":"#2f2ebe","inverse-primary":"#b4c5ff","primary-container":"#2563eb","secondary-fixed-dim":"#c0c1ff"},"borderRadius":{"DEFAULT":"0.125rem","lg":"0.25rem","xl":"0.5rem","full":"0.75rem"},"spacing":{"margin-mobile":"1rem","space-lg":"1rem","space-sm":"0.5rem","space-xxs":"0.125rem","space-xs":"0.25rem","gutter-sm":"0.75rem","gutter-lg":"1.5rem","gutter":"1rem","space-md":"0.75rem","space-xl":"1.5rem","space-2xl":"2rem","margin":"1.5rem"},"fontFamily":{"headline-xl-mobile":["Cairo"],"body-sm":["Cairo"],"body-md":["Cairo"],"headline-sm":["Cairo"],"title-md":["Cairo"],"label-sm":["Cairo"],"headline-lg-mobile":["Cairo"],"headline-md":["Cairo"],"label-md":["Cairo"],"headline-xl":["Cairo"],"label-lg":["Cairo"],"title-sm":["Cairo"],"headline-lg":["Cairo"],"body-lg":["Cairo"],"metric-display":["Cairo"]},"fontSize":{"headline-xl-mobile":["22px",{"lineHeight":"30px","fontWeight":"700"}],"body-sm":["12px",{"lineHeight":"18px","fontWeight":"400"}],"body-md":["13px",{"lineHeight":"20px","fontWeight":"400"}],"headline-sm":["16px",{"lineHeight":"24px","fontWeight":"600"}],"title-md":["15px",{"lineHeight":"22px","fontWeight":"600"}],"label-sm":["11px",{"lineHeight":"14px","fontWeight":"600"}],"headline-lg-mobile":["18px",{"lineHeight":"26px","fontWeight":"700"}],"headline-md":["20px",{"lineHeight":"28px","fontWeight":"600"}],"label-md":["12px",{"lineHeight":"16px","fontWeight":"500"}],"headline-xl":["30px",{"lineHeight":"38px","fontWeight":"700"}],"label-lg":["13px",{"lineHeight":"18px","fontWeight":"500"}],"title-sm":["14px",{"lineHeight":"20px","fontWeight":"600"}],"headline-lg":["24px",{"lineHeight":"32px","fontWeight":"700"}],"body-lg":["14px",{"lineHeight":"22px","fontWeight":"400"}],"metric-display":["28px",{"lineHeight":"34px","fontWeight":"700"}]}}}};</script></head><body class="bg-surface font-body-md text-on-surface antialiased"><aside class="fixed right-0 top-0 h-full w-72 bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-50 flex flex-col justify-between select-none"><div class="flex flex-col"><div class="h-16 px-gutter flex items-center justify-between border-b border-surface-container-high"><div class="flex items-center gap-space-sm"><div class="w-9 h-9 rounded-xl bg-primary flex items-center justify-center text-on-primary shadow-sm"><span class="material-symbols-outlined text-[22px]">token</span></div><div class="flex flex-col"><span class="font-headline-sm text-headline-sm text-on-surface leading-tight tracking-tight">رواق CRM</span><span class="font-label-sm text-label-sm text-outline">نظام إدارة العلاقات</span></div></div><span class="material-symbols-outlined text-outline cursor-pointer hover:text-on-surface transition-colors text-[20px]">dock_to_right</span></div><nav class="flex flex-col gap-space-xxs p-space-sm mt-space-xs" data-active-classes="bg-primary-container text-on-primary font-title-sm shadow-sm"><a class="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all font-body-md text-body-md" data-path="dashboard" href="#"><span class="material-symbols-outlined text-[20px]">grid_view</span><span>لوحة القيادة</span></a><a class="flex items-center justify-between px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all font-body-md text-body-md" data-path="leads" href="#"><div class="flex items-center gap-space-md"><span class="material-symbols-outlined text-[20px]">filter_alt</span><span>العملاء المحتملين</span></div><span class="font-label-sm text-label-sm bg-primary-fixed text-on-primary-fixed px-space-xs py-0.5 rounded">184</span></a><a class="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all font-body-md text-body-md" data-path="contacts" href="#"><span class="material-symbols-outlined text-[20px]">contact_page</span><span>جهات الاتصال</span></a><a class="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all font-body-md text-body-md" data-path="companies" href="#"><span class="material-symbols-outlined text-[20px]">domain</span><span>الشركات والحسابات</span></a><a class="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all font-body-md text-body-md" data-path="deals" href="#"><span class="material-symbols-outlined text-[20px]">monetization_on</span><span>الصفقات والمبيعات</span></a><a class="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all font-body-md text-body-md" data-path="tasks" href="#"><span class="material-symbols-outlined text-[20px]">assignment_turned_in</span><span>المهام والأنشطة</span></a><a class="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all font-body-md text-body-md" data-path="analytics" href="#"><span class="material-symbols-outlined text-[20px]">insert_chart</span><span>التقارير والتحليلات</span></a><a class="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all font-body-md text-body-md" data-path="settings" href="#"><span class="material-symbols-outlined text-[20px]">settings</span><span>الإعدادات والنظام</span></a></nav></div><div class="p-space-sm border-t border-surface-container-high"><div class="flex items-center justify-between p-space-sm rounded-xl bg-surface-container-low hover:bg-surface-container transition-colors cursor-pointer"><div class="flex items-center gap-space-sm"><div class="w-9 h-9 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div><div class="flex flex-col text-right"><span class="font-title-sm text-title-sm text-on-surface leading-snug">طارق العتيبي</span><span class="font-label-sm text-label-sm text-outline leading-tight">مدير مبيعات</span></div></div><span class="material-symbols-outlined text-outline text-[18px]">unfold_more</span></div></div></aside><div class="pr-72"><header class="fixed top-0 right-72 left-0 h-16 bg-surface/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 px-gutter flex items-center justify-between border-b border-surface-container-high"><div class="flex items-center gap-space-md flex-1 max-w-xl"><div class="relative w-full flex items-center"><span class="material-symbols-outlined absolute right-space-sm text-outline text-[20px] pointer-events-none">search</span><input class="w-full h-10 pr-10 pl-16 rounded-lg bg-surface-container-lowest border border-outline-variant text-on-surface placeholder:text-outline font-body-md text-body-md focus:outline-none focus:border-primary transition-colors" placeholder="بحث شامل عن العملاء، الصفقات، الشركات..." type="text"><div class="absolute left-space-xs flex items-center gap-space-xxs bg-surface-container px-space-xs py-0.5 rounded text-outline font-label-sm text-label-sm border border-outline-variant"><span class="text-[10px]">Ctrl</span><span>+</span><span class="text-[10px]">K</span></div></div></div><div class="flex items-center gap-space-md"><div class="hidden md:flex items-center gap-space-xs px-space-sm py-1.5 rounded-full bg-tertiary/10 text-tertiary border border-tertiary/20 font-label-md text-label-md"><span class="w-2 h-2 rounded-full bg-tertiary animate-pulse"></span><span>مزامنة فورية</span></div><button class="flex items-center gap-space-xs h-10 px-space-md rounded-lg bg-surface-container-lowest border border-outline-variant text-on-surface hover:bg-surface-container transition-colors font-label-lg text-label-lg relative"><span class="material-symbols-outlined text-[18px] text-outline">forum</span><span>صندوق المحادثات الموحد</span><span class="w-2 h-2 rounded-full bg-error absolute -top-1 -right-1"></span></button><button class="flex items-center gap-space-xs h-10 px-space-lg rounded-lg bg-primary-container text-on-primary hover:bg-primary transition-colors font-title-sm text-title-sm shadow-sm"><span class="material-symbols-outlined text-[18px]">add</span><span>صفقة سريعة</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></header><main class="relative pt-16 bg-surface min-h-screen w-full px-gutter py-space-xl"><div class="flex flex-col w-full font-body-md text-on-surface">
+<!-- TOP RECORD HEADER STRIP -->
+<div class="bg-surface-container-lowest shadow-sm px-gutter-lg pt-space-xl pb-space-lg mb-space-xl rounded-xl">
+<!-- Top Row: Back Nav, Identity & Primary Actions -->
+<div class="flex flex-col lg:flex-row lg:items-center justify-between gap-space-lg mb-space-lg">
+<!-- Right Side: Navigation & Lead Identity -->
+<div class="flex flex-col gap-space-xs">
+<a class="inline-flex items-center gap-space-xs text-outline hover:text-primary transition-colors font-title-sm text-title-sm w-fit mb-space-xxs" href="#">
+<svg class="w-4 h-4 fill-none stroke-current" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" viewBox="0 0 24 24">
+<path d="M5 12h14M12 5l7 7-7 7"></path>
+</svg>
+<span>العملاء المحتملين</span>
+</a>
+<div class="flex items-center flex-wrap gap-space-md">
+<div class="w-11 h-11 rounded-xl bg-primary flex items-center justify-center text-on-primary font-headline-sm text-headline-sm shadow-sm select-none">
+            ع.س
+          </div>
+<h1 class="font-headline-xl text-headline-xl text-on-surface font-bold tracking-tight">
+            م. عبد الله السبيعي
+          </h1><div class="inline-flex items-center gap-1.5 px-space-sm py-1 rounded-md text-xs font-mono font-medium bg-surface-container text-on-surface-variant border border-outline-variant hover:bg-surface-container-high cursor-pointer transition-colors select-none" title="انقر للنسخ"><span>ID: RWQ-10482</span><svg class="w-3.5 h-3.5 fill-none stroke-current text-outline" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg></div>
+<span class="inline-flex items-center gap-1.5 bg-tertiary-fixed/30 text-tertiary px-space-md py-0.5 rounded-full font-label-md text-label-md">
+<span class="text-xs">🔥</span>
+<span>94% ساخن</span>
+</span>
+</div>
+<!-- Clickable Tags Row -->
+<div class="flex items-center flex-wrap gap-space-xs mt-space-xxs">
+<span class="inline-flex items-center px-space-sm py-0.5 rounded bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm cursor-pointer hover:bg-primary-fixed-dim transition-colors">
+            #عميل_VIP
+          </span>
+<span class="inline-flex items-center px-space-sm py-0.5 rounded bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm cursor-pointer hover:bg-secondary-fixed-dim transition-colors">
+            #حملة_الصيف
+          </span>
+<button class="inline-flex items-center gap-1 px-space-sm py-0.5 rounded bg-surface-container-low hover:bg-surface-container text-outline hover:text-on-surface font-label-sm text-label-sm transition-colors">
+<svg class="w-3 h-3 fill-none stroke-current" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" viewBox="0 0 24 24">
+<path d="M12 5v14M5 12h14"></path>
+</svg>
+<span>إضافة وسم</span>
+</button>
+</div>
+</div>
+<!-- Left Side: Action Buttons -->
+<div class="flex items-center flex-wrap gap-space-sm self-start lg:self-center">
+<!-- Primary Convert Lead -->
+<button class="flex items-center gap-space-xs bg-primary-container text-on-primary hover:bg-primary font-title-sm text-title-sm px-space-xl py-space-sm rounded-xl shadow-sm transition-all transform active:scale-[0.98]">
+<svg class="w-4 h-4 fill-none stroke-current" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" viewBox="0 0 24 24">
+<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+</svg>
+<span>تحويل العميل (Convert Lead)</span>
+</button>
+<!-- Secondary Chat -->
+<button class="flex items-center gap-space-xs bg-tertiary-container text-on-tertiary hover:bg-tertiary font-title-sm text-title-sm px-space-lg py-space-sm rounded-xl transition-all shadow-sm">
+<svg class="w-4 h-4 fill-none stroke-current" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24">
+<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+</svg>
+<span>محادثة كاملة</span>
+</button>
+<!-- Tertiary Task/Call -->
+<button class="flex items-center gap-space-xs bg-surface-container-lowest text-on-surface hover:bg-surface-container font-title-sm text-title-sm px-space-lg py-space-sm rounded-xl transition-colors shadow-sm">
+<svg class="w-4 h-4 fill-none stroke-current" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24">
+<path d="M12 5v14M5 12h14"></path>
+</svg>
+<span>مهمة / اتصال</span>
+</button>
+<!-- More Button -->
+<button aria-label="خيارات إضافية" class="w-10 h-10 flex items-center justify-center rounded-xl bg-surface-container-lowest text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors shadow-sm">
+<svg class="w-5 h-5 fill-current" viewBox="0 0 24 24">
+<circle cx="12" cy="5" r="1.75"></circle>
+<circle cx="12" cy="12" r="1.75"></circle>
+<circle cx="12" cy="19" r="1.75"></circle>
+</svg>
+</button>
+</div>
+</div>
+<!-- Bottom Row: Blueprint Stage Progression Bar -->
+<div class="pt-space-md mt-space-md bg-surface-container-low p-space-md rounded-xl flex flex-col md:flex-row items-center justify-between gap-space-md">
+<!-- Stage Chain -->
+<div class="flex items-center flex-wrap gap-space-sm w-full md:w-auto">
+<!-- Stage 1 -->
+<div class="flex items-center gap-space-xs bg-surface-container-lowest text-on-surface-variant font-label-md text-label-md px-space-lg py-2 rounded-lg shadow-sm">
+<span class="w-4 h-4 rounded-full bg-tertiary/15 text-tertiary flex items-center justify-center">
+<svg class="w-2.5 h-2.5 fill-none stroke-current" stroke-linecap="round" stroke-linejoin="round" stroke-width="3.5" viewBox="0 0 24 24">
+<polyline points="20 6 9 17 4 12"></polyline>
+</svg>
+</span>
+<span>1. جديد</span>
+</div>
+<svg class="w-4 h-4 text-outline" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" viewBox="0 0 24 24">
+<path d="m15 18-6-6 6-6"></path>
+</svg>
+<!-- Stage 2 -->
+<div class="flex items-center gap-space-xs bg-surface-container-lowest text-on-surface-variant font-label-md text-label-md px-space-lg py-2 rounded-lg shadow-sm">
+<span class="w-4 h-4 rounded-full bg-tertiary/15 text-tertiary flex items-center justify-center">
+<svg class="w-2.5 h-2.5 fill-none stroke-current" stroke-linecap="round" stroke-linejoin="round" stroke-width="3.5" viewBox="0 0 24 24">
+<polyline points="20 6 9 17 4 12"></polyline>
+</svg>
+</span>
+<span>2. تم التواصل</span>
+</div>
+<svg class="w-4 h-4 text-outline" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" viewBox="0 0 24 24">
+<path d="m15 18-6-6 6-6"></path>
+</svg>
+<!-- Stage 3 (ACTIVE) -->
+<div class="flex items-center gap-space-xs bg-primary-container text-on-primary font-title-sm text-title-sm px-space-xl py-2 rounded-lg shadow-sm">
+<span class="w-2 h-2 rounded-full bg-on-primary animate-pulse"></span>
+<span>3. مؤهل للتحويل</span>
+</div>
+</div>
+<!-- Left Disqualify Action -->
+<button class="flex items-center gap-space-xs text-error hover:bg-error-container hover:text-on-error-container font-label-md text-label-md px-space-md py-1.5 rounded-lg transition-colors self-end md:self-center">
+<svg class="w-3.5 h-3.5 fill-none stroke-current" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24">
+<circle cx="12" cy="12" r="10"></circle>
+<line x1="15" x2="9" y1="9" y2="15"></line>
+<line x1="9" x2="15" y1="9" y2="15"></line>
+</svg>
+<span>غير مهتم / استبعاد العميل</span>
+</button>
+</div>
+</div>
+<!-- MAIN 2-COLUMN GRID BODY -->
+<div class="grid grid-cols-12 gap-space-xl">
+<!-- RIGHT MAIN COLUMN (8 Columns) -->
+<div class="col-span-12 lg:col-span-8 flex flex-col gap-space-xl">
+<!-- CARD 1: Basic Information -->
+<div class="bg-surface-container-lowest rounded-xl p-space-xl shadow-sm">
+<!-- Header -->
+<div class="flex items-center justify-between pb-space-md mb-space-lg bg-surface-container-low/50 -mx-space-xl -mt-space-xl p-space-lg rounded-t-xl">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+<svg class="w-4 h-4 fill-none stroke-current" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24">
+<rect height="18" rx="2" width="18" x="3" y="3"></rect>
+<path d="M7 7h.01M7 12h.01M7 17h.01M11 7h6M11 12h6M11 17h6"></path>
+</svg>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">البيانات الأساسية ومعلومات التواصل</h2>
+</div>
+<div class="flex items-center gap-1.5 text-tertiary font-label-sm text-label-sm">
+<svg class="w-3.5 h-3.5 fill-none stroke-current" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" viewBox="0 0 24 24">
+<polyline points="20 6 9 17 4 12"></polyline>
+</svg>
+<span>حفظ تلقائياً قبل دقيقة</span>
+</div>
+</div>
+<!-- 2-Column Fields Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-space-lg"><div class="col-span-1 md:col-span-2 flex flex-col gap-space-xs"><div class="flex items-center justify-between"><label class="font-label-md text-label-md text-on-surface-variant">معرّف العميل الفريد (Unique ID)</label><span class="inline-flex items-center gap-1 text-[11px] font-label-sm text-outline"><svg class="w-3 h-3 fill-none stroke-current" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg><span>معرّف فريد دائم (للقراءة فقط)</span></span></div><div class="flex items-center justify-between bg-surface-container-low/70 border border-outline-variant/60 rounded-lg px-space-md py-space-sm"><div class="flex items-center gap-space-sm"><span class="w-2 h-2 rounded-full bg-primary/70"></span><span class="font-mono font-semibold text-body-lg text-on-surface tracking-wider" dir="ltr">RWQ-10482</span></div><button class="flex items-center gap-1 text-xs text-outline hover:text-primary transition-colors cursor-pointer" title="نسخ المعرّف"><svg class="w-3.5 h-3.5 fill-none stroke-current" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg><span>نسخ</span></button></div></div>
+<!-- Field: Phone Number -->
+<div class="flex flex-col gap-space-xs">
+<label class="font-label-md text-label-md text-on-surface-variant">رقم الجوال المباشر</label>
+<div class="relative flex items-center bg-surface-container-low rounded-lg px-space-md py-space-sm">
+<input class="bg-transparent w-full font-body-lg text-body-lg text-on-surface focus:outline-none font-mono" dir="ltr" type="text" value="+966 50 123 4567">
+<div class="flex items-center gap-space-xs text-outline">
+<span class="cursor-pointer hover:text-tertiary transition-colors" title="واتساب">
+<svg class="w-4 h-4 fill-none stroke-current" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24">
+<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+</svg>
+</span>
+<span class="cursor-pointer hover:text-primary transition-colors" title="اتصال مباشر">
+<svg class="w-4 h-4 fill-none stroke-current" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24">
+<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+</svg>
+</span>
+</div>
+</div>
+</div>
+<!-- Field: Email -->
+<div class="flex flex-col gap-space-xs">
+<label class="font-label-md text-label-md text-on-surface-variant">البريد الإلكتروني المهني</label>
+<div class="relative flex items-center bg-surface-container-low rounded-lg px-space-md py-space-sm">
+<input class="bg-transparent w-full font-body-lg text-body-lg text-on-surface focus:outline-none" dir="ltr" type="text" value="subaie@qimmah.sa">
+<div class="text-outline">
+<svg class="w-4 h-4 fill-none stroke-current" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24">
+<rect height="16" rx="2" width="20" x="2" y="4"></rect>
+<path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>
+</svg>
+</div>
+</div>
+</div>
+<!-- Field: Preferred Channel -->
+<div class="flex flex-col gap-space-xs">
+<label class="font-label-md text-label-md text-on-surface-variant">القناة المفضلة للتواصل</label>
+<div class="flex items-center justify-between bg-surface-container-low rounded-lg px-space-md py-space-sm">
+<span class="font-body-md text-body-md text-on-surface">واتساب للأعمال (WhatsApp Business)</span>
+<span class="inline-flex items-center gap-1 bg-tertiary-fixed/40 text-tertiary px-space-xs py-0.5 rounded font-label-sm text-label-sm">
+<svg class="w-3 h-3 fill-none stroke-current" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" viewBox="0 0 24 24">
+<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+</svg>
+<span>مباشر</span>
+</span>
+</div>
+</div>
+<!-- Field: Location -->
+<div class="flex flex-col gap-space-xs">
+<label class="font-label-md text-label-md text-on-surface-variant">المدينة / الدولة</label>
+<div class="flex items-center justify-between bg-surface-container-low rounded-lg px-space-md py-space-sm">
+<input class="bg-transparent w-full font-body-md text-body-md text-on-surface focus:outline-none" type="text" value="الرياض، المملكة العربية السعودية">
+<div class="text-outline">
+<svg class="w-4 h-4 fill-none stroke-current" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24">
+<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path>
+<circle cx="12" cy="10" r="3"></circle>
+</svg>
+</div>
+</div>
+</div>
+<!-- Field: Lead Owner -->
+<div class="flex flex-col gap-space-xs">
+<label class="font-label-md text-label-md text-on-surface-variant">مالك السجل</label>
+<div class="flex items-center justify-between bg-surface-container-low rounded-lg px-space-md py-space-sm">
+<div class="flex items-center gap-space-sm">
+<div class="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-sm text-label-sm">
+                  ط
+                </div>
+<span class="font-title-sm text-title-sm text-on-surface">طارق العتيبي (مدير المبيعات)</span>
+</div>
+<button class="text-outline hover:text-on-surface transition-colors">
+<svg class="w-4 h-4 fill-none stroke-current" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24">
+<path d="m6 9 6 6 6-6"></path>
+</svg>
+</button>
+</div>
+</div>
+<!-- Field: Acquisition Source -->
+<div class="flex flex-col gap-space-xs">
+<label class="font-label-md text-label-md text-on-surface-variant">مصدر الاستقطاب الأساسي</label>
+<div class="flex items-center justify-between bg-surface-container-low rounded-lg px-space-md py-space-sm">
+<span class="font-body-md text-body-md text-on-surface">إعلان ميتا - رواد الأعمال Q2</span>
+<div class="text-secondary">
+<svg class="w-4 h-4 fill-none stroke-current" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24">
+<path d="m3 11 18-5v12L3 14v-3z"></path>
+<path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"></path>
+</svg>
+</div>
+</div>
+</div>
+<!-- Field: Internal Guidance (Full Width) -->
+<div class="col-span-1 md:col-span-2 flex flex-col gap-space-xs">
+<label class="font-label-md text-label-md text-on-surface-variant">الملاحظات والتوجيهات الداخلية</label>
+<div class="bg-surface-container-low rounded-xl p-space-md">
+<p class="font-body-md text-body-md text-on-surface leading-relaxed">
+                العميل مهتم جداً بربط نظام رواق CRM مع نظام سحابي داخلي عبر REST API مخصص. يطلب استلام مسودة عرض سعر متكامل لعقد سنوي لعدد 20 مستخدم مع توضيح فترات الدعم الفني وضمان الاستقرار في الرياض.
+              </p>
+</div>
+</div>
+</div>
+</div>
+<!-- CARD 2: Touchpoints Subform (Multi-Touch Attribution) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-xl shadow-sm">
+<!-- Header -->
+<div class="flex items-center justify-between pb-space-md mb-space-lg bg-surface-container-low/50 -mx-space-xl -mt-space-xl p-space-lg rounded-t-xl">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-secondary/10 text-secondary flex items-center justify-center">
+<svg class="w-4 h-4 fill-none stroke-current" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24">
+<circle cx="18" cy="18" r="3"></circle>
+<circle cx="6" cy="6" r="3"></circle>
+<path d="M18 6a9 9 0 0 1-9 9"></path>
+<path d="M6 18a9 9 0 0 1 9-9"></path>
+</svg>
+</div>
+<div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">نقاط الدخول وسجل الحملات الإعلانية</h2>
+<span class="font-label-sm text-label-sm text-outline">Multi-Touch Attribution Matrix</span>
+</div>
+</div>
+<button class="flex items-center gap-1 text-primary hover:bg-primary-fixed/30 font-title-sm text-title-sm px-space-md py-1.5 rounded-lg transition-colors">
+<svg class="w-3.5 h-3.5 fill-none stroke-current" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" viewBox="0 0 24 24">
+<path d="M12 5v14M5 12h14"></path>
+</svg>
+<span>تسجيل دخول جديد</span>
+</button>
+</div>
+<!-- Touchpoints Data Table -->
+<div class="overflow-x-auto">
+<table class="w-full text-right border-collapse">
+<thead>
+<tr class="bg-surface-container-low font-label-sm text-label-sm text-outline">
+<th class="py-space-sm px-space-md rounded-r-lg">التاريخ والوقت</th>
+<th class="py-space-sm px-space-md">القناة</th>
+<th class="py-space-sm px-space-md">اسم الحملة الإعلانية</th>
+<th class="py-space-sm px-space-md">معرّف الإعلان (Ad ID)</th>
+<th class="py-space-sm px-space-md">مصدر UTM</th>
+<th class="py-space-sm px-space-md rounded-l-lg">نوع التفاعل والحدث</th>
+</tr>
+</thead>
+<tbody class="font-body-md text-body-md divide-y-0">
+<!-- Row 1 -->
+<tr class="hover:bg-surface-container-low transition-colors">
+<td class="py-space-md px-space-md font-label-md text-label-md text-on-surface whitespace-nowrap">
+                  اليوم، 10:15 ص
+                </td>
+<td class="py-space-md px-space-md whitespace-nowrap">
+<span class="inline-flex items-center gap-1.5 px-space-xs py-0.5 rounded bg-tertiary-fixed/30 text-tertiary font-label-sm text-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+                    واتساب مباشر
+                  </span>
+</td>
+<td class="py-space-md px-space-md font-title-sm text-title-sm text-on-surface whitespace-nowrap">
+                  حملة رواد الأعمال Q2
+                </td>
+<td class="py-space-md px-space-md font-mono text-outline font-label-sm text-label-sm whitespace-nowrap">
+                  ad_89214_meta
+                </td>
+<td class="py-space-md px-space-md font-mono text-outline font-label-sm text-label-sm whitespace-nowrap">
+                  meta_lead_ad
+                </td>
+<td class="py-space-md px-space-md text-tertiary font-title-sm text-title-sm whitespace-nowrap">
+                  إرسال استفسار API أول
+                </td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-surface-container-low transition-colors bg-surface-container-lowest">
+<td class="py-space-md px-space-md font-label-md text-label-md text-on-surface whitespace-nowrap">
+                  أمس، 04:30 م
+                </td>
+<td class="py-space-md px-space-md whitespace-nowrap">
+<span class="inline-flex items-center gap-1.5 px-space-xs py-0.5 rounded bg-secondary-fixed/50 text-secondary font-label-sm text-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+                    إعلان إنستغرام
+                  </span>
+</td>
+<td class="py-space-md px-space-md font-title-sm text-title-sm text-on-surface whitespace-nowrap">
+                  تسريع التحول الرقمي
+                </td>
+<td class="py-space-md px-space-md font-mono text-outline font-label-sm text-label-sm whitespace-nowrap">
+                  ad_77102_ig
+                </td>
+<td class="py-space-md px-space-md font-mono text-outline font-label-sm text-label-sm whitespace-nowrap">
+                  ig_story_cpc
+                </td>
+<td class="py-space-md px-space-md text-on-surface-variant whitespace-nowrap">
+                  النقر على زر المراسلة
+                </td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-surface-container-low transition-colors">
+<td class="py-space-md px-space-md font-label-md text-label-md text-on-surface whitespace-nowrap">
+                  14 مايو 2024
+                </td>
+<td class="py-space-md px-space-md whitespace-nowrap">
+<span class="inline-flex items-center gap-1.5 px-space-xs py-0.5 rounded bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+                    موقع الويب المباشر
+                  </span>
+</td>
+<td class="py-space-md px-space-md font-title-sm text-title-sm text-on-surface whitespace-nowrap">
+                  Organic Web Lead
+                </td>
+<td class="py-space-md px-space-md font-mono text-outline font-label-sm text-label-sm whitespace-nowrap">
+                  direct_visit
+                </td>
+<td class="py-space-md px-space-md font-mono text-outline font-label-sm text-label-sm whitespace-nowrap">
+                  google_organic
+                </td>
+<td class="py-space-md px-space-md text-on-surface-variant whitespace-nowrap">
+                  تعبئة نموذج طلب عرض مالي
+                </td>
+</tr>
+<!-- Row 4 -->
+<tr class="hover:bg-surface-container-low transition-colors bg-surface-container-lowest">
+<td class="py-space-md px-space-md font-label-md text-label-md text-on-surface whitespace-nowrap">
+                  10 مايو 2024
+                </td>
+<td class="py-space-md px-space-md whitespace-nowrap">
+<span class="inline-flex items-center gap-1.5 px-space-xs py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-label-sm text-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-outline"></span>
+                    مؤتمر LEAP 2024
+                  </span>
+</td>
+<td class="py-space-md px-space-md font-title-sm text-title-sm text-on-surface whitespace-nowrap">
+                  جناح رواق CRM
+                </td>
+<td class="py-space-md px-space-md font-mono text-outline font-label-sm text-label-sm whitespace-nowrap">
+                  qr_booth_b4
+                </td>
+<td class="py-space-md px-space-md font-mono text-outline font-label-sm text-label-sm whitespace-nowrap">
+                  event_qr
+                </td>
+<td class="py-space-md px-space-md text-on-surface-variant whitespace-nowrap">
+                  مسح رمز QR وتوثيق اللقاء الأول
+                </td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<!-- LEFT ACTION COLUMN (4 Columns) -->
+<div class="col-span-12 lg:col-span-4 flex flex-col gap-space-xl">
+<!-- CARD A: Upcoming Tasks & Activities -->
+<div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm">
+<!-- Header -->
+<div class="flex items-center justify-between pb-space-sm mb-space-md bg-surface-container-low/50 -mx-space-lg -mt-space-lg p-space-md rounded-t-xl">
+<div class="flex items-center gap-space-xs">
+<h3 class="font-title-md text-title-md text-on-surface font-bold">المهام والأنشطة القادمة</h3>
+<span class="bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm px-space-xs py-0.5 rounded-full font-bold">
+              2 نشطة
+            </span>
+</div>
+<button class="text-primary hover:text-primary/80 font-title-sm text-title-sm flex items-center gap-0.5">
+<svg class="w-3.5 h-3.5 fill-none stroke-current" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" viewBox="0 0 24 24">
+<path d="M12 5v14M5 12h14"></path>
+</svg>
+<span>إضافة مهمة</span>
+</button>
+</div>
+<!-- Task List -->
+<div class="flex flex-col gap-space-sm">
+<!-- Task Item 1 -->
+<div class="bg-surface-container-low p-space-md rounded-xl hover:bg-surface-container transition-colors group">
+<div class="flex items-start gap-space-sm">
+<button class="mt-0.5 w-4 h-4 rounded bg-surface-container-lowest hover:bg-primary hover:text-on-primary text-transparent flex items-center justify-center transition-colors shadow-sm flex-shrink-0" title="إكمال المهمة">
+<svg class="w-3 h-3 fill-none stroke-current" stroke-linecap="round" stroke-linejoin="round" stroke-width="3" viewBox="0 0 24 24">
+<polyline points="20 6 9 17 4 12"></polyline>
+</svg>
+</button>
+<div class="flex flex-col gap-space-xxs flex-1 min-w-0">
+<span class="font-title-sm text-title-sm text-on-surface group-hover:text-primary transition-colors leading-snug">
+                  إرسال مسودة عرض السعر المخصص مع تفاصيل API
+                </span>
+<div class="flex items-center flex-wrap gap-space-xs mt-space-xxs">
+<div class="flex items-center gap-1 text-outline font-label-sm text-label-sm">
+<svg class="w-3.5 h-3.5 fill-none stroke-current" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24">
+<circle cx="12" cy="12" r="10"></circle>
+<polyline points="12 6 12 12 16 14"></polyline>
+</svg>
+<span>اليوم، 03:00 م</span>
+</div>
+<span class="bg-error-container text-on-error-container font-label-sm text-label-sm px-1.5 py-0.5 rounded font-semibold">
+                    أولوية مرتفعة
+                  </span>
+</div>
+<div class="mt-space-xs pt-space-xs flex justify-end">
+<button class="bg-surface-container-lowest hover:bg-primary-container hover:text-on-primary text-on-surface-variant font-label-sm text-label-sm px-space-sm py-1 rounded transition-colors shadow-sm">
+                    إكمال بنقرة ✓
+                  </button>
+</div>
+</div>
+</div>
+</div>
+<!-- Task Item 2 -->
+<div class="bg-surface-container-low p-space-md rounded-xl hover:bg-surface-container transition-colors group">
+<div class="flex items-start gap-space-sm">
+<button class="mt-0.5 w-4 h-4 rounded bg-surface-container-lowest hover:bg-primary hover:text-on-primary text-transparent flex items-center justify-center transition-colors shadow-sm flex-shrink-0" title="إكمال المهمة">
+<svg class="w-3 h-3 fill-none stroke-current" stroke-linecap="round" stroke-linejoin="round" stroke-width="3" viewBox="0 0 24 24">
+<polyline points="20 6 9 17 4 12"></polyline>
+</svg>
+</button>
+<div class="flex flex-col gap-space-xxs flex-1 min-w-0">
+<span class="font-title-sm text-title-sm text-on-surface group-hover:text-primary transition-colors leading-snug">
+                  تحديد موعد جلسة العرض الحي (Demo) مع الفريق التقني
+                </span>
+<div class="flex items-center flex-wrap gap-space-xs mt-space-xxs">
+<div class="flex items-center gap-1 text-outline font-label-sm text-label-sm">
+<svg class="w-3.5 h-3.5 fill-none stroke-current" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24">
+<circle cx="12" cy="12" r="10"></circle>
+<polyline points="12 6 12 12 16 14"></polyline>
+</svg>
+<span>غداً، 11:00 ص</span>
+</div>
+<span class="bg-surface-container-highest text-on-surface-variant font-label-sm text-label-sm px-1.5 py-0.5 rounded font-semibold">
+                    أولوية عادية
+                  </span>
+</div>
+<div class="mt-space-xs pt-space-xs flex justify-end">
+<button class="bg-surface-container-lowest hover:bg-primary-container hover:text-on-primary text-on-surface-variant font-label-sm text-label-sm px-space-sm py-1 rounded transition-colors shadow-sm">
+                    تأكيد الموعد
+                  </button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- CARD B: Live WhatsApp Conversation -->
+<div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col">
+<!-- Header -->
+<div class="flex items-center justify-between pb-space-sm mb-space-md bg-surface-container-low/50 -mx-space-lg -mt-space-lg p-space-md rounded-t-xl">
+<div class="flex items-center gap-space-xs">
+<span class="relative flex h-2.5 w-2.5">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-tertiary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-tertiary"></span>
+</span>
+<h3 class="font-title-md text-title-md text-on-surface font-bold">محادثة واتساب المباشرة</h3>
+</div>
+<a class="text-primary hover:text-primary/80 font-label-md text-label-md flex items-center gap-0.5" href="#">
+<span>المحادثة الكاملة</span>
+<svg class="w-3.5 h-3.5 fill-none stroke-current" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24">
+<path d="M7 17l10-10M7 7h10v10"></path>
+</svg>
+</a>
+</div>
+<!-- Message Stream -->
+<div class="flex flex-col gap-space-sm mb-space-md">
+<!-- Message 1: Received -->
+<div class="flex flex-col items-start gap-1 max-w-[90%]">
+<div class="bg-surface-container-low text-on-surface rounded-2xl rounded-tr-none p-space-md shadow-sm">
+<p class="font-body-md text-body-md leading-relaxed">
+                السلام عليكم، هل يتوفر ربط فوري مع أنظمة ERP سحابية عبر REST API مع توفير Webhooks؟
+              </p>
+</div>
+<span class="font-label-sm text-label-sm text-outline px-1">10:15 ص</span>
+</div>
+<!-- Message 2: Sent -->
+<div class="flex flex-col items-end gap-1 max-w-[90%] self-end">
+<div class="bg-primary-container text-on-primary rounded-2xl rounded-tl-none p-space-md shadow-sm">
+<p class="font-body-md text-body-md leading-relaxed">
+                أهلاً وسهلاً مهندس عبد الله! نعم بكل تأكيد، نوفر مكتبة API متكاملة مع توثيق تقني ودعم Webhooks ثنائية الاتجاه مع ERP.
+              </p>
+</div>
+<div class="flex items-center gap-1 font-label-sm text-label-sm text-outline px-1">
+<span>10:18 ص</span>
+<span class="text-primary flex items-center" title="تمت القراءة">
+<svg class="w-3.5 h-3.5 fill-none stroke-current" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" viewBox="0 0 24 24">
+<path d="m18 6-9.5 9.5-4-4"></path>
+<path d="m22 10-9.5 9.5-2-2"></path>
+</svg>
+</span>
+</div>
+</div>
+<!-- Message 3: Received -->
+<div class="flex flex-col items-start gap-1 max-w-[90%]">
+<div class="bg-surface-container-low text-on-surface rounded-2xl rounded-tr-none p-space-md shadow-sm">
+<p class="font-body-md text-body-md leading-relaxed">
+                ممتاز جداً، أرجو تزويدنا بعرض سعر سنوي مخصص لعدد 20 مستخدم مع تفاصيل باقة الربط الهندسي.
+              </p>
+</div>
+<span class="font-label-sm text-label-sm text-outline px-1">10:20 ص</span>
+</div>
+</div>
+<!-- Quick-Reply Snippets -->
+<div class="flex items-center flex-wrap gap-space-xs mb-space-sm">
+<button class="bg-surface-container-low hover:bg-primary-fixed hover:text-on-primary-fixed text-on-surface-variant font-label-sm text-label-sm px-space-sm py-1 rounded-full transition-colors font-mono">
+            /عرض_سعر_API
+          </button>
+<button class="bg-surface-container-low hover:bg-primary-fixed hover:text-on-primary-fixed text-on-surface-variant font-label-sm text-label-sm px-space-sm py-1 rounded-full transition-colors font-mono">
+            /حجز_موعد_عرض
+          </button>
+<button class="bg-surface-container-low hover:bg-primary-fixed hover:text-on-primary-fixed text-on-surface-variant font-label-sm text-label-sm px-space-sm py-1 rounded-full transition-colors font-mono">
+            /ترحيب_مخصص
+          </button>
+</div>
+<!-- Instant Reply Box -->
+<div class="relative flex items-center bg-surface-container-low rounded-xl px-space-md py-space-xs">
+<button class="text-outline hover:text-on-surface transition-colors p-1" title="إرفاق ملف">
+<svg class="w-4 h-4 fill-none stroke-current" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24">
+<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+</svg>
+</button>
+<input class="bg-transparent w-full font-body-md text-body-md text-on-surface placeholder:text-outline px-space-sm focus:outline-none" placeholder="اكتب رداً سريعاً ومباشراً عبر واتساب..." type="text">
+<button class="w-8 h-8 rounded-lg bg-tertiary-container hover:bg-tertiary text-on-tertiary flex items-center justify-center transition-colors shadow-sm flex-shrink-0" title="إرسال">
+<svg class="w-4 h-4 fill-none stroke-current rotate-180" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" viewBox="0 0 24 24">
+<path d="m22 2-7 20-4-9-9-4Z"></path>
+<path d="M22 2 11 13"></path>
+</svg>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div></main></div>
+
+
+</body></html>

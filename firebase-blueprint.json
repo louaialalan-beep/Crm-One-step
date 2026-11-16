@@ -1,0 +1,426 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Employee user account and assigned profile/role reference",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "fullName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "email": { "type": "string", "format": "email", "maxLength": 160 },
+        "jobTitle": { "type": "string", "maxLength": 120 },
+        "profileId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "roleId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "department": { "type": "string", "maxLength": 100 },
+        "avatarUrl": { "type": "string", "maxLength": 500 },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "fullName", "email", "profileId", "roleId", "status", "createdAt", "updatedAt"]
+    },
+    "Profile": {
+      "title": "Profile",
+      "description": "Access profile defining CRUD permissions and Field-Level Security rules",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 400 },
+        "isSystem": { "type": "boolean" },
+        "modulePermissions": { "type": "object" },
+        "fieldSecurity": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "name", "isSystem", "modulePermissions", "fieldSecurity", "createdAt", "updatedAt"]
+    },
+    "Role": {
+      "title": "Role",
+      "description": "Organizational hierarchy role with reporting parent and data visibility",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "reportsToRoleId": { "type": "string", "maxLength": 128 },
+        "dataVisibility": { "type": "string", "enum": ["private", "team", "organization"] },
+        "description": { "type": "string", "maxLength": 300 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "name", "dataVisibility", "createdAt", "updatedAt"]
+    },
+    "CustomField": {
+      "title": "CustomField",
+      "description": "Dynamic layout and custom field schema definition for CRM modules",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "module": { "type": "string", "enum": ["leads", "contacts", "accounts", "deals", "quotes", "sales_orders", "invoices", "tasks"] },
+        "fieldKey": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-zA-Z0-9_]+$" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "fieldType": { "type": "string", "enum": ["text", "number", "currency", "select", "date", "boolean", "email", "phone"] },
+        "section": { "type": "string", "maxLength": 100 },
+        "required": { "type": "boolean" },
+        "order": { "type": "number" },
+        "options": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "module", "fieldKey", "label", "fieldType", "section", "required", "order", "createdAt", "updatedAt"]
+    },
+    "Lead": {
+      "title": "Lead",
+      "description": "Incoming prospect with RWQ-xxxxx identifier and AI qualification score",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "unique_id": { "type": "string", "pattern": "^RWQ-[0-9]{5}$", "maxLength": 16 },
+        "fullName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "company": { "type": "string", "maxLength": 140 },
+        "jobTitle": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 160 },
+        "phone": { "type": "string", "maxLength": 40 },
+        "altContact": { "type": "string", "maxLength": 160 },
+        "source": { "type": "string", "maxLength": 80 },
+        "channel": { "type": "string", "enum": ["whatsapp", "instagram", "messenger", "website", "phone", "referral"] },
+        "campaign": { "type": "string", "maxLength": 140 },
+        "adId": { "type": "string", "maxLength": 80 },
+        "utmSource": { "type": "string", "maxLength": 80 },
+        "utmMedium": { "type": "string", "maxLength": 80 },
+        "utmCampaign": { "type": "string", "maxLength": 80 },
+        "status": { "type": "string", "enum": ["جديد", "تم التواصل", "مؤهل للتحويل", "غير مهتم"] },
+        "aiScore": { "type": "number" },
+        "estimatedValue": { "type": "number" },
+        "approvedBudget": { "type": "number" },
+        "assignedToName": { "type": "string", "maxLength": 120 },
+        "city": { "type": "string", "maxLength": 80 },
+        "tags": { "type": "array" },
+        "lastActivityLabel": { "type": "string", "maxLength": 80 },
+        "lastMessageSnippet": { "type": "string", "maxLength": 300 },
+        "awaitingReplyHours": { "type": "number" },
+        "followUpAt": { "type": "string", "maxLength": 40 },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "converted": { "type": "boolean" },
+        "convertedAt": { "type": "string", "maxLength": 40 },
+        "convertedContactId": { "type": "string", "maxLength": 128 },
+        "convertedAccountId": { "type": "string", "maxLength": 128 },
+        "convertedDealId": { "type": "string", "maxLength": 128 },
+        "customValues": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "unique_id", "fullName", "status", "aiScore", "estimatedValue", "assignedToName", "createdAt", "updatedAt"]
+    },
+    "Contact": {
+      "title": "Contact",
+      "description": "Enterprise stakeholder linked to a corporate account",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "fullName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "accountId": { "type": "string", "maxLength": 128 },
+        "accountName": { "type": "string", "maxLength": 140 },
+        "jobTitle": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 160 },
+        "phone": { "type": "string", "maxLength": 40 },
+        "city": { "type": "string", "maxLength": 80 },
+        "isPrimary": { "type": "boolean" },
+        "leadUniqueId": { "type": "string", "maxLength": 16 },
+        "primarySource": { "type": "string", "maxLength": 120 },
+        "contactStatus": { "type": "string", "maxLength": 80 },
+        "channel": { "type": "string", "enum": ["whatsapp", "instagram", "messenger", "website", "phone", "referral"] },
+        "assignedToName": { "type": "string", "maxLength": 120 },
+        "tags": { "type": "array" },
+        "lastActivityLabel": { "type": "string", "maxLength": 80 },
+        "lastMessageSnippet": { "type": "string", "maxLength": 300 },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "customValues": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "fullName", "accountId", "accountName", "isPrimary", "createdAt", "updatedAt"]
+    },
+    "Account": {
+      "title": "Account",
+      "description": "Corporate client organization or enterprise account",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 150 },
+        "industry": { "type": "string", "maxLength": 100 },
+        "city": { "type": "string", "maxLength": 80 },
+        "tier": { "type": "string", "enum": ["استراتيجي", "مؤسسات", "نمو"] },
+        "annualRevenue": { "type": "number" },
+        "employeesCount": { "type": "number" },
+        "website": { "type": "string", "maxLength": 200 },
+        "accountManager": { "type": "string", "maxLength": 120 },
+        "leadUniqueId": { "type": "string", "maxLength": 16 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "name", "industry", "tier", "annualRevenue", "accountManager", "createdAt", "updatedAt"]
+    },
+    "Deal": {
+      "title": "Deal",
+      "description": "Sales pipeline opportunity with monetary value and stage",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "accountId": { "type": "string", "maxLength": 128 },
+        "accountName": { "type": "string", "maxLength": 150 },
+        "amount": { "type": "number" },
+        "currency": { "type": "string", "enum": ["SAR", "USD", "AED"] },
+        "stage": { "type": "string", "enum": ["تأهيل مبدئي", "تحديد الاحتياج", "عرض سعر", "تفاوض", "مكتملة", "خسارة"] },
+        "probability": { "type": "number" },
+        "closeDate": { "type": "string", "maxLength": 40 },
+        "ownerName": { "type": "string", "maxLength": 120 },
+        "nextStep": { "type": "string", "maxLength": 200 },
+        "leadUniqueId": { "type": "string", "maxLength": 16 },
+        "contactId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "title", "accountId", "accountName", "amount", "currency", "stage", "probability", "closeDate", "ownerName", "createdAt", "updatedAt"]
+    },
+    "Quote": {
+      "title": "Quote",
+      "description": "Formal commercial quote linked to a deal and account",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "quoteNumber": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "subject": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "dealId": { "type": "string", "maxLength": 128 },
+        "accountName": { "type": "string", "maxLength": 150 },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["مسودة", "مرسل", "مؤهل", "مكتملة", "خسارة"] },
+        "validUntil": { "type": "string", "maxLength": 40 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "quoteNumber", "subject", "dealId", "accountName", "totalAmount", "status", "validUntil", "createdAt", "updatedAt"]
+    },
+    "SalesOrder": {
+      "title": "SalesOrder",
+      "description": "Approved sales order awaiting fulfillment or invoicing",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "orderNumber": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "quoteId": { "type": "string", "maxLength": 128 },
+        "accountName": { "type": "string", "maxLength": 150 },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["قيد التجهيز", "مؤهل", "مكتملة", "مؤجلة"] },
+        "deliveryDate": { "type": "string", "maxLength": 40 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "orderNumber", "accountName", "totalAmount", "status", "deliveryDate", "createdAt", "updatedAt"]
+    },
+    "Invoice": {
+      "title": "Invoice",
+      "description": "Financial invoice issued to a corporate account",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "invoiceNumber": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "salesOrderId": { "type": "string", "maxLength": 128 },
+        "accountName": { "type": "string", "maxLength": 150 },
+        "totalAmount": { "type": "number" },
+        "paidAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["مكتملة", "مؤجلة", "متأخرة", "مسودة"] },
+        "dueDate": { "type": "string", "maxLength": 40 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "invoiceNumber", "accountName", "totalAmount", "paidAmount", "status", "dueDate", "createdAt", "updatedAt"]
+    },
+    "Touchpoint": {
+      "title": "Touchpoint",
+      "description": "Logged customer interaction across calls, meetings, and emails",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "channel": { "type": "string", "enum": ["مكالمة", "اجتماع", "بريد إلكتروني", "واتساب", "إنستغرام", "موقع ويب", "حدث"] },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "relatedEntityType": { "type": "string", "maxLength": 60 },
+        "relatedEntityId": { "type": "string", "maxLength": 128 },
+        "relatedEntityName": { "type": "string", "maxLength": 140 },
+        "occurredAt": { "type": "string", "maxLength": 40 },
+        "leadId": { "type": "string", "maxLength": 128 },
+        "leadUniqueId": { "type": "string", "maxLength": 16 },
+        "campaign": { "type": "string", "maxLength": 140 },
+        "adId": { "type": "string", "maxLength": 80 },
+        "utmSource": { "type": "string", "maxLength": 80 },
+        "eventType": { "type": "string", "maxLength": 140 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "channel", "summary", "relatedEntityType", "relatedEntityId", "relatedEntityName", "occurredAt", "createdAt", "updatedAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Unified omnichannel inbox message (WhatsApp, Email, Live Chat, Instagram, Messenger)",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "channel": { "type": "string", "enum": ["whatsapp", "email", "chat", "instagram", "messenger"] },
+        "senderName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "companyName": { "type": "string", "maxLength": 140 },
+        "subject": { "type": "string", "maxLength": 160 },
+        "body": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "direction": { "type": "string", "enum": ["inbound", "outbound"] },
+        "unread": { "type": "boolean" },
+        "timestampLabel": { "type": "string", "maxLength": 60 },
+        "leadId": { "type": "string", "maxLength": 128 },
+        "leadUniqueId": { "type": "string", "maxLength": 16 },
+        "campaign": { "type": "string", "maxLength": 140 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "channel", "senderName", "body", "direction", "unread", "timestampLabel", "createdAt", "updatedAt"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "Follow-up task or activity scheduled for a sales representative",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "priority": { "type": "string", "enum": ["عالية", "متوسطة", "منخفضة"] },
+        "status": { "type": "string", "enum": ["قيد التنفيذ", "مكتملة", "مؤجلة"] },
+        "dueDate": { "type": "string", "maxLength": 40 },
+        "relatedTo": { "type": "string", "maxLength": 140 },
+        "assignedToName": { "type": "string", "maxLength": 120 },
+        "leadId": { "type": "string", "maxLength": 128 },
+        "leadUniqueId": { "type": "string", "maxLength": 16 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "title", "priority", "status", "dueDate", "relatedTo", "assignedToName", "createdAt", "updatedAt"]
+    },
+    "Blueprint": {
+      "title": "Blueprint",
+      "description": "Stage-gate sales process blueprint enforcing mandatory transitions",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "module": { "type": "string", "maxLength": 60 },
+        "active": { "type": "boolean" },
+        "stagesCount": { "type": "number" },
+        "description": { "type": "string", "maxLength": 300 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "name", "module", "active", "stagesCount", "createdAt", "updatedAt"]
+    },
+    "Workflow": {
+      "title": "Workflow",
+      "description": "Automated CRM workflow rule triggered on record events",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "module": { "type": "string", "maxLength": 60 },
+        "trigger": { "type": "string", "maxLength": 120 },
+        "actionSummary": { "type": "string", "maxLength": 200 },
+        "active": { "type": "boolean" },
+        "executionsCount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "name", "module", "trigger", "actionSummary", "active", "executionsCount", "createdAt", "updatedAt"]
+    },
+    "RecycleBinItem": {
+      "title": "RecycleBinItem",
+      "description": "Soft-deleted CRM record awaiting restoration or permanent purge",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "entityType": { "type": "string", "maxLength": 60 },
+        "originalId": { "type": "string", "maxLength": 128 },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "deletedBy": { "type": "string", "maxLength": 120 },
+        "deletedAtLabel": { "type": "string", "maxLength": 60 },
+        "expiresInDays": { "type": "number" },
+        "payloadJson": { "type": "string", "maxLength": 10000 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "entityType", "originalId", "displayName", "deletedBy", "deletedAtLabel", "expiresInDays", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Authenticated CRM employee accounts (PII isolated per user/admin)"
+    },
+    "/profiles/{profileId}": {
+      "schema": { "$ref": "#/entities/Profile" },
+      "description": "Permission profiles with CRUD and Field-Level Security rules"
+    },
+    "/roles/{roleId}": {
+      "schema": { "$ref": "#/entities/Role" },
+      "description": "Hierarchical organizational roles"
+    },
+    "/custom_fields/{fieldId}": {
+      "schema": { "$ref": "#/entities/CustomField" },
+      "description": "Custom field and layout builder definitions"
+    },
+    "/leads/{leadId}": {
+      "schema": { "$ref": "#/entities/Lead" },
+      "description": "Prospects with RWQ-xxxxx unique identifier"
+    },
+    "/contacts/{contactId}": {
+      "schema": { "$ref": "#/entities/Contact" },
+      "description": "Corporate stakeholder contacts"
+    },
+    "/accounts/{accountId}": {
+      "schema": { "$ref": "#/entities/Account" },
+      "description": "Enterprise client organizations"
+    },
+    "/deals/{dealId}": {
+      "schema": { "$ref": "#/entities/Deal" },
+      "description": "Active sales pipeline opportunities"
+    },
+    "/quotes/{quoteId}": {
+      "schema": { "$ref": "#/entities/Quote" },
+      "description": "Commercial quotes"
+    },
+    "/sales_orders/{orderId}": {
+      "schema": { "$ref": "#/entities/SalesOrder" },
+      "description": "Approved sales orders"
+    },
+    "/invoices/{invoiceId}": {
+      "schema": { "$ref": "#/entities/Invoice" },
+      "description": "Issued financial invoices"
+    },
+    "/touchpoints/{touchpointId}": {
+      "schema": { "$ref": "#/entities/Touchpoint" },
+      "description": "Customer interaction timeline records"
+    },
+    "/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/Message" },
+      "description": "Unified omnichannel inbox messages"
+    },
+    "/tasks/{taskId}": {
+      "schema": { "$ref": "#/entities/Task" },
+      "description": "Employee follow-up tasks and activities"
+    },
+    "/blueprints/{blueprintId}": {
+      "schema": { "$ref": "#/entities/Blueprint" },
+      "description": "Sales process stage-gate blueprints"
+    },
+    "/workflows/{workflowId}": {
+      "schema": { "$ref": "#/entities/Workflow" },
+      "description": "Automated CRM workflow rules"
+    },
+    "/recycle_bin/{itemId}": {
+      "schema": { "$ref": "#/entities/RecycleBinItem" },
+      "description": "Soft-deleted records retained before permanent removal"
+    }
+  }
+}
