@@ -1,6 +1,23 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { Check, Layers, Plus, RotateCcw, Shield, Trash2 } from 'lucide-react';
+import {
+  BarChart3,
+  Building2,
+  Check,
+  ChevronDown,
+  Columns3,
+  Download,
+  Kanban,
+  Layers,
+  Percent,
+  Plus,
+  PlusCircle,
+  RotateCcw,
+  Shield,
+  Table2,
+  Trash2,
+  Wallet,
+} from 'lucide-react';
 import { ROUTE_METADATA, SIDEBAR_MODULES } from '../config/navigation';
 import { useCrm } from '../context/CrmContext';
 import { StatusBadge } from '../components/ui/StatusBadge';
@@ -42,6 +59,25 @@ export const ModulePlaceholderPage: React.FC = () => {
   const [newProfileName, setNewProfileName] = useState('');
   const [newProfileDesc, setNewProfileDesc] = useState('');
   const [profileError, setProfileError] = useState('');
+  const [accountQuickFilter, setAccountQuickFilter] = useState<'all' | 'استراتيجي' | 'مؤسسات' | 'نمو'>('all');
+  const [accountViewMode, setAccountViewMode] = useState<'table' | 'kanban' | 'split' | 'chart'>('table');
+  const [accountSplitOpen, setAccountSplitOpen] = useState(false);
+  const accountSplitRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleOutside = (e: MouseEvent) => {
+      if (accountSplitRef.current && !accountSplitRef.current.contains(e.target as Node)) {
+        setAccountSplitOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, []);
+
+  const filteredAccounts =
+    accountQuickFilter === 'all'
+      ? accounts
+      : accounts.filter((a) => a.tier === accountQuickFilter);
 
   const billingGroup = SIDEBAR_MODULES.find((m) => m.id === 'billing');
   const settingsGroup = SIDEBAR_MODULES.find((m) => m.id === 'settings');
@@ -169,7 +205,7 @@ export const ModulePlaceholderPage: React.FC = () => {
         return (
           <div className="card-surface rounded-lg overflow-hidden">
             <div className="border-b border-[#E2E8F0] px-4 py-3 text-[14px] font-semibold text-[#0F172A]">
-              الشركات والحسابات المؤسسية ({accounts.length})
+              الشركات والحسابات المؤسسية ({filteredAccounts.length})
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-right border-collapse">
@@ -183,7 +219,7 @@ export const ModulePlaceholderPage: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E2E8F0] text-[13px]">
-                  {accounts.map((acc) => (
+                  {filteredAccounts.map((acc) => (
                     <tr key={acc.id} className="h-[44px] hover:bg-[#F8FAFC]">
                       <td className="px-4 py-2 font-semibold text-[#0F172A]">{acc.name}</td>
                       <td className="px-3 py-2 text-[#475569]">{acc.industry}</td>
@@ -648,17 +684,213 @@ export const ModulePlaceholderPage: React.FC = () => {
     }
   };
 
+  const totalAccountsRevenue = accounts.reduce((s, a) => s + a.annualRevenue, 0);
+  const strategicRatio =
+    accounts.length > 0
+      ? Math.round(
+          (accounts.filter((a) => a.tier === 'استراتيجي').length / accounts.length) * 100
+        )
+      : 0;
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-[24px] font-bold leading-[32px] text-[#0F172A]">{meta.title}</h1>
-          <p className="mt-0.5 text-[13px] text-[#64748B]">{meta.description}</p>
+      {path === '/accounts' ? (
+        <header className="-mx-4 lg:-mx-6 -mt-4 lg:-mt-6 bg-[#ffffff] border-t border-b border-[#E2E8F0] px-4 lg:px-6 pt-4 pb-3.5 shadow-2xs space-y-3">
+          {/* Row 1: Icon Box + Title/Badge/Subtitle (Right) & 4-Icon View Switcher + Split CTA (Left) */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-[#004ac6]/10 text-[#004ac6] flex items-center justify-center shrink-0">
+                <Building2 className="h-5 w-5" />
+              </div>
+              <div className="flex flex-col min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-[20px] font-bold text-[#131b2e] tracking-tight leading-tight whitespace-nowrap">
+                    الشركات والحسابات (Accounts)
+                  </h1>
+                  <span className="px-2 py-0.5 rounded-full bg-[#dbe1ff] text-[#00174b] text-[11px] font-semibold tabular-nums whitespace-nowrap">
+                    {filteredAccounts.length === accounts.length
+                      ? `${accounts.length} سجل متاح`
+                      : `${filteredAccounts.length} من ${accounts.length} سجل`}
+                  </span>
+                </div>
+                <p className="text-[12px] text-[#737686] truncate">
+                  {meta.description}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 shrink-0">
+              {/* 4-Icon View Switcher */}
+              <nav
+                aria-label="أنماط العرض"
+                role="tablist"
+                className="inline-flex p-1 bg-[#eaedff] rounded-xl shadow-inner"
+              >
+                {(
+                  [
+                    { id: 'table', label: 'عرض الجدول', icon: <Table2 className="h-4 w-4" /> },
+                    { id: 'kanban', label: 'عرض كانبان', icon: <Kanban className="h-4 w-4" /> },
+                    { id: 'split', label: 'العرض المقسم الثلاثي', icon: <Columns3 className="h-4 w-4" /> },
+                    { id: 'chart', label: 'عرض الرسوم البيانية', icon: <BarChart3 className="h-4 w-4" /> },
+                  ] as const
+                ).map((mode) => {
+                  const active = accountViewMode === mode.id;
+                  return (
+                    <button
+                      key={mode.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      aria-label={mode.label}
+                      title={mode.label}
+                      onClick={() => setAccountViewMode(mode.id)}
+                      className={`p-1.5 rounded-lg transition-all flex items-center justify-center ${
+                        active
+                          ? 'bg-[#ffffff] text-[#004ac6] shadow-sm'
+                          : 'text-[#737686] hover:text-[#131b2e]'
+                      }`}
+                    >
+                      {mode.icon}
+                    </button>
+                  );
+                })}
+              </nav>
+
+              {/* Split Primary Button [+ حساب جديد | ⌄] */}
+              <div className="relative inline-flex items-center" ref={accountSplitRef}>
+                <div className="inline-flex rounded-xl shadow-sm bg-[#2563EB] text-[#ffffff] overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setAccountQuickFilter('all')}
+                    className="flex items-center gap-1.5 px-3.5 py-2 text-[13px] font-semibold hover:bg-[#1D4ED8] transition-colors whitespace-nowrap"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>حساب جديد</span>
+                  </button>
+                  <div className="w-px bg-[#ffffff]/20" />
+                  <button
+                    type="button"
+                    onClick={() => setAccountSplitOpen((prev) => !prev)}
+                    aria-label="خيارات إضافية للحسابات"
+                    aria-expanded={accountSplitOpen}
+                    title="خيارات إضافية"
+                    className="px-2 py-2 hover:bg-[#1D4ED8] transition-colors flex items-center justify-center"
+                  >
+                    <ChevronDown className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {accountSplitOpen && (
+                  <div className="flyout-surface absolute left-0 top-11 z-40 w-52 rounded-xl py-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setAccountSplitOpen(false)}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-right text-[12px] text-[#131b2e] hover:bg-[#f2f3ff]"
+                    >
+                      <Download className="h-3.5 w-3.5 text-[#006242]" />
+                      <span>تصدير القائمة الحالية (CSV)</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Row 2: Quick Filter Pills (Right) + KPIs (Left) */}
+          <div className="flex items-center justify-between gap-3 overflow-x-auto pb-0.5">
+            <div className="flex items-center gap-1.5 flex-nowrap">
+              {(
+                [
+                  { key: 'all', label: 'الكل', count: accounts.length },
+                  {
+                    key: 'استراتيجي',
+                    label: 'حسابات استراتيجية',
+                    count: accounts.filter((a) => a.tier === 'استراتيجي').length,
+                  },
+                  {
+                    key: 'مؤسسات',
+                    label: 'مؤسسات كبرى',
+                    count: accounts.filter((a) => a.tier === 'مؤسسات').length,
+                  },
+                  {
+                    key: 'نمو',
+                    label: 'شركات النمو',
+                    count: accounts.filter((a) => a.tier === 'نمو').length,
+                  },
+                ] as const
+              ).map((pill) => {
+                const active = accountQuickFilter === pill.key;
+                return (
+                  <button
+                    key={pill.key}
+                    type="button"
+                    onClick={() => setAccountQuickFilter(pill.key)}
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[12px] font-medium transition-all whitespace-nowrap shrink-0 ${
+                      active
+                        ? 'bg-[#2563EB] text-[#ffffff] shadow-sm font-semibold'
+                        : 'bg-[#f2f3ff] text-[#434655] hover:bg-[#eaedff] shadow-2xs'
+                    }`}
+                  >
+                    <span>{pill.label}</span>
+                    <span
+                      className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold tabular-nums ${
+                        active
+                          ? 'bg-[#ffffff]/20 text-[#ffffff]'
+                          : 'bg-[#eaedff] text-[#737686]'
+                      }`}
+                    >
+                      {pill.count}
+                    </span>
+                  </button>
+                );
+              })}
+
+              <button
+                type="button"
+                onClick={() => setAccountQuickFilter('all')}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[#2563EB] hover:bg-[#dae2fd]/50 text-[12px] font-medium transition-colors whitespace-nowrap shrink-0"
+              >
+                <PlusCircle className="h-3.5 w-3.5" />
+                <span>إضافة فلتر مخصص</span>
+              </button>
+            </div>
+
+            <div className="hidden xl:flex items-center gap-3 text-[#737686] text-[11px] shrink-0">
+              <div className="flex items-center gap-1">
+                <Wallet className="h-4 w-4 text-[#006242]" />
+                <span>
+                  إجمالي الإيرادات السنوية:{' '}
+                  <strong className="text-[#131b2e] tabular-nums">
+                    {canViewField('accounts', 'annualRevenue')
+                      ? formatCurrencySAR(totalAccountsRevenue)
+                      : 'محجوب (FLS)'}
+                  </strong>
+                </span>
+              </div>
+              <div className="h-3 w-px bg-[#e2e7ff]" />
+              <div className="flex items-center gap-1">
+                <Percent className="h-4 w-4 text-[#2563EB]" />
+                <span>
+                  نسبة الحسابات الاستراتيجية:{' '}
+                  <strong className="text-[#131b2e] tabular-nums">
+                    {strategicRatio}%
+                  </strong>
+                </span>
+              </div>
+            </div>
+          </div>
+        </header>
+      ) : (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-[24px] font-bold leading-[32px] text-[#0F172A]">{meta.title}</h1>
+            <p className="mt-0.5 text-[13px] text-[#64748B]">{meta.description}</p>
+          </div>
+          <span className="text-[12px] font-medium text-[#64748B] self-start sm:self-auto whitespace-nowrap">
+            {meta.section} · متصل بقاعدة البيانات
+          </span>
         </div>
-        <span className="text-[12px] font-medium text-[#64748B] self-start sm:self-auto whitespace-nowrap">
-          {meta.section} · متصل بقاعدة البيانات
-        </span>
-      </div>
+      )}
 
       {renderSubTabs()}
       {renderModuleBody()}

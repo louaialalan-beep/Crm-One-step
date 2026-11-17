@@ -2,6 +2,7 @@ import type {
   Account,
   Blueprint,
   Contact,
+  CrmOrganization,
   CrmProfile,
   CrmRole,
   CrmTask,
@@ -10,6 +11,11 @@ import type {
   InboxMessage,
   Invoice,
   Lead,
+  MetaConnection,
+  MetaFieldMapping,
+  MetaPage,
+  MetaWebhookLog,
+  OrganizationPlan,
   Quote,
   RecycleBinItem,
   SalesOrder,
@@ -18,7 +24,11 @@ import type {
   WorkflowRule,
 } from '../types/crm';
 
+export const DEFAULT_ORG_ID = 'org_riwaq_main';
+export const SECONDARY_ORG_ID = 'org_riwaq_gulf';
+
 export interface SeedDataset {
+  organizations: CrmOrganization[];
   profiles: CrmProfile[];
   roles: CrmRole[];
   custom_fields: CustomField[];
@@ -35,9 +45,22 @@ export interface SeedDataset {
   blueprints: Blueprint[];
   workflows: WorkflowRule[];
   recycle_bin: RecycleBinItem[];
+  meta_connections: MetaConnection[];
+  meta_pages: MetaPage[];
+  meta_field_mappings: MetaFieldMapping[];
+  meta_webhook_logs: MetaWebhookLog[];
 }
 
-export function buildSeedDataset(ownerId: string): SeedDataset {
+function buildRawSeedDataset(
+  ownerId: string
+): Omit<
+  SeedDataset,
+  | 'organizations'
+  | 'meta_connections'
+  | 'meta_pages'
+  | 'meta_field_mappings'
+  | 'meta_webhook_logs'
+> {
   return {
     profiles: [
       {
@@ -1398,6 +1421,571 @@ export function buildSeedDataset(ownerId: string): SeedDataset {
         expiresInDays: 21,
       },
     ],
+  };
+}
+
+export function buildSeedDataset(ownerId: string, orgId: string = DEFAULT_ORG_ID): SeedDataset {
+  const raw = buildRawSeedDataset(ownerId);
+
+  const organizations: CrmOrganization[] = [
+    {
+      id: DEFAULT_ORG_ID,
+      org_id: DEFAULT_ORG_ID,
+      ownerId,
+      name: 'مؤسسة رواق الرئيسية',
+      plan: 'Enterprise',
+      seats_limit: 25,
+      active_users_count: 18,
+      addons: {
+        whatsapp_campaigns: true,
+        meta_direct: true,
+        custom_functions: true,
+      },
+      created_by: ownerId,
+      created_at: '2026-01-10',
+    },
+    {
+      id: SECONDARY_ORG_ID,
+      org_id: SECONDARY_ORG_ID,
+      ownerId,
+      name: 'مؤسسة رواق الخليج التجارية',
+      plan: 'Pro',
+      seats_limit: 10,
+      active_users_count: 6,
+      addons: {
+        whatsapp_campaigns: true,
+        meta_direct: true,
+        custom_functions: false,
+      },
+      created_by: ownerId,
+      created_at: '2026-06-15',
+    },
+  ];
+
+  // Secondary org sample isolated records so switching orgs demonstrates instant multi-tenant isolation
+  const secondaryGulfAccount: Account = {
+    id: 'acc_gulf_1',
+    ownerId,
+    org_id: SECONDARY_ORG_ID,
+    name: 'مجموعة الخليج للاستثمار البحري',
+    industry: 'الموانئ والخدمات اللوجستية',
+    city: 'الخبر / دبي',
+    tier: 'استراتيجي',
+    annualRevenue: 31000000,
+    employeesCount: 290,
+    website: 'gulf-marine.ae',
+    accountManager: 'سلمان القحطاني',
+  };
+
+  const secondaryGulfLead: Lead = {
+    id: 'lead_gulf_1',
+    ownerId,
+    org_id: SECONDARY_ORG_ID,
+    unique_id: 'RWQ-80101',
+    fullName: 'راشد بن خليفة آل مكتوم',
+    company: 'شركة دانة الخليج العقارية',
+    jobTitle: 'مدير التحول الرقمي',
+    email: 'rashid@danagulf.ae',
+    phone: '+971 50 441 8890',
+    source: 'معرض جيتكس دبي',
+    channel: 'whatsapp',
+    status: 'مؤهل للتحويل',
+    aiScore: 92,
+    estimatedValue: 420000,
+    approvedBudget: 400000,
+    assignedToName: 'سلمان عبد العزيز القحطاني',
+    city: 'دبي، الإمارات',
+    tags: ['فرع_الخليج', 'VIP'],
+    lastActivityLabel: 'منذ ساعتين',
+    lastMessageSnippet: 'نرغب في جدولة عرض فني لمنظومة رواق السحابية لفرع دبي والخبر.',
+    awaitingReplyHours: 1,
+    converted: false,
+  };
+
+  const secondaryGulfDeal: Deal = {
+    id: 'deal_gulf_1',
+    ownerId,
+    org_id: SECONDARY_ORG_ID,
+    title: 'رخص رواق السحابية لقطاع الموانئ — مجموعة الخليج',
+    accountId: 'acc_gulf_1',
+    accountName: 'مجموعة الخليج للاستثمار البحري',
+    amount: 580000,
+    currency: 'SAR',
+    stage: 'تفاوض',
+    probability: 75,
+    closeDate: '2026-12-15',
+    ownerName: 'سلمان عبد العزيز القحطاني',
+    nextStep: 'اعتماد مسودة العقد الإقليمي',
+  };
+
+  const secondaryGulfProfile: CrmProfile = {
+    id: 'prof_admin_gulf',
+    ownerId,
+    org_id: SECONDARY_ORG_ID,
+    name: 'مدير النظام العام (Super Admin)',
+    description: 'صلاحيات كاملة لإدارة مؤسسة رواق الخليج التجارية',
+    isSystem: true,
+    modulePermissions: raw.profiles[0].modulePermissions,
+    fieldSecurity: raw.profiles[0].fieldSecurity,
+    addonPermissions: {
+      whatsapp_campaigns: true,
+      meta_direct: true,
+      custom_functions: false,
+    },
+  };
+
+  const secondaryGulfRole: CrmRole = {
+    id: 'role_exec_gulf',
+    ownerId,
+    org_id: SECONDARY_ORG_ID,
+    name: 'المدير الإقليمي للخليج',
+    reportsToRoleId: '',
+    dataVisibility: 'organization',
+    hide_subordinates_data: false,
+    description: 'إشراف كامل على سجلات مؤسسة رواق الخليج التجارية',
+  };
+
+  return {
+    organizations,
+    profiles: [
+      ...raw.profiles.map((p, idx) => ({
+        ...p,
+        org_id: orgId,
+        addonPermissions: {
+          whatsapp_campaigns: true,
+          meta_direct: idx < 2,
+          custom_functions: idx === 0,
+        },
+      })),
+      secondaryGulfProfile,
+    ],
+    roles: [
+      ...raw.roles.map((r) => ({
+        ...r,
+        org_id: orgId,
+        hide_subordinates_data: false,
+      })),
+      secondaryGulfRole,
+    ],
+    custom_fields: raw.custom_fields.map((cf) => ({
+      ...cf,
+      org_id: orgId,
+      api_name: `cf_${cf.module}_${cf.fieldKey}`,
+    })),
+    accounts: [...raw.accounts.map((a) => ({ ...a, org_id: orgId })), secondaryGulfAccount],
+    contacts: raw.contacts.map((c) => ({ ...c, org_id: orgId })),
+    leads: [...raw.leads.map((l) => ({ ...l, org_id: orgId })), secondaryGulfLead],
+    deals: [...raw.deals.map((d) => ({ ...d, org_id: orgId })), secondaryGulfDeal],
+    quotes: raw.quotes.map((q) => ({ ...q, org_id: orgId })),
+    sales_orders: raw.sales_orders.map((s) => ({ ...s, org_id: orgId })),
+    invoices: raw.invoices.map((i) => ({ ...i, org_id: orgId })),
+    touchpoints: raw.touchpoints.map((t) => ({ ...t, org_id: orgId })),
+    messages: raw.messages.map((m) => ({ ...m, org_id: orgId })),
+    tasks: raw.tasks.map((t) => ({ ...t, org_id: orgId })),
+    blueprints: raw.blueprints.map((b) => ({ ...b, org_id: orgId })),
+    workflows: raw.workflows.map((w) => ({ ...w, org_id: orgId })),
+    recycle_bin: raw.recycle_bin.map((r) => ({ ...r, org_id: orgId })),
+    meta_connections: [
+      {
+        id: 'meta_conn_riwaq_main',
+        ownerId,
+        org_id: orgId,
+        fb_user_id: 'fb_10293847561029',
+        fb_user_name: 'طارق العتيبي — Meta Business Suite Admin',
+        long_lived_token_enc:
+          'aes256:9f4b2c8e1d7a3f609182736455463728:7a89d4e21c03f8a92b1e4d6c8f0a2b4e6d8c0f2a4b6d8e0f1a3c5e7b9d1f3a5c',
+        token_expires_at: '2027-01-15T12:00:00.000Z',
+        status: 'connected',
+        scopes: [
+          'leads_retrieval',
+          'pages_manage_metadata',
+          'pages_read_engagement',
+          'pages_show_list',
+          'whatsapp_business_messaging',
+          'whatsapp_business_management',
+        ],
+      },
+      {
+        id: 'meta_conn_riwaq_gulf',
+        ownerId,
+        org_id: SECONDARY_ORG_ID,
+        fb_user_id: 'fb_88473625190283',
+        fb_user_name: 'راشد المنصوري — فرع الخليج',
+        long_lived_token_enc:
+          'aes256:3a1c5e7f9b2d4e608192a3b4c5d6e7f8:1f2e3d4c5b6a7988071625344352617089a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4',
+        token_expires_at: '2027-01-10T12:00:00.000Z',
+        status: 'connected',
+        scopes: [
+          'leads_retrieval',
+          'pages_manage_metadata',
+          'pages_read_engagement',
+          'pages_show_list',
+          'whatsapp_business_messaging',
+          'whatsapp_business_management',
+        ],
+      },
+    ],
+    meta_pages: [
+      {
+        id: 'meta_page_ksa_main',
+        ownerId,
+        org_id: orgId,
+        page_id: '104928374650192',
+        page_name: 'رواق للحلول المؤسسية — الصفحة الرسمية (Riwaq Enterprise KSA)',
+        ig_account_id: 'ig_17841405822304914',
+        waba_id: 'waba_94857201928374',
+        phone_number_id: 'pn_10928374651029',
+        page_token_enc:
+          'aes256:4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f90:9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b',
+        subscribed_fields: ['leadgen', 'messages'],
+      },
+      {
+        id: 'meta_page_ksa_cloud',
+        ownerId,
+        org_id: orgId,
+        page_id: '109827364519283',
+        page_name: 'رواق السحابية — قطاع الشركات الكبرى (Riwaq Cloud B2B)',
+        ig_account_id: 'ig_17841409988112233',
+        waba_id: 'waba_94857201928374',
+        phone_number_id: 'pn_10928374659988',
+        page_token_enc:
+          'aes256:1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d:5f6e7d8c9b0a1f2e3d4c5b6a7f8e9d0c1b2a3f4e5d6c7b8a9f0e1d2c3b4a5f6e',
+        subscribed_fields: ['leadgen', 'messages'],
+      },
+    ],
+    meta_field_mappings: [
+      {
+        id: 'meta_map_enterprise_2026',
+        ownerId,
+        org_id: orgId,
+        form_id: 'form_ksa_enterprise_2026',
+        form_name: 'نموذج طلب عرض سعر باقة المؤسسات (Meta Lead Ads Q4)',
+        page_id: '104928374650192',
+        mappings: {
+          full_name: 'fullName',
+          phone_number: 'phone',
+          email: 'email',
+          company_name: 'company',
+          job_title: 'jobTitle',
+          city: 'city',
+          budget_range: 'approvedBudget',
+          branch_region: 'cf_leads_branch_region',
+        },
+        store_extra_in: 'custom_values',
+      },
+    ],
+    meta_webhook_logs: [
+      {
+        id: 'wh_log_1',
+        ownerId,
+        org_id: orgId,
+        event_id: 'evt_leadgen_99482104',
+        event_type: 'leadgen',
+        status: 'processed',
+        retry_count: 0,
+        payload_summary:
+          'Lead Ads: فيصل بن تركي العتيبي (+966 50 412 8890) ➔ إسناد تلقائي لسلمان القحطاني',
+        lead_unique_id: 'RWQ-10482',
+        created_at: '2026-11-16 10:42:18',
+      },
+      {
+        id: 'wh_log_2',
+        ownerId,
+        org_id: orgId,
+        event_id: 'evt_ctwa_msg_88392011',
+        event_type: 'messages',
+        status: 'processed',
+        retry_count: 0,
+        payload_summary:
+          'Click-to-WhatsApp Ad Referral: نورة الدوسري (+966 55 892 1045) ➔ ربط مع العميل RWQ-10481',
+        lead_unique_id: 'RWQ-10481',
+        created_at: '2026-11-16 10:15:04',
+      },
+      {
+        id: 'wh_log_3',
+        ownerId,
+        org_id: orgId,
+        event_id: 'evt_capi_pur_77482910',
+        event_type: 'capi_purchase',
+        status: 'processed',
+        retry_count: 0,
+        payload_summary:
+          'Conversions API (Purchase): إغلاق صفقة سما للاتصالات (890,000 ر.س — RWQ-10468)',
+        lead_unique_id: 'RWQ-10468',
+        created_at: '2026-11-16 09:30:50',
+      },
+      {
+        id: 'wh_log_4',
+        ownerId,
+        org_id: orgId,
+        event_id: 'evt_leadgen_err_66291044',
+        event_type: 'leadgen',
+        status: 'failed',
+        retry_count: 2,
+        error_message:
+          'Graph API Timeout (504) أثناء جلب بيانات النموذج — جاهز لإعادة المحاولة (Exponential Backoff)',
+        payload_summary: 'حدث leadgen معلق من حملة التوسع الإقليمي (Form ID: form_ksa_enterprise_2026)',
+        created_at: '2026-11-16 08:55:12',
+      },
+    ],
+  };
+}
+
+export function buildProvisionedOrgSeed(
+  ownerId: string,
+  orgId: string,
+  orgName: string,
+  plan: OrganizationPlan = 'Enterprise'
+): {
+  organization: CrmOrganization;
+  profiles: CrmProfile[];
+  roles: CrmRole[];
+  custom_fields: CustomField[];
+  blueprints: Blueprint[];
+  workflows: WorkflowRule[];
+  leads: Lead[];
+  accounts: Account[];
+  deals: Deal[];
+} {
+  const seatsLimit = plan === 'Enterprise' ? 25 : plan === 'Pro' ? 10 : 5;
+  const organization: CrmOrganization = {
+    id: orgId,
+    org_id: orgId,
+    ownerId,
+    name: orgName,
+    plan,
+    seats_limit: seatsLimit,
+    active_users_count: 1,
+    addons: {
+      whatsapp_campaigns: true,
+      meta_direct: plan !== 'Starter',
+      custom_functions: plan === 'Enterprise',
+    },
+    created_by: ownerId,
+    created_at: new Date().toISOString().slice(0, 10),
+  };
+
+  const fullPerms = {
+    leads: { create: true, read: true, update: true, delete: true },
+    contacts: { create: true, read: true, update: true, delete: true },
+    accounts: { create: true, read: true, update: true, delete: true },
+    deals: { create: true, read: true, update: true, delete: true },
+    quotes: { create: true, read: true, update: true, delete: true },
+    sales_orders: { create: true, read: true, update: true, delete: true },
+    invoices: { create: true, read: true, update: true, delete: true },
+    tasks: { create: true, read: true, update: true, delete: true },
+  };
+
+  const standardPerms = {
+    leads: { create: true, read: true, update: true, delete: false },
+    contacts: { create: true, read: true, update: true, delete: false },
+    accounts: { create: true, read: true, update: true, delete: false },
+    deals: { create: true, read: true, update: true, delete: false },
+    quotes: { create: true, read: true, update: true, delete: false },
+    sales_orders: { create: false, read: true, update: false, delete: false },
+    invoices: { create: false, read: true, update: false, delete: false },
+    tasks: { create: true, read: true, update: true, delete: false },
+  };
+
+  const profiles: CrmProfile[] = [
+    {
+      id: `${orgId}_prof_admin`,
+      ownerId,
+      org_id: orgId,
+      name: 'مدير النظام العام (Super Admin)',
+      description: 'صلاحيات مطلقة لإدارة المؤسسة والبلوبرينت والمستخدمين',
+      isSystem: true,
+      modulePermissions: fullPerms,
+      fieldSecurity: {
+        leads: { branch_region: 'read_write', requested_service: 'read_write' },
+        deals: { amount: 'read_write', probability: 'read_write' },
+      },
+      addonPermissions: {
+        whatsapp_campaigns: true,
+        meta_direct: true,
+        custom_functions: true,
+      },
+    },
+    {
+      id: `${orgId}_prof_sales`,
+      ownerId,
+      org_id: orgId,
+      name: 'مبيعات متقدمة (Standard Sales)',
+      description: 'الملف الافتراضي لفريق المبيعات وإدارة الصفقات مع حماية الحذف',
+      isSystem: false,
+      modulePermissions: standardPerms,
+      fieldSecurity: {
+        leads: { branch_region: 'read_write', requested_service: 'read_only' },
+        deals: { amount: 'read_write', probability: 'read_only' },
+      },
+      addonPermissions: {
+        whatsapp_campaigns: true,
+        meta_direct: true,
+        custom_functions: false,
+      },
+    },
+  ];
+
+  const roles: CrmRole[] = [
+    {
+      id: `${orgId}_role_ceo`,
+      ownerId,
+      org_id: orgId,
+      name: 'الرئيس التنفيذي (CEO)',
+      reportsToRoleId: '',
+      dataVisibility: 'organization',
+      hide_subordinates_data: false,
+      description: 'رؤية شاملة لكافة سجلات المؤسسة',
+    },
+    {
+      id: `${orgId}_role_sales_mgr`,
+      ownerId,
+      org_id: orgId,
+      name: 'مدير المبيعات الإقليمي',
+      reportsToRoleId: `${orgId}_role_ceo`,
+      dataVisibility: 'team',
+      hide_subordinates_data: false,
+      description: 'يرى سجلاته وسجلات المرؤوسين المباشرين في الفريق',
+    },
+    {
+      id: `${orgId}_role_sales_rep`,
+      ownerId,
+      org_id: orgId,
+      name: 'مندوب مبيعات (Sales Rep)',
+      reportsToRoleId: `${orgId}_role_sales_mgr`,
+      dataVisibility: 'private',
+      hide_subordinates_data: false,
+      description: 'يرى السجلات المسندة إليه فقط',
+    },
+  ];
+
+  const custom_fields: CustomField[] = [
+    {
+      id: `${orgId}_cf_region`,
+      ownerId,
+      org_id: orgId,
+      module: 'leads',
+      fieldKey: 'branch_region',
+      api_name: 'cf_leads_branch_region',
+      label: 'المنطقة الجغرافية',
+      fieldType: 'select',
+      section: 'معلومات التصنيف',
+      required: false,
+      order: 1,
+      options: ['الرياض والوسطى', 'جدة والغربية', 'الدمام والشرقية'],
+    },
+    {
+      id: `${orgId}_cf_contract_months`,
+      ownerId,
+      org_id: orgId,
+      module: 'deals',
+      fieldKey: 'contract_duration_months',
+      api_name: 'cf_deals_contract_duration_months',
+      label: 'مدة العقد (بالأشهر)',
+      fieldType: 'number',
+      section: 'الشروط التجارية',
+      required: true,
+      order: 1,
+    },
+  ];
+
+  const blueprints: Blueprint[] = [
+    {
+      id: `${orgId}_bp_deals`,
+      ownerId,
+      org_id: orgId,
+      name: `بلوبرينت مبيعات ${orgName}`,
+      module: 'الصفقات',
+      active: true,
+      stagesCount: 6,
+      description: 'مسار الحوكمة القياسي المولد تلقائياً للمؤسسة',
+    },
+  ];
+
+  const workflows: WorkflowRule[] = [
+    {
+      id: `${orgId}_wf_welcome`,
+      ownerId,
+      org_id: orgId,
+      name: 'تنبيه فوري عند إنشاء صفقة كبرى',
+      module: 'الصفقات',
+      trigger: 'عند إنشاء أو تعديل السجل',
+      actionSummary: 'إشعار واتساب + مهمة متابعة خلال 24 ساعة',
+      active: true,
+      executionsCount: 1,
+    },
+  ];
+
+  const accounts: Account[] = [
+    {
+      id: `${orgId}_acc_1`,
+      ownerId,
+      org_id: orgId,
+      name: `الحساب التأسيسي — ${orgName}`,
+      industry: 'الأعمال والخدمات المؤسسية',
+      city: 'الرياض',
+      tier: 'استراتيجي',
+      annualRevenue: 12000000,
+      employeesCount: 85,
+      website: 'riwaq.sa',
+      accountManager: 'مدير النظام',
+    },
+  ];
+
+  const leads: Lead[] = [
+    {
+      id: `${orgId}_lead_1`,
+      ownerId,
+      org_id: orgId,
+      unique_id: 'RWQ-90001',
+      fullName: `عميل ترحيبي أول — ${orgName}`,
+      company: orgName,
+      jobTitle: 'المدير العام',
+      email: 'welcome@riwaq.sa',
+      phone: '+966 50 111 2233',
+      source: 'تهيئة المؤسسة التلقائية',
+      channel: 'whatsapp',
+      status: 'جديد',
+      aiScore: 88,
+      estimatedValue: 150000,
+      assignedToName: 'سلمان عبد العزيز القحطاني',
+      city: 'الرياض، السعودية',
+      tags: ['تهيئة_تلقائية'],
+      lastActivityLabel: 'الآن',
+      lastMessageSnippet: `تم تجهيز بيئة عمل معزولة بالكامل لمؤسسة «${orgName}».`,
+      awaitingReplyHours: 0,
+      converted: false,
+    },
+  ];
+
+  const deals: Deal[] = [
+    {
+      id: `${orgId}_deal_1`,
+      ownerId,
+      org_id: orgId,
+      title: `صفقة التدشين الأولى — ${orgName}`,
+      accountId: `${orgId}_acc_1`,
+      accountName: `الحساب التأسيسي — ${orgName}`,
+      amount: 150000,
+      currency: 'SAR',
+      stage: 'تأهيل مبدئي',
+      probability: 60,
+      closeDate: '2026-12-30',
+      ownerName: 'سلمان عبد العزيز القحطاني',
+      nextStep: 'جدولة اجتماع انطلاق المشروع',
+    },
+  ];
+
+  return {
+    organization,
+    profiles,
+    roles,
+    custom_fields,
+    blueprints,
+    workflows,
+    leads,
+    accounts,
+    deals,
   };
 }
 

@@ -4,13 +4,16 @@ import {
   doc,
   getDocFromServer,
   initializeFirestore,
+  setLogLevel,
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
+
+setLogLevel('silent');
 
 const app = initializeApp(firebaseConfig);
 export const db = initializeFirestore(
   app,
-  { experimentalAutoDetectLongPolling: true },
+  { experimentalForceLongPolling: true },
   firebaseConfig.firestoreDatabaseId
 );
 export const auth = getAuth(app);

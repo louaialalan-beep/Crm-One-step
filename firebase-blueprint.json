@@ -351,9 +351,29 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["ownerId", "entityType", "originalId", "displayName", "deletedBy", "deletedAtLabel", "expiresInDays", "createdAt", "updatedAt"]
+    },
+    "Organization": {
+      "title": "Organization",
+      "description": "Multi-tenant CRM organization with subscription plan, seat limits, and paid add-ons",
+      "type": "object",
+      "properties": {
+        "org_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 140 },
+        "plan": { "type": "string", "enum": ["Starter", "Pro", "Enterprise"] },
+        "seats_limit": { "type": "number" },
+        "active_users_count": { "type": "number" },
+        "addons": { "type": "object" },
+        "created_by": { "type": "string", "maxLength": 128 },
+        "created_at": { "type": "string", "maxLength": 60 }
+      },
+      "required": ["org_id", "name", "plan", "seats_limit", "active_users_count", "addons", "created_by", "created_at"]
     }
   },
   "firestore": {
+    "/organizations/{orgId}": {
+      "schema": { "$ref": "#/entities/Organization" },
+      "description": "Multi-tenant organizations and subscription plans"
+    },
     "/users/{userId}": {
       "schema": { "$ref": "#/entities/User" },
       "description": "Authenticated CRM employee accounts (PII isolated per user/admin)"
@@ -421,6 +441,22 @@
     "/recycle_bin/{itemId}": {
       "schema": { "$ref": "#/entities/RecycleBinItem" },
       "description": "Soft-deleted records retained before permanent removal"
+    },
+    "/meta_connections/{connId}": {
+      "schema": { "type": "object" },
+      "description": "Tenant-isolated Meta OAuth connections with AES-256 encrypted long-lived tokens"
+    },
+    "/meta_pages/{pageId}": {
+      "schema": { "type": "object" },
+      "description": "Connected Facebook Pages, Instagram Direct accounts, and WhatsApp Business WABA numbers"
+    },
+    "/meta_field_mappings/{mapId}": {
+      "schema": { "type": "object" },
+      "description": "Dynamic Meta Lead Ads form field mappings to CRM api_name fields"
+    },
+    "/meta_webhook_logs/{logId}": {
+      "schema": { "type": "object" },
+      "description": "Idempotent Meta webhook execution logs with retry_count and Error 190 tracking"
     }
   }
 }

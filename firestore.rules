@@ -51,11 +51,31 @@ service cloud.firestore {
       return isSignedIn() && (existing().ownerId == request.auth.uid || isTokenAdmin());
     }
 
+    function isSameTenantOrg() {
+      return !('org_id' in existing()) || ('org_id' in incoming() && incoming().org_id == existing().org_id);
+    }
+
     // 3. Entity Blueprint Validators
+    function isValidOrganization(data) {
+      return data.keys().hasAll(['org_id', 'name', 'plan', 'seats_limit', 'active_users_count', 'addons', 'created_by', 'created_at'])
+        && data.keys().hasOnly(['id', 'org_id', 'ownerId', 'name', 'plan', 'seats_limit', 'active_users_count', 'addons', 'created_by', 'created_at', 'createdAt', 'updatedAt'])
+        && isValidId(data.org_id)
+        && isOptionalStr(data, 'id', 128)
+        && isOptionalStr(data, 'ownerId', 128)
+        && isNonEmptyStr(data.name, 140)
+        && data.plan in ['Starter', 'Pro', 'Enterprise']
+        && data.seats_limit is number && data.seats_limit >= 1 && data.seats_limit <= 10000
+        && data.active_users_count is number && data.active_users_count >= 0 && data.active_users_count <= 10000
+        && data.addons is map
+        && isNonEmptyStr(data.created_by, 128)
+        && isNonEmptyStr(data.created_at, 60);
+    }
+
     function isValidUser(data) {
       return data.keys().hasAll(['uid', 'fullName', 'email', 'profileId', 'roleId', 'status', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['uid', 'fullName', 'email', 'jobTitle', 'profileId', 'roleId', 'department', 'avatarUrl', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'org_id', 'fullName', 'email', 'jobTitle', 'profileId', 'roleId', 'department', 'avatarUrl', 'status', 'createdAt', 'updatedAt'])
         && isValidId(data.uid)
+        && isOptionalStr(data, 'org_id', 128)
         && isNonEmptyStr(data.fullName, 120)
         && isNonEmptyStr(data.email, 160)
         && isOptionalStr(data, 'jobTitle', 120)
@@ -70,24 +90,28 @@ service cloud.firestore {
 
     function isValidProfile(data) {
       return data.keys().hasAll(['ownerId', 'name', 'isSystem', 'modulePermissions', 'fieldSecurity', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['ownerId', 'name', 'description', 'isSystem', 'modulePermissions', 'fieldSecurity', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['ownerId', 'org_id', 'name', 'description', 'isSystem', 'modulePermissions', 'fieldSecurity', 'addonPermissions', 'createdAt', 'updatedAt'])
         && isValidId(data.ownerId)
+        && isOptionalStr(data, 'org_id', 128)
         && isNonEmptyStr(data.name, 100)
         && isOptionalStr(data, 'description', 400)
         && data.isSystem is bool
         && data.modulePermissions is map
         && data.fieldSecurity is map
+        && (!('addonPermissions' in data) || data.addonPermissions is map)
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }
 
     function isValidRole(data) {
       return data.keys().hasAll(['ownerId', 'name', 'dataVisibility', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['ownerId', 'name', 'reportsToRoleId', 'dataVisibility', 'description', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['ownerId', 'org_id', 'name', 'reportsToRoleId', 'dataVisibility', 'hide_subordinates_data', 'description', 'createdAt', 'updatedAt'])
         && isValidId(data.ownerId)
+        && isOptionalStr(data, 'org_id', 128)
         && isNonEmptyStr(data.name, 100)
         && isOptionalStr(data, 'reportsToRoleId', 128)
         && data.dataVisibility in ['private', 'team', 'organization']
+        && (!('hide_subordinates_data' in data) || data.hide_subordinates_data is bool)
         && isOptionalStr(data, 'description', 300)
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
@@ -95,11 +119,13 @@ service cloud.firestore {
 
     function isValidCustomField(data) {
       return data.keys().hasAll(['ownerId', 'module', 'fieldKey', 'label', 'fieldType', 'section', 'required', 'order', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['ownerId', 'module', 'fieldKey', 'label', 'fieldType', 'section', 'required', 'order', 'options', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['ownerId', 'org_id', 'module', 'fieldKey', 'api_name', 'label', 'fieldType', 'section', 'required', 'order', 'options', 'createdAt', 'updatedAt'])
         && isValidId(data.ownerId)
+        && isOptionalStr(data, 'org_id', 128)
         && data.module in ['leads', 'contacts', 'accounts', 'deals', 'quotes', 'sales_orders', 'invoices', 'tasks']
         && isNonEmptyStr(data.fieldKey, 80)
         && data.fieldKey.matches('^[a-zA-Z0-9_]+$')
+        && isOptionalStr(data, 'api_name', 100)
         && isNonEmptyStr(data.label, 100)
         && data.fieldType in ['text', 'number', 'currency', 'select', 'date', 'boolean', 'email', 'phone']
         && isNonEmptyStr(data.section, 100)
@@ -114,7 +140,7 @@ service cloud.firestore {
     function isValidLead(data) {
       return data.keys().hasAll(['ownerId', 'unique_id', 'fullName', 'status', 'aiScore', 'estimatedValue', 'assignedToName', 'createdAt', 'updatedAt'])
         && data.keys().hasOnly([
-          'ownerId', 'unique_id', 'fullName', 'company', 'jobTitle', 'email', 'phone', 'altContact',
+          'ownerId', 'org_id', 'unique_id', 'fullName', 'company', 'jobTitle', 'email', 'phone', 'altContact',
           'source', 'channel', 'campaign', 'adId', 'utmSource', 'utmMedium', 'utmCampaign',
           'status', 'aiScore', 'estimatedValue', 'approvedBudget', 'assignedToName', 'city', 'tags',
           'lastActivityLabel', 'lastMessageSnippet', 'awaitingReplyHours', 'followUpAt', 'notes',
@@ -122,6 +148,7 @@ service cloud.firestore {
           'customValues', 'createdAt', 'updatedAt'
         ])
         && isValidId(data.ownerId)
+        && isOptionalStr(data, 'org_id', 128)
         && isNonEmptyStr(data.unique_id, 16)
         && data.unique_id.matches('^RWQ-[0-9]{5}$')
         && isNonEmptyStr(data.fullName, 120)
@@ -162,11 +189,12 @@ service cloud.firestore {
     function isValidContact(data) {
       return data.keys().hasAll(['ownerId', 'fullName', 'accountId', 'accountName', 'isPrimary', 'createdAt', 'updatedAt'])
         && data.keys().hasOnly([
-          'ownerId', 'fullName', 'accountId', 'accountName', 'jobTitle', 'email', 'phone', 'city',
+          'ownerId', 'org_id', 'fullName', 'accountId', 'accountName', 'jobTitle', 'email', 'phone', 'city',
           'isPrimary', 'leadUniqueId', 'primarySource', 'contactStatus', 'channel', 'assignedToName',
           'tags', 'lastActivityLabel', 'lastMessageSnippet', 'notes', 'customValues', 'createdAt', 'updatedAt'
         ])
         && isValidId(data.ownerId)
+        && isOptionalStr(data, 'org_id', 128)
         && isNonEmptyStr(data.fullName, 120)
         && isNonEmptyStr(data.accountId, 128)
         && isNonEmptyStr(data.accountName, 140)
@@ -191,8 +219,9 @@ service cloud.firestore {
 
     function isValidAccount(data) {
       return data.keys().hasAll(['ownerId', 'name', 'industry', 'tier', 'annualRevenue', 'accountManager', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['ownerId', 'name', 'industry', 'city', 'tier', 'annualRevenue', 'employeesCount', 'website', 'accountManager', 'leadUniqueId', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['ownerId', 'org_id', 'name', 'industry', 'city', 'tier', 'annualRevenue', 'employeesCount', 'website', 'accountManager', 'leadUniqueId', 'createdAt', 'updatedAt'])
         && isValidId(data.ownerId)
+        && isOptionalStr(data, 'org_id', 128)
         && isNonEmptyStr(data.name, 150)
         && isNonEmptyStr(data.industry, 100)
         && isOptionalStr(data, 'city', 80)
@@ -208,8 +237,9 @@ service cloud.firestore {
 
     function isValidDeal(data) {
       return data.keys().hasAll(['ownerId', 'title', 'accountId', 'accountName', 'amount', 'currency', 'stage', 'probability', 'closeDate', 'ownerName', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['ownerId', 'title', 'accountId', 'accountName', 'amount', 'currency', 'stage', 'probability', 'closeDate', 'ownerName', 'nextStep', 'leadUniqueId', 'contactId', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['ownerId', 'org_id', 'title', 'accountId', 'accountName', 'amount', 'currency', 'stage', 'probability', 'closeDate', 'ownerName', 'nextStep', 'leadUniqueId', 'contactId', 'createdAt', 'updatedAt'])
         && isValidId(data.ownerId)
+        && isOptionalStr(data, 'org_id', 128)
         && isNonEmptyStr(data.title, 160)
         && isNonEmptyStr(data.accountId, 128)
         && isNonEmptyStr(data.accountName, 150)
@@ -228,8 +258,9 @@ service cloud.firestore {
 
     function isValidQuote(data) {
       return data.keys().hasAll(['ownerId', 'quoteNumber', 'subject', 'dealId', 'accountName', 'totalAmount', 'status', 'validUntil', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['ownerId', 'quoteNumber', 'subject', 'dealId', 'accountName', 'totalAmount', 'status', 'validUntil', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['ownerId', 'org_id', 'quoteNumber', 'subject', 'dealId', 'accountName', 'totalAmount', 'status', 'validUntil', 'createdAt', 'updatedAt'])
         && isValidId(data.ownerId)
+        && isOptionalStr(data, 'org_id', 128)
         && isNonEmptyStr(data.quoteNumber, 40)
         && isNonEmptyStr(data.subject, 160)
         && isNonEmptyStr(data.dealId, 128)
@@ -243,8 +274,9 @@ service cloud.firestore {
 
     function isValidSalesOrder(data) {
       return data.keys().hasAll(['ownerId', 'orderNumber', 'accountName', 'totalAmount', 'status', 'deliveryDate', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['ownerId', 'orderNumber', 'quoteId', 'accountName', 'totalAmount', 'status', 'deliveryDate', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['ownerId', 'org_id', 'orderNumber', 'quoteId', 'accountName', 'totalAmount', 'status', 'deliveryDate', 'createdAt', 'updatedAt'])
         && isValidId(data.ownerId)
+        && isOptionalStr(data, 'org_id', 128)
         && isNonEmptyStr(data.orderNumber, 40)
         && isOptionalStr(data, 'quoteId', 128)
         && isNonEmptyStr(data.accountName, 150)
@@ -257,8 +289,9 @@ service cloud.firestore {
 
     function isValidInvoice(data) {
       return data.keys().hasAll(['ownerId', 'invoiceNumber', 'accountName', 'totalAmount', 'paidAmount', 'status', 'dueDate', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['ownerId', 'invoiceNumber', 'salesOrderId', 'accountName', 'totalAmount', 'paidAmount', 'status', 'dueDate', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['ownerId', 'org_id', 'invoiceNumber', 'salesOrderId', 'accountName', 'totalAmount', 'paidAmount', 'status', 'dueDate', 'createdAt', 'updatedAt'])
         && isValidId(data.ownerId)
+        && isOptionalStr(data, 'org_id', 128)
         && isNonEmptyStr(data.invoiceNumber, 40)
         && isOptionalStr(data, 'salesOrderId', 128)
         && isNonEmptyStr(data.accountName, 150)
@@ -272,8 +305,9 @@ service cloud.firestore {
 
     function isValidTouchpoint(data) {
       return data.keys().hasAll(['ownerId', 'channel', 'summary', 'relatedEntityType', 'relatedEntityId', 'relatedEntityName', 'occurredAt', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['ownerId', 'channel', 'summary', 'relatedEntityType', 'relatedEntityId', 'relatedEntityName', 'occurredAt', 'leadId', 'leadUniqueId', 'campaign', 'adId', 'utmSource', 'eventType', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['ownerId', 'org_id', 'channel', 'summary', 'relatedEntityType', 'relatedEntityId', 'relatedEntityName', 'occurredAt', 'leadId', 'leadUniqueId', 'campaign', 'adId', 'utmSource', 'eventType', 'createdAt', 'updatedAt'])
         && isValidId(data.ownerId)
+        && isOptionalStr(data, 'org_id', 128)
         && data.channel in ['مكالمة', 'اجتماع', 'بريد إلكتروني', 'واتساب', 'إنستغرام', 'موقع ويب', 'حدث']
         && isNonEmptyStr(data.summary, 300)
         && isNonEmptyStr(data.relatedEntityType, 60)
@@ -292,8 +326,9 @@ service cloud.firestore {
 
     function isValidMessage(data) {
       return data.keys().hasAll(['ownerId', 'channel', 'senderName', 'body', 'direction', 'unread', 'timestampLabel', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['ownerId', 'channel', 'senderName', 'companyName', 'subject', 'body', 'direction', 'unread', 'timestampLabel', 'leadId', 'leadUniqueId', 'campaign', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['ownerId', 'org_id', 'channel', 'senderName', 'companyName', 'subject', 'body', 'direction', 'unread', 'timestampLabel', 'leadId', 'leadUniqueId', 'campaign', 'createdAt', 'updatedAt'])
         && isValidId(data.ownerId)
+        && isOptionalStr(data, 'org_id', 128)
         && data.channel in ['whatsapp', 'email', 'chat', 'instagram', 'messenger']
         && isNonEmptyStr(data.senderName, 120)
         && isOptionalStr(data, 'companyName', 140)
@@ -311,8 +346,9 @@ service cloud.firestore {
 
     function isValidTask(data) {
       return data.keys().hasAll(['ownerId', 'title', 'priority', 'status', 'dueDate', 'relatedTo', 'assignedToName', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['ownerId', 'title', 'priority', 'status', 'dueDate', 'relatedTo', 'assignedToName', 'leadId', 'leadUniqueId', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['ownerId', 'org_id', 'title', 'priority', 'status', 'dueDate', 'relatedTo', 'assignedToName', 'leadId', 'leadUniqueId', 'createdAt', 'updatedAt'])
         && isValidId(data.ownerId)
+        && isOptionalStr(data, 'org_id', 128)
         && isNonEmptyStr(data.title, 160)
         && data.priority in ['عالية', 'متوسطة', 'منخفضة']
         && data.status in ['قيد التنفيذ', 'مكتملة', 'مؤجلة']
@@ -327,8 +363,9 @@ service cloud.firestore {
 
     function isValidBlueprint(data) {
       return data.keys().hasAll(['ownerId', 'name', 'module', 'active', 'stagesCount', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['ownerId', 'name', 'module', 'active', 'stagesCount', 'description', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['ownerId', 'org_id', 'name', 'module', 'active', 'stagesCount', 'description', 'createdAt', 'updatedAt'])
         && isValidId(data.ownerId)
+        && isOptionalStr(data, 'org_id', 128)
         && isNonEmptyStr(data.name, 120)
         && isNonEmptyStr(data.module, 60)
         && data.active is bool
@@ -340,8 +377,9 @@ service cloud.firestore {
 
     function isValidWorkflow(data) {
       return data.keys().hasAll(['ownerId', 'name', 'module', 'trigger', 'actionSummary', 'active', 'executionsCount', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['ownerId', 'name', 'module', 'trigger', 'actionSummary', 'active', 'executionsCount', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['ownerId', 'org_id', 'name', 'module', 'trigger', 'actionSummary', 'active', 'executionsCount', 'createdAt', 'updatedAt'])
         && isValidId(data.ownerId)
+        && isOptionalStr(data, 'org_id', 128)
         && isNonEmptyStr(data.name, 120)
         && isNonEmptyStr(data.module, 60)
         && isNonEmptyStr(data.trigger, 120)
@@ -354,8 +392,9 @@ service cloud.firestore {
 
     function isValidRecycleBinItem(data) {
       return data.keys().hasAll(['ownerId', 'entityType', 'originalId', 'displayName', 'deletedBy', 'deletedAtLabel', 'expiresInDays', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['ownerId', 'entityType', 'originalId', 'displayName', 'deletedBy', 'deletedAtLabel', 'expiresInDays', 'payloadJson', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['ownerId', 'org_id', 'entityType', 'originalId', 'displayName', 'deletedBy', 'deletedAtLabel', 'expiresInDays', 'payloadJson', 'createdAt', 'updatedAt'])
         && isValidId(data.ownerId)
+        && isOptionalStr(data, 'org_id', 128)
         && isNonEmptyStr(data.entityType, 60)
         && isNonEmptyStr(data.originalId, 128)
         && isNonEmptyStr(data.displayName, 160)
@@ -367,10 +406,60 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
-    // 4. Collection Match Blocks (All 17 Collections + admins)
+    function isValidMetaConnection(data) {
+      return data.keys().hasAll(['ownerId', 'org_id', 'fb_user_id', 'long_lived_token_enc', 'token_expires_at', 'status', 'createdAt', 'updatedAt'])
+        && isValidId(data.ownerId)
+        && isValidId(data.org_id)
+        && isNonEmptyStr(data.fb_user_id, 128)
+        && isNonEmptyStr(data.long_lived_token_enc, 2000)
+        && isNonEmptyStr(data.token_expires_at, 80)
+        && data.status in ['connected', 'reconnect_required'];
+    }
+
+    function isValidMetaPage(data) {
+      return data.keys().hasAll(['ownerId', 'org_id', 'page_id', 'page_name', 'ig_account_id', 'waba_id', 'phone_number_id', 'page_token_enc', 'subscribed_fields', 'createdAt', 'updatedAt'])
+        && isValidId(data.ownerId)
+        && isValidId(data.org_id)
+        && isNonEmptyStr(data.page_id, 128)
+        && isNonEmptyStr(data.page_name, 200)
+        && isNonEmptyStr(data.page_token_enc, 2000)
+        && data.subscribed_fields is list;
+    }
+
+    function isValidMetaFieldMapping(data) {
+      return data.keys().hasAll(['ownerId', 'org_id', 'form_id', 'mappings', 'createdAt', 'updatedAt'])
+        && isValidId(data.ownerId)
+        && isValidId(data.org_id)
+        && isNonEmptyStr(data.form_id, 128)
+        && data.mappings is map;
+    }
+
+    function isValidMetaWebhookLog(data) {
+      return data.keys().hasAll(['ownerId', 'org_id', 'event_id', 'event_type', 'status', 'retry_count', 'created_at', 'createdAt', 'updatedAt'])
+        && isValidId(data.ownerId)
+        && isValidId(data.org_id)
+        && isNonEmptyStr(data.event_id, 160)
+        && data.status in ['queued', 'processed', 'failed']
+        && data.retry_count is number && data.retry_count >= 0;
+    }
+
+    // 4. Collection Match Blocks (All 22 Collections + admins)
     match /admins/{adminId} {
       allow get: if isSignedIn() && isValidId(adminId) && adminId == request.auth.uid;
       allow list, write: if false;
+    }
+
+    match /organizations/{orgId} {
+      allow get, list: if isSignedIn();
+      allow create: if isVerifiedUser()
+        && isValidId(orgId)
+        && isValidOrganization(incoming())
+        && incoming().org_id == orgId;
+      allow update: if isVerifiedUser()
+        && isValidId(orgId)
+        && isValidOrganization(incoming())
+        && incoming().org_id == existing().org_id;
+      allow delete: if isAdmin() && isValidId(orgId);
     }
 
     match /users/{userId} {
@@ -388,11 +477,12 @@ service cloud.firestore {
         && isValidUser(incoming())
         && (userId == request.auth.uid || isAdmin())
         && incoming().uid == existing().uid
+        && isSameTenantOrg()
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
           isAdmin() ||
-          incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'jobTitle', 'department', 'avatarUrl', 'updatedAt'])
+          incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'jobTitle', 'department', 'avatarUrl', 'org_id', 'updatedAt'])
         );
       allow delete: if isAdmin() && isValidId(userId);
     }
@@ -411,11 +501,12 @@ service cloud.firestore {
         && isValidProfile(incoming())
         && isOwnerResource()
         && incoming().ownerId == existing().ownerId
+        && isSameTenantOrg()
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
           isAdmin() ||
-          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'modulePermissions', 'fieldSecurity', 'updatedAt'])
+          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'modulePermissions', 'fieldSecurity', 'addonPermissions', 'org_id', 'updatedAt'])
         );
       allow delete: if isVerifiedUser() && isValidId(profileId) && isOwnerResource() && !existing().isSystem;
     }
@@ -434,11 +525,12 @@ service cloud.firestore {
         && isValidRole(incoming())
         && isOwnerResource()
         && incoming().ownerId == existing().ownerId
+        && isSameTenantOrg()
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
           isAdmin() ||
-          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'reportsToRoleId', 'dataVisibility', 'description', 'updatedAt'])
+          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'reportsToRoleId', 'dataVisibility', 'hide_subordinates_data', 'description', 'org_id', 'updatedAt'])
         );
       allow delete: if isVerifiedUser() && isValidId(roleId) && isOwnerResource();
     }
@@ -457,11 +549,12 @@ service cloud.firestore {
         && isValidCustomField(incoming())
         && isOwnerResource()
         && incoming().ownerId == existing().ownerId
+        && isSameTenantOrg()
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
           isAdmin() ||
-          incoming().diff(existing()).affectedKeys().hasOnly(['label', 'section', 'required', 'order', 'options', 'updatedAt'])
+          incoming().diff(existing()).affectedKeys().hasOnly(['label', 'section', 'required', 'order', 'options', 'api_name', 'org_id', 'updatedAt'])
         );
       allow delete: if isVerifiedUser() && isValidId(fieldId) && isOwnerResource();
     }
@@ -481,6 +574,7 @@ service cloud.firestore {
         && isOwnerResource()
         && incoming().ownerId == existing().ownerId
         && incoming().unique_id == existing().unique_id
+        && isSameTenantOrg()
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
@@ -494,7 +588,7 @@ service cloud.firestore {
             'source', 'channel', 'campaign', 'adId', 'utmSource', 'utmMedium', 'utmCampaign',
             'status', 'aiScore', 'estimatedValue', 'approvedBudget', 'assignedToName', 'city', 'tags',
             'lastActivityLabel', 'lastMessageSnippet', 'awaitingReplyHours', 'followUpAt', 'notes',
-            'customValues', 'updatedAt'
+            'customValues', 'org_id', 'updatedAt'
           ])
         );
       allow delete: if isVerifiedUser() && isValidId(leadId) && isOwnerResource();
@@ -514,6 +608,7 @@ service cloud.firestore {
         && isValidContact(incoming())
         && isOwnerResource()
         && incoming().ownerId == existing().ownerId
+        && isSameTenantOrg()
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
@@ -525,7 +620,7 @@ service cloud.firestore {
             'fullName', 'accountId', 'accountName', 'jobTitle', 'email', 'phone', 'city',
             'isPrimary', 'leadUniqueId', 'primarySource', 'contactStatus', 'channel',
             'assignedToName', 'tags', 'lastActivityLabel', 'lastMessageSnippet',
-            'notes', 'customValues', 'updatedAt'
+            'notes', 'customValues', 'org_id', 'updatedAt'
           ])
         );
       allow delete: if isVerifiedUser() && isValidId(contactId) && isOwnerResource();
@@ -545,11 +640,12 @@ service cloud.firestore {
         && isValidAccount(incoming())
         && isOwnerResource()
         && incoming().ownerId == existing().ownerId
+        && isSameTenantOrg()
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
           isAdmin() ||
-          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'industry', 'city', 'tier', 'annualRevenue', 'employeesCount', 'website', 'accountManager', 'updatedAt'])
+          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'industry', 'city', 'tier', 'annualRevenue', 'employeesCount', 'website', 'accountManager', 'org_id', 'updatedAt'])
         );
       allow delete: if isVerifiedUser() && isValidId(accountId) && isOwnerResource();
     }
@@ -568,6 +664,7 @@ service cloud.firestore {
         && isValidDeal(incoming())
         && isOwnerResource()
         && incoming().ownerId == existing().ownerId
+        && isSameTenantOrg()
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
@@ -575,7 +672,7 @@ service cloud.firestore {
           incoming().diff(existing()).affectedKeys().hasOnly(['contactId', 'leadUniqueId', 'updatedAt']) ||
           (existing().stage != 'مكتملة' && existing().stage != 'خسارة' && (
             incoming().diff(existing()).affectedKeys().hasOnly(['stage', 'probability', 'updatedAt']) ||
-            incoming().diff(existing()).affectedKeys().hasOnly(['title', 'accountId', 'accountName', 'amount', 'currency', 'stage', 'probability', 'closeDate', 'ownerName', 'nextStep', 'contactId', 'updatedAt'])
+            incoming().diff(existing()).affectedKeys().hasOnly(['title', 'accountId', 'accountName', 'amount', 'currency', 'stage', 'probability', 'closeDate', 'ownerName', 'nextStep', 'contactId', 'org_id', 'updatedAt'])
           ))
         );
       allow delete: if isVerifiedUser() && isValidId(dealId) && isOwnerResource();
@@ -595,12 +692,13 @@ service cloud.firestore {
         && isValidQuote(incoming())
         && isOwnerResource()
         && incoming().ownerId == existing().ownerId
+        && isSameTenantOrg()
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
           isAdmin() ||
           incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']) ||
-          incoming().diff(existing()).affectedKeys().hasOnly(['subject', 'totalAmount', 'status', 'validUntil', 'updatedAt'])
+          incoming().diff(existing()).affectedKeys().hasOnly(['subject', 'totalAmount', 'status', 'validUntil', 'org_id', 'updatedAt'])
         );
       allow delete: if isVerifiedUser() && isValidId(quoteId) && isOwnerResource();
     }
@@ -619,11 +717,12 @@ service cloud.firestore {
         && isValidSalesOrder(incoming())
         && isOwnerResource()
         && incoming().ownerId == existing().ownerId
+        && isSameTenantOrg()
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
           isAdmin() ||
-          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'deliveryDate', 'updatedAt'])
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'deliveryDate', 'org_id', 'updatedAt'])
         );
       allow delete: if isVerifiedUser() && isValidId(orderId) && isOwnerResource();
     }
@@ -642,12 +741,13 @@ service cloud.firestore {
         && isValidInvoice(incoming())
         && isOwnerResource()
         && incoming().ownerId == existing().ownerId
+        && isSameTenantOrg()
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
           isAdmin() ||
           (existing().status != 'مكتملة' &&
-            incoming().diff(existing()).affectedKeys().hasOnly(['paidAmount', 'status', 'dueDate', 'updatedAt']))
+            incoming().diff(existing()).affectedKeys().hasOnly(['paidAmount', 'status', 'dueDate', 'org_id', 'updatedAt']))
         );
       allow delete: if isVerifiedUser() && isValidId(invoiceId) && isOwnerResource();
     }
@@ -666,12 +766,13 @@ service cloud.firestore {
         && isValidTouchpoint(incoming())
         && isOwnerResource()
         && incoming().ownerId == existing().ownerId
+        && isSameTenantOrg()
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
           isAdmin() ||
           incoming().diff(existing()).affectedKeys().hasOnly(['summary', 'updatedAt']) ||
-          incoming().diff(existing()).affectedKeys().hasOnly(['relatedEntityType', 'relatedEntityId', 'relatedEntityName', 'leadId', 'leadUniqueId', 'updatedAt'])
+          incoming().diff(existing()).affectedKeys().hasOnly(['relatedEntityType', 'relatedEntityId', 'relatedEntityName', 'leadId', 'leadUniqueId', 'org_id', 'updatedAt'])
         );
       allow delete: if isVerifiedUser() && isValidId(touchpointId) && isOwnerResource();
     }
@@ -690,12 +791,13 @@ service cloud.firestore {
         && isValidMessage(incoming())
         && isOwnerResource()
         && incoming().ownerId == existing().ownerId
+        && isSameTenantOrg()
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
           isAdmin() ||
           incoming().diff(existing()).affectedKeys().hasOnly(['unread', 'updatedAt']) ||
-          incoming().diff(existing()).affectedKeys().hasOnly(['leadId', 'leadUniqueId', 'senderName', 'companyName', 'updatedAt'])
+          incoming().diff(existing()).affectedKeys().hasOnly(['leadId', 'leadUniqueId', 'senderName', 'companyName', 'org_id', 'updatedAt'])
         );
       allow delete: if isVerifiedUser() && isValidId(messageId) && isOwnerResource();
     }
@@ -714,12 +816,13 @@ service cloud.firestore {
         && isValidTask(incoming())
         && isOwnerResource()
         && incoming().ownerId == existing().ownerId
+        && isSameTenantOrg()
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
           isAdmin() ||
           incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']) ||
-          incoming().diff(existing()).affectedKeys().hasOnly(['title', 'priority', 'status', 'dueDate', 'relatedTo', 'assignedToName', 'leadId', 'leadUniqueId', 'updatedAt'])
+          incoming().diff(existing()).affectedKeys().hasOnly(['title', 'priority', 'status', 'dueDate', 'relatedTo', 'assignedToName', 'leadId', 'leadUniqueId', 'org_id', 'updatedAt'])
         );
       allow delete: if isVerifiedUser() && isValidId(taskId) && isOwnerResource();
     }
@@ -738,11 +841,12 @@ service cloud.firestore {
         && isValidBlueprint(incoming())
         && isOwnerResource()
         && incoming().ownerId == existing().ownerId
+        && isSameTenantOrg()
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
           isAdmin() ||
-          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'active', 'stagesCount', 'description', 'updatedAt'])
+          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'active', 'stagesCount', 'description', 'org_id', 'updatedAt'])
         );
       allow delete: if isVerifiedUser() && isValidId(blueprintId) && isOwnerResource();
     }
@@ -761,12 +865,13 @@ service cloud.firestore {
         && isValidWorkflow(incoming())
         && isOwnerResource()
         && incoming().ownerId == existing().ownerId
+        && isSameTenantOrg()
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
           isAdmin() ||
           incoming().diff(existing()).affectedKeys().hasOnly(['active', 'executionsCount', 'updatedAt']) ||
-          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'trigger', 'actionSummary', 'active', 'updatedAt'])
+          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'trigger', 'actionSummary', 'active', 'org_id', 'updatedAt'])
         );
       allow delete: if isVerifiedUser() && isValidId(workflowId) && isOwnerResource();
     }
@@ -782,6 +887,66 @@ service cloud.firestore {
         && incoming().updatedAt == request.time;
       allow update: if false;
       allow delete: if isVerifiedUser() && isValidId(itemId) && isOwnerResource();
+    }
+
+    match /meta_connections/{connId} {
+      allow get: if isValidId(connId) && isOwnerResource();
+      allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isTokenAdmin());
+      allow create: if isVerifiedUser()
+        && isValidId(connId)
+        && isValidMetaConnection(incoming())
+        && incoming().ownerId == request.auth.uid;
+      allow update: if isVerifiedUser()
+        && isValidId(connId)
+        && isValidMetaConnection(incoming())
+        && isOwnerResource()
+        && isSameTenantOrg();
+      allow delete: if isVerifiedUser() && isValidId(connId) && isOwnerResource();
+    }
+
+    match /meta_pages/{pageId} {
+      allow get: if isValidId(pageId) && isOwnerResource();
+      allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isTokenAdmin());
+      allow create: if isVerifiedUser()
+        && isValidId(pageId)
+        && isValidMetaPage(incoming())
+        && incoming().ownerId == request.auth.uid;
+      allow update: if isVerifiedUser()
+        && isValidId(pageId)
+        && isValidMetaPage(incoming())
+        && isOwnerResource()
+        && isSameTenantOrg();
+      allow delete: if isVerifiedUser() && isValidId(pageId) && isOwnerResource();
+    }
+
+    match /meta_field_mappings/{mapId} {
+      allow get: if isValidId(mapId) && isOwnerResource();
+      allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isTokenAdmin());
+      allow create: if isVerifiedUser()
+        && isValidId(mapId)
+        && isValidMetaFieldMapping(incoming())
+        && incoming().ownerId == request.auth.uid;
+      allow update: if isVerifiedUser()
+        && isValidId(mapId)
+        && isValidMetaFieldMapping(incoming())
+        && isOwnerResource()
+        && isSameTenantOrg();
+      allow delete: if isVerifiedUser() && isValidId(mapId) && isOwnerResource();
+    }
+
+    match /meta_webhook_logs/{logId} {
+      allow get: if isValidId(logId) && isOwnerResource();
+      allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isTokenAdmin());
+      allow create: if isVerifiedUser()
+        && isValidId(logId)
+        && isValidMetaWebhookLog(incoming())
+        && incoming().ownerId == request.auth.uid;
+      allow update: if isVerifiedUser()
+        && isValidId(logId)
+        && isValidMetaWebhookLog(incoming())
+        && isOwnerResource()
+        && isSameTenantOrg();
+      allow delete: if isVerifiedUser() && isValidId(logId) && isOwnerResource();
     }
   }
 }

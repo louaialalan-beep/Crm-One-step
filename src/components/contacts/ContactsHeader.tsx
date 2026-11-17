@@ -91,14 +91,10 @@ export const ContactsHeader: React.FC<ContactsHeaderProps> = ({
               <h1 className="text-[20px] font-bold text-[#131b2e] tracking-tight leading-tight whitespace-nowrap">
                 جهات الاتصال (Contacts)
               </h1>
-              <span className="px-2.5 py-0.5 rounded-full bg-[#dbe1ff] text-[#00174b] text-[11px] font-bold tabular-nums whitespace-nowrap">
+              <span className="px-2 py-0.5 rounded-full bg-[#dbe1ff] text-[#00174b] text-[11px] font-semibold tabular-nums whitespace-nowrap">
                 {filteredCount === totalCount
-                  ? `${totalCount} جهة اتصال`
-                  : `${filteredCount} من ${totalCount} جهة اتصال`}
-              </span>
-              <span className="inline-flex items-center gap-1 rounded bg-[#6ffbbe] px-2 py-0.5 text-[10px] font-semibold text-[#005236] whitespace-nowrap">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#006242] animate-pulse" />
-                <span>تحديث حي</span>
+                  ? `${totalCount} سجل متاح`
+                  : `${filteredCount} من ${totalCount} سجل`}
               </span>
             </div>
             <p className="text-[12px] text-[#737686] truncate">
@@ -147,7 +143,7 @@ export const ContactsHeader: React.FC<ContactsHeaderProps> = ({
                 className="flex items-center gap-1.5 px-3.5 py-2 text-[13px] font-semibold hover:bg-[#1D4ED8] transition-colors disabled:opacity-50 whitespace-nowrap"
               >
                 <UserPlus className="h-4 w-4" />
-                <span>+ جهة اتصال جديدة</span>
+                <span>جهة اتصال جديدة</span>
               </button>
               <div className="w-px bg-[#ffffff]/20" />
               <button
@@ -324,7 +320,7 @@ export const ContactsHeader: React.FC<ContactsHeaderProps> = ({
             className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[#2563EB] hover:bg-[#dae2fd]/50 text-[12px] font-medium transition-colors whitespace-nowrap shrink-0"
           >
             <PlusCircle className="h-3.5 w-3.5" />
-            <span>+ إضافة فلتر مخصص</span>
+            <span>إضافة فلتر مخصص</span>
             {activeDockedCount > 0 && (
               <span className="rounded-full bg-[#2563EB] px-1.5 py-0.2 text-[10px] font-bold text-[#ffffff] tabular-nums">
                 {activeDockedCount}
@@ -334,9 +330,9 @@ export const ContactsHeader: React.FC<ContactsHeaderProps> = ({
         </div>
 
         {/* Left: Deals Value & Repeat Purchase Rate */}
-        <div className="hidden xl:flex items-center gap-3 text-[#737686] text-[11px] shrink-0 py-1 px-2.5 rounded-lg bg-[#f2f3ff]/70">
+        <div className="hidden xl:flex items-center gap-3 text-[#737686] text-[11px] shrink-0">
           <div className="flex items-center gap-1">
-            <Wallet className="h-3.5 w-3.5 text-[#006242]" />
+            <Wallet className="h-4 w-4 text-[#006242]" />
             <span>
               إجمالي قيمة الصفقات:{' '}
               <strong className="text-[#131b2e] tabular-nums">
@@ -344,12 +340,12 @@ export const ContactsHeader: React.FC<ContactsHeaderProps> = ({
               </strong>
             </span>
           </div>
-          <div className="h-3 w-px bg-[#c3c6d7]" />
+          <div className="h-3 w-px bg-[#e2e7ff]" />
           <div className="flex items-center gap-1">
-            <Repeat className="h-3.5 w-3.5 text-[#2563EB]" />
+            <Repeat className="h-4 w-4 text-[#2563EB]" />
             <span>
               نسبة تكرار الشراء:{' '}
-              <strong className="text-[#004ac6] tabular-nums">
+              <strong className="text-[#131b2e] tabular-nums">
                 {metrics.repeatPurchasePercent}%
               </strong>
             </span>

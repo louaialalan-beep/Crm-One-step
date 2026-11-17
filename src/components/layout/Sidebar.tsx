@@ -10,7 +10,9 @@ import {
   ChevronRight,
   FileSpreadsheet,
   LayoutDashboard,
+  MessageSquare,
   PieChart,
+  Send,
   Settings,
   UserPlus,
   Users,
@@ -36,6 +38,8 @@ const ICON_MAP: Record<NavModuleItem['iconName'], React.ComponentType<{ classNam
   BarChart3,
   PieChart,
   Settings,
+  MessageSquare,
+  Send,
 };
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -64,6 +68,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const isModuleActive = (mod: NavModuleItem) => {
     if (mod.path === '/') return location.pathname === '/';
+    if (mod.id === 'tasks') {
+      return location.pathname === '/tasks' || location.pathname === '/activities';
+    }
     if (mod.subItems) {
       return mod.subItems.some((sub) => location.pathname === sub.path);
     }

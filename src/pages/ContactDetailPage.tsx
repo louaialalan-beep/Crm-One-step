@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
+  AlertCircle,
   ArrowRight,
   Briefcase,
   Building2,
+  CalendarPlus,
   Check,
   CheckCheck,
   CheckCircle2,
@@ -44,7 +46,6 @@ import {
   getDealsForContact,
   resolveContactStatus,
 } from '../utils/contactsLogic';
-import { formatCurrencySAR } from '../utils/formatters';
 import { CHANNEL_LABELS } from '../utils/leadsLogic';
 import { CreateContactDealModal } from '../components/contacts/CreateContactDealModal';
 import { getArabicInitials } from '../components/leads/LeadChannelIcon';
@@ -59,6 +60,15 @@ const TOUCHPOINT_CHANNELS: TouchpointChannel[] = [
   'حدث',
 ];
 
+const PREFERRED_CHANNEL_LABELS: Record<LeadChannel, string> = {
+  whatsapp: 'واتساب للأعمال (WhatsApp Business)',
+  instagram: 'إنستغرام (Instagram Direct)',
+  messenger: 'فيسبوك ماسنجر (Messenger)',
+  website: 'الموقع الإلكتروني (Website)',
+  phone: 'اتصال هاتفي مباشر',
+  referral: 'إحالة شريك / عميل',
+};
+
 const TOUCHPOINT_BADGE_STYLE: Record<TouchpointChannel, string> = {
   واتساب: 'border-[#A7F3D0] bg-[#ECFDF5] text-[#059669]',
   إنستغرام: 'border-[#BFDBFE] bg-[#EFF6FF] text-[#2563EB]',
@@ -66,7 +76,7 @@ const TOUCHPOINT_BADGE_STYLE: Record<TouchpointChannel, string> = {
   مكالمة: 'border-[#FDE68A] bg-[#FFFBEB] text-[#D97706]',
   اجتماع: 'border-[#C7D2FE] bg-[#EEF2FF] text-[#4F46E5]',
   'بريد إلكتروني': 'border-[#CBD5E1] bg-[#F1F5F9] text-[#334155]',
-  حدث: 'border-[#C7D2FE] bg-[#EEF2FF] text-[#4338CA]',
+  حدث: 'border-[#BAE6FD] bg-[#F0F9FF] text-[#0284C7]',
 };
 
 const DEAL_STAGE_BADGE: Record<DealStage, string> = {
@@ -118,6 +128,7 @@ export const ContactDetailPage: React.FC = () => {
 
   const {
     contacts,
+    leads,
     deals,
     customFields,
     touchpoints,
@@ -144,6 +155,7 @@ export const ContactDetailPage: React.FC = () => {
 
   const [copiedId, setCopiedId] = useState(false);
   const [savedNotice, setSavedNotice] = useState(false);
+  const [errorNotice, setErrorNotice] = useState<string | null>(null);
   const [editModeHint, setEditModeHint] = useState(false);
   const [dealModalOpen, setDealModalOpen] = useState(false);
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
@@ -201,12 +213,32 @@ export const ContactDetailPage: React.FC = () => {
       contact.channel === 'messenger'
     ) {
       setChatChannel(contact.channel);
+    } else if (contact.channel === 'website') {
+      setChatChannel('chat');
+    } else {
+      setChatChannel('whatsapp');
     }
   }, [contact]);
+
+  const matchedOriginLead = useMemo(() => {
+    if (!contact) return null;
+    return (
+      leads.find(
+        (l) =>
+          l.convertedContactId === contact.id ||
+          (Boolean(contact.leadUniqueId) && l.unique_id === contact.leadUniqueId)
+      ) ?? null
+    );
+  }, [contact, leads]);
 
   const contactDeals = useMemo(
     () => (contact ? getDealsForContact(contact, deals) : []),
     [contact, deals]
+  );
+
+  const contactDealIds = useMemo(
+    () => new Set(contactDeals.map((d) => d.id)),
+    [contactDeals]
   );
 
   const contactTouchpoints = useMemo(() => {
@@ -214,18 +246,29 @@ export const ContactDetailPage: React.FC = () => {
     return touchpoints.filter(
       (tp) =>
         (tp.relatedEntityType === 'contact' && tp.relatedEntityId === contact.id) ||
+        (tp.relatedEntityType === 'deal' && contactDealIds.has(tp.relatedEntityId)) ||
+        (Boolean(matchedOriginLead) && tp.leadId === matchedOriginLead?.id) ||
         (Boolean(contact.leadUniqueId) && tp.leadUniqueId === contact.leadUniqueId)
     );
-  }, [contact, touchpoints]);
+  }, [contact, contactDealIds, matchedOriginLead, touchpoints]);
 
   const contactTasks = useMemo(() => {
     if (!contact) return [];
-    return tasks.filter(
+    const list = tasks.filter(
       (t) =>
         t.relatedTo === contact.fullName ||
-        (Boolean(contact.leadUniqueId) && t.leadUniqueId === contact.leadUniqueId)
+        (Boolean(matchedOriginLead) && t.leadId === matchedOriginLead?.id) ||
+        (Boolean(contact.leadUniqueId) && t.leadUniqueId === contact.leadUniqueId) ||
+        (contact.isPrimary &&
+          contact.accountId !== 'unassigned' &&
+          t.relatedTo === contact.accountName)
     );
-  }, [contact, tasks]);
+    return [...list].sort((a, b) => {
+      const aDone = a.status === 'مكتملة' ? 1 : 0;
+      const bDone = b.status === 'مكتملة' ? 1 : 0;
+      return aDone - bDone;
+    });
+  }, [contact, matchedOriginLead, tasks]);
 
   const openTasksCount = useMemo(
     () => contactTasks.filter((t) => t.status !== 'مكتملة').length,
@@ -236,11 +279,12 @@ export const ContactDetailPage: React.FC = () => {
     if (!contact) return [];
     return messages.filter(
       (m) =>
+        (Boolean(matchedOriginLead) && m.leadId === matchedOriginLead?.id) ||
         (Boolean(contact.leadUniqueId) && m.leadUniqueId === contact.leadUniqueId) ||
         m.senderName === contact.fullName ||
         (m.direction === 'outbound' && m.subject?.includes(contact.fullName))
     );
-  }, [contact, messages]);
+  }, [contact, matchedOriginLead, messages]);
 
   const contactCustomFields = useMemo(
     () =>
@@ -252,11 +296,11 @@ export const ContactDetailPage: React.FC = () => {
 
   if (!contact) {
     return (
-      <div className="rounded-2xl border border-[#E2E8F0] bg-[#FFFFFF] p-10 text-center space-y-3">
+      <div className="rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] p-10 text-center space-y-3">
         <p className="text-base font-bold text-[#0F172A]">لم يتم العثور على جهة الاتصال المطلوبة</p>
         <Link
           to="/contacts"
-          className="inline-flex items-center gap-1.5 rounded-xl bg-[#2563EB] px-4 py-2 text-xs font-bold text-[#FFFFFF]"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-[#2563EB] px-4 py-2 text-xs font-bold text-[#FFFFFF] hover:bg-[#1D4ED8]"
         >
           <ArrowRight className="h-4 w-4" />
           <span>العودة إلى جهات الاتصال</span>
@@ -282,11 +326,20 @@ export const ContactDetailPage: React.FC = () => {
   const statusAccess = getFieldAccess('contacts', 'contactStatus');
   const notesAccess = getFieldAccess('contacts', 'notes');
 
+  const showSaved = () => {
+    setErrorNotice(null);
+    setSavedNotice(true);
+    window.setTimeout(() => setSavedNotice(false), 2000);
+  };
+
   const commitPatch = async (patch: Parameters<typeof updateContactFields>[1]) => {
     if (!canUpdateContact) return;
-    await updateContactFields(contact.id, patch);
-    setSavedNotice(true);
-    window.setTimeout(() => setSavedNotice(false), 1800);
+    try {
+      await updateContactFields(contact.id, patch);
+      showSaved();
+    } catch {
+      setErrorNotice('تعذر حفظ التغييرات في السحابة، يرجى التحقق من الاتصال.');
+    }
   };
 
   const handleCopyId = () => {
@@ -297,7 +350,7 @@ export const ContactDetailPage: React.FC = () => {
 
   const handleAddTag = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleaned = newTagText.trim().replace(/^#/, '');
+    const cleaned = newTagText.trim().replace(/^#/, '').slice(0, 32);
     if (!cleaned) return;
     const next = Array.from(new Set([...(contact.tags ?? []), cleaned])).slice(0, 20);
     await commitPatch({ tags: next });
@@ -308,48 +361,77 @@ export const ContactDetailPage: React.FC = () => {
   const handleAddTouchpoint = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!tpSummary.trim() && !tpCampaign.trim()) return;
-    await addContactTouchpoint(contact.id, {
-      channel: tpChannel,
-      campaign: tpCampaign.trim() || contact.primarySource,
-      summary: tpSummary.trim() || 'نقطة دخول مسجلة يدوياً',
-      eventType: 'نقطة دخول يدوية',
-    });
-    setTpSummary('');
-    setTpCampaign('');
-    setTpOpen(false);
+    try {
+      await addContactTouchpoint(contact.id, {
+        channel: tpChannel,
+        campaign: (tpCampaign.trim() || contact.primarySource || 'إدخال يدوي').slice(0, 140),
+        summary: (tpSummary.trim() || 'نقطة دخول مسجلة يدوياً').slice(0, 300),
+        eventType: 'نقطة دخول يدوية',
+      });
+      setTpSummary('');
+      setTpCampaign('');
+      setTpOpen(false);
+      showSaved();
+    } catch {
+      setErrorNotice('تعذر تسجيل نقطة الدخول في قاعدة البيانات.');
+    }
   };
 
   const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!taskTitle.trim()) return;
-    await addContactTask(contact.id, {
-      title: taskTitle.trim(),
-      priority: taskPriority,
-      dueDate: taskDueDate,
-    });
-    setTaskTitle('');
-    setTaskOpen(false);
+    try {
+      await addContactTask(contact.id, {
+        title: taskTitle.trim().slice(0, 160),
+        priority: taskPriority,
+        dueDate: taskDueDate,
+      });
+      setTaskTitle('');
+      setTaskOpen(false);
+      showSaved();
+    } catch {
+      setErrorNotice('تعذر حفظ المهمة الجديدة.');
+    }
   };
 
   const handleSendChat = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!chatText.trim()) return;
-    await sendInboxReply(chatChannel, contact.fullName, chatText.trim(), {
-      contactId: contact.id,
-      leadUniqueId: contact.leadUniqueId,
-      companyName: contact.accountName,
-    });
-    setChatText('');
+    const clean = chatText.trim().slice(0, 2000);
+    if (!clean) return;
+    try {
+      await sendInboxReply(chatChannel, contact.fullName, clean, {
+        contactId: contact.id,
+        leadId: matchedOriginLead?.id,
+        leadUniqueId: contact.leadUniqueId,
+        companyName: contact.accountName,
+      });
+      setChatText('');
+      showSaved();
+    } catch {
+      setErrorNotice('تعذر إرسال الرسالة، يرجى المحاولة مرة أخرى.');
+    }
+  };
+
+  const resolveDealLastTouchSource = (dealId: string, dealLeadUniqueId?: string): string => {
+    const dealSpecificTp = contactTouchpoints.find(
+      (tp) => tp.relatedEntityType === 'deal' && tp.relatedEntityId === dealId
+    );
+    if (dealSpecificTp?.campaign) return dealSpecificTp.campaign;
+    const latestLeadTp = contactTouchpoints.find(
+      (tp) => dealLeadUniqueId && tp.leadUniqueId === dealLeadUniqueId && tp.campaign
+    );
+    if (latestLeadTp?.campaign) return latestLeadTp.campaign;
+    return contactTouchpoints[0]?.campaign || contact.primarySource || 'إدخال مباشر';
   };
 
   const showSlashPalette = chatText.trim().startsWith('/');
 
   return (
-    <div className="space-y-4 pb-10">
+    <div className="space-y-4 pb-8">
       {/* 1. TOP FLUSH HEADER */}
       <header className="-mx-4 -mt-4 lg:-mx-6 lg:-mt-6 border-b border-[#E2E8F0] bg-[#FFFFFF] px-6 py-4">
         <div className="mx-auto max-w-[1440px] space-y-2.5">
-          {/* Breadcrumb row */}
+          {/* Breadcrumb + Live Save Status Row */}
           <div className="flex flex-wrap items-center justify-between gap-2 text-[12px]">
             <div className="flex items-center gap-2 text-[#64748B]">
               <Link
@@ -363,20 +445,28 @@ export const ContactDetailPage: React.FC = () => {
               <span>سجل العملاء النشطين</span>
             </div>
 
-            {savedNotice && (
-              <span className="inline-flex items-center gap-1 rounded border border-[#A7F3D0] bg-[#ECFDF5] px-2.5 py-0.5 text-[11px] font-bold text-[#059669]">
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                <span>تم الحفظ التلقائي بنجاح</span>
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              {errorNotice && (
+                <span className="inline-flex items-center gap-1 rounded border border-[#FECDD3] bg-[#FFF1F2] px-2.5 py-0.5 text-[11px] font-semibold text-[#E11D48]">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  <span>{errorNotice}</span>
+                </span>
+              )}
+              {savedNotice && (
+                <span className="inline-flex items-center gap-1 rounded border border-[#A7F3D0] bg-[#ECFDF5] px-2.5 py-0.5 text-[11px] font-bold text-[#059669]">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  <span>تم الحفظ التلقائي</span>
+                </span>
+              )}
+            </div>
           </div>
 
-          {/* Identity + Actions Row */}
+          {/* Identity + Primary Action Buttons Row */}
           <div className="flex flex-wrap items-start justify-between gap-4">
-            {/* Right Side (RTL start): Name, Copyable UUID, Account link, Status pill, Tags */}
-            <div className="min-w-0 space-y-2">
+            {/* Right Side (RTL start): Name, Copyable UUID, Account Link, Status Pill, Tags */}
+            <div className="min-w-0 space-y-1.5">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-[22px] font-bold text-[#0F172A] leading-tight">
+                <h1 className="text-[22px] font-extrabold text-[#0F172A] leading-tight">
                   {contact.fullName}
                 </h1>
 
@@ -384,7 +474,7 @@ export const ContactDetailPage: React.FC = () => {
                   type="button"
                   onClick={handleCopyId}
                   title="اضغط لنسخ المعرف الدائم"
-                  className="inline-flex items-center gap-1.5 rounded-md border border-[#BFDBFE] bg-[#EFF6FF] px-2.5 py-0.5 font-mono text-[11px] font-bold text-[#2563EB] hover:bg-[#DBEAFE] tabular-nums"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-[#BFDBFE] bg-[#EFF6FF] px-2.5 py-0.5 font-mono text-[11px] font-bold text-[#2563EB] hover:bg-[#DBEAFE] tabular-nums transition-colors"
                 >
                   <span>{permanentUuid}</span>
                   {copiedId ? (
@@ -399,7 +489,7 @@ export const ContactDetailPage: React.FC = () => {
                 </span>
               </div>
 
-              {/* Linked Account + Status Pill */}
+              {/* Clickable Linked Account + Status Pill */}
               <div className="flex flex-wrap items-center gap-2.5 text-xs">
                 {isB2C ? (
                   <span className="inline-flex items-center gap-1 font-semibold text-[#475569]">
@@ -425,11 +515,11 @@ export const ContactDetailPage: React.FC = () => {
               </div>
 
               {/* Tags Row directly below name */}
-              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+              <div className="flex flex-wrap items-center gap-1.5 pt-1">
                 {(contact.tags ?? []).map((t) => (
                   <span
                     key={t}
-                    className="inline-flex items-center gap-1 rounded border border-[#CBD5E1] bg-[#F8FAFC] px-2 py-0.5 text-[11px] font-medium text-[#334155]"
+                    className="inline-flex items-center gap-1 rounded border border-[#E2E8F0] bg-[#F8FAFC] px-2 py-0.5 text-[11px] font-medium text-[#334155]"
                   >
                     <span>#{t.replace(/^#/, '')}</span>
                     {canUpdateContact && (
@@ -455,6 +545,7 @@ export const ContactDetailPage: React.FC = () => {
                       <input
                         type="text"
                         autoFocus
+                        maxLength={32}
                         value={newTagText}
                         onChange={(e) => setNewTagText(e.target.value)}
                         onBlur={() => {
@@ -484,11 +575,11 @@ export const ContactDetailPage: React.FC = () => {
             </div>
 
             {/* Left Side (RTL end): Primary CTA Buttons */}
-            <div className="flex flex-wrap items-center gap-2 pt-1">
+            <div className="flex flex-wrap items-center gap-2 pt-0.5">
               <button
                 type="button"
                 onClick={() => setDealModalOpen(true)}
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#2563EB] px-4 text-[12px] font-bold text-[#FFFFFF] hover:bg-[#1D4ED8] transition-colors whitespace-nowrap"
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#2563EB] px-4 text-[12px] font-bold text-[#FFFFFF] hover:bg-[#1D4ED8] transition-colors whitespace-nowrap shrink-0"
               >
                 <Plus className="h-4 w-4" />
                 <span>صفقة جديدة</span>
@@ -497,7 +588,7 @@ export const ContactDetailPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => openInboxForContact(contact.id)}
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#10B981] px-4 text-[12px] font-bold text-[#FFFFFF] hover:bg-[#059669] transition-colors whitespace-nowrap"
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#10B981] px-4 text-[12px] font-bold text-[#FFFFFF] hover:bg-[#059669] transition-colors whitespace-nowrap shrink-0"
               >
                 <MessageCircle className="h-4 w-4" />
                 <span>محادثة فورية</span>
@@ -509,9 +600,9 @@ export const ContactDetailPage: React.FC = () => {
                   setTaskOpen(true);
                   window.setTimeout(() => taskInputRef.current?.focus(), 60);
                 }}
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#CBD5E1] bg-[#FFFFFF] px-3.5 text-[12px] font-semibold text-[#0F172A] hover:bg-[#F8FAFC] transition-colors whitespace-nowrap"
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#CBD5E1] bg-[#FFFFFF] px-3.5 text-[12px] font-semibold text-[#0F172A] hover:bg-[#F8FAFC] transition-colors whitespace-nowrap shrink-0"
               >
-                <Plus className="h-3.5 w-3.5 text-[#64748B]" />
+                <CalendarPlus className="h-3.5 w-3.5 text-[#64748B]" />
                 <span>مهمة / اتصال</span>
               </button>
 
@@ -525,7 +616,7 @@ export const ContactDetailPage: React.FC = () => {
                   <MoreVertical className="h-4 w-4" />
                 </button>
                 {actionsMenuOpen && (
-                  <div className="flyout-surface absolute left-0 top-10 z-30 w-48 rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] py-1.5 shadow-lg">
+                  <div className="flyout-surface absolute left-0 top-10 z-30 w-52 rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] py-1.5 shadow-lg">
                     <button
                       type="button"
                       onClick={() => {
@@ -559,12 +650,12 @@ export const ContactDetailPage: React.FC = () => {
         </div>
       </header>
 
-      {/* 2. MAIN 2-COLUMN WORKSPACE: Right Main Column (65% = 8 cols) + Left Action Column (35% = 4 cols) */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 items-stretch">
-        {/* RIGHT MAIN COLUMN (65% -> 8 cols) */}
-        <div className="lg:col-span-8 space-y-4">
+      {/* 2. MAIN 2-COLUMN WORKSPACE: Right Main Column (65%) + Left Action Column (35%) */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,65fr)_minmax(0,35fr)] items-stretch">
+        {/* RIGHT MAIN COLUMN (65%) */}
+        <div className="min-w-0 space-y-4">
           {/* Card 1: البيانات الأساسية ومعلومات التواصل */}
-          <section className="rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] p-5 space-y-4 shadow-2xs">
+          <section className="rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] p-5 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#F1F5F9] pb-3.5">
               <div className="flex items-center gap-3">
                 <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#BFDBFE] bg-[#EFF6FF] text-[#2563EB] shrink-0">
@@ -590,14 +681,14 @@ export const ContactDetailPage: React.FC = () => {
                   className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#2563EB] hover:text-[#1D4ED8]"
                 >
                   <Pencil className="h-3.5 w-3.5" />
-                  <span>{editModeHint ? 'حفظ تلقائي عند المغادرة' : 'تعديل الحقول'}</span>
+                  <span>{editModeHint ? 'الحفظ التلقائي مفعل' : 'تعديل الحقول'}</span>
                 </button>
               )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {/* Permanent RWQ-xxxxx */}
-              <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC]/80 px-3.5 py-2.5 flex items-center justify-between gap-2">
+              {/* 1. Permanent RWQ-xxxxx */}
+              <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-3.5 py-2.5 flex items-center justify-between gap-2">
                 <div className="min-w-0">
                   <label className="flex items-center gap-1 text-[11px] text-[#64748B]">
                     <Lock className="h-3 w-3" />
@@ -621,9 +712,15 @@ export const ContactDetailPage: React.FC = () => {
                 </button>
               </div>
 
-              {/* Phone (FLS) */}
+              {/* 2. Phone (FLS) */}
               {phoneAccess !== 'hidden' && (
-                <div className="rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] px-3.5 py-2.5 flex items-center justify-between gap-2 focus-within:border-[#2563EB]">
+                <div
+                  className={`rounded-xl border bg-[#FFFFFF] px-3.5 py-2.5 flex items-center justify-between gap-2 focus-within:border-[#2563EB] ${
+                    editModeHint && phoneAccess === 'read_write'
+                      ? 'border-[#BFDBFE]'
+                      : 'border-[#E2E8F0]'
+                  }`}
+                >
                   <div className="min-w-0 flex-1">
                     <label className="flex items-center gap-1 text-[11px] text-[#64748B]">
                       <span>رقم الجوال المباشر</span>
@@ -633,18 +730,20 @@ export const ContactDetailPage: React.FC = () => {
                       ref={phoneInputRef}
                       type="text"
                       dir="ltr"
+                      maxLength={40}
                       value={draftPhone}
                       disabled={!canUpdateContact || phoneAccess === 'read_only'}
                       onChange={(e) => setDraftPhone(e.target.value)}
                       onBlur={() => {
-                        if (draftPhone !== (contact.phone ?? '')) {
-                          void commitPatch({ phone: draftPhone.trim() || undefined });
+                        const clean = draftPhone.trim().slice(0, 40);
+                        if (clean !== (contact.phone ?? '')) {
+                          void commitPatch({ phone: clean });
                         }
                       }}
                       className="mt-0.5 w-full bg-transparent text-right font-mono text-[13px] font-bold text-[#0F172A] tabular-nums focus:outline-none disabled:opacity-75"
                     />
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-1 shrink-0">
                     <button
                       type="button"
                       onClick={() => openInboxForContact(contact.id)}
@@ -657,7 +756,7 @@ export const ContactDetailPage: React.FC = () => {
                       <a
                         href={`tel:${contact.phone.replace(/\s+/g, '')}`}
                         title="اتصال هاتفي"
-                        className="flex h-7 w-7 items-center justify-center rounded-md bg-[#F8FAFC] text-[#475569] hover:bg-[#EFF6FF] hover:text-[#2563EB]"
+                        className="flex h-7 w-7 items-center justify-center rounded-md bg-[#F8FAFC] text-[#64748B] hover:bg-[#EFF6FF] hover:text-[#2563EB]"
                       >
                         <Phone className="h-3.5 w-3.5" />
                       </a>
@@ -666,9 +765,15 @@ export const ContactDetailPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Email (FLS) */}
+              {/* 3. Email (FLS) */}
               {emailAccess !== 'hidden' && (
-                <div className="rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] px-3.5 py-2.5 flex items-center justify-between gap-2 focus-within:border-[#2563EB]">
+                <div
+                  className={`rounded-xl border bg-[#FFFFFF] px-3.5 py-2.5 flex items-center justify-between gap-2 focus-within:border-[#2563EB] ${
+                    editModeHint && emailAccess === 'read_write'
+                      ? 'border-[#BFDBFE]'
+                      : 'border-[#E2E8F0]'
+                  }`}
+                >
                   <div className="min-w-0 flex-1">
                     <label className="flex items-center gap-1 text-[11px] text-[#64748B]">
                       <Mail className="h-3 w-3" />
@@ -678,12 +783,14 @@ export const ContactDetailPage: React.FC = () => {
                     <input
                       type="email"
                       dir="ltr"
+                      maxLength={160}
                       value={draftEmail}
                       disabled={!canUpdateContact || emailAccess === 'read_only'}
                       onChange={(e) => setDraftEmail(e.target.value)}
                       onBlur={() => {
-                        if (draftEmail !== (contact.email ?? '')) {
-                          void commitPatch({ email: draftEmail.trim() || undefined });
+                        const clean = draftEmail.trim().slice(0, 160);
+                        if (clean !== (contact.email ?? '')) {
+                          void commitPatch({ email: clean });
                         }
                       }}
                       className="mt-0.5 w-full bg-transparent text-right font-mono text-[13px] font-semibold text-[#2563EB] focus:outline-none disabled:opacity-75"
@@ -697,12 +804,20 @@ export const ContactDetailPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Preferred Channel (FLS) */}
+              {/* 4. Preferred Channel (FLS) */}
               {channelAccess !== 'hidden' && (
-                <div className="rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] px-3.5 py-2.5 focus-within:border-[#2563EB]">
+                <div
+                  className={`rounded-xl border bg-[#FFFFFF] px-3.5 py-2.5 focus-within:border-[#2563EB] ${
+                    editModeHint && channelAccess === 'read_write'
+                      ? 'border-[#BFDBFE]'
+                      : 'border-[#E2E8F0]'
+                  }`}
+                >
                   <label className="flex items-center gap-1 text-[11px] text-[#64748B]">
                     <span>القناة المفضلة للتواصل</span>
-                    {channelAccess === 'read_only' && <Lock className="h-2.5 w-2.5 text-[#D97706]" />}
+                    {channelAccess === 'read_only' && (
+                      <Lock className="h-2.5 w-2.5 text-[#D97706]" />
+                    )}
                   </label>
                   <div className="mt-0.5 flex items-center gap-2">
                     <span className="h-2 w-2 rounded-full bg-[#10B981] shrink-0" />
@@ -714,7 +829,7 @@ export const ContactDetailPage: React.FC = () => {
                     >
                       {(Object.keys(CHANNEL_LABELS) as LeadChannel[]).map((ch) => (
                         <option key={ch} value={ch}>
-                          {CHANNEL_LABELS[ch]}
+                          {PREFERRED_CHANNEL_LABELS[ch] ?? CHANNEL_LABELS[ch]}
                         </option>
                       ))}
                     </select>
@@ -722,23 +837,33 @@ export const ContactDetailPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Primary Source First-Touch (FLS) */}
+              {/* 5. Primary Source First-Touch (FLS) */}
               {sourceAccess !== 'hidden' && (
-                <div className="rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] px-3.5 py-2.5 focus-within:border-[#2563EB]">
+                <div
+                  className={`rounded-xl border bg-[#FFFFFF] px-3.5 py-2.5 focus-within:border-[#2563EB] ${
+                    editModeHint && sourceAccess === 'read_write'
+                      ? 'border-[#BFDBFE]'
+                      : 'border-[#E2E8F0]'
+                  }`}
+                >
                   <label className="flex items-center gap-1 text-[11px] text-[#64748B]">
                     <span>المصدر الأساسي (First-Touch)</span>
-                    {sourceAccess === 'read_only' && <Lock className="h-2.5 w-2.5 text-[#D97706]" />}
+                    {sourceAccess === 'read_only' && (
+                      <Lock className="h-2.5 w-2.5 text-[#D97706]" />
+                    )}
                   </label>
                   <div className="mt-0.5 flex items-center gap-2">
                     <Compass className="h-3.5 w-3.5 text-[#2563EB] shrink-0" />
                     <input
                       type="text"
+                      maxLength={120}
                       value={draftSource}
                       disabled={!canUpdateContact || sourceAccess === 'read_only'}
                       onChange={(e) => setDraftSource(e.target.value)}
                       onBlur={() => {
-                        if (draftSource !== (contact.primarySource ?? '')) {
-                          void commitPatch({ primarySource: draftSource.trim() || undefined });
+                        const clean = draftSource.trim().slice(0, 120);
+                        if (clean !== (contact.primarySource ?? '')) {
+                          void commitPatch({ primarySource: clean });
                         }
                       }}
                       className="w-full bg-transparent text-[13px] font-semibold text-[#0F172A] focus:outline-none disabled:opacity-75"
@@ -747,9 +872,15 @@ export const ContactDetailPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Owner (FLS) */}
+              {/* 6. Owner (FLS) */}
               {ownerAccess !== 'hidden' && (
-                <div className="rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] px-3.5 py-2.5 focus-within:border-[#2563EB]">
+                <div
+                  className={`rounded-xl border bg-[#FFFFFF] px-3.5 py-2.5 focus-within:border-[#2563EB] ${
+                    editModeHint && ownerAccess === 'read_write'
+                      ? 'border-[#BFDBFE]'
+                      : 'border-[#E2E8F0]'
+                  }`}
+                >
                   <label className="flex items-center gap-1 text-[11px] text-[#64748B]">
                     <span>مسؤول الحساب (Record Owner)</span>
                     {ownerAccess === 'read_only' && <Lock className="h-2.5 w-2.5 text-[#D97706]" />}
@@ -774,9 +905,15 @@ export const ContactDetailPage: React.FC = () => {
                 </div>
               )}
 
-              {/* City (FLS) */}
+              {/* 7. City (FLS) */}
               {cityAccess !== 'hidden' && (
-                <div className="rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] px-3.5 py-2.5 focus-within:border-[#2563EB]">
+                <div
+                  className={`rounded-xl border bg-[#FFFFFF] px-3.5 py-2.5 focus-within:border-[#2563EB] ${
+                    editModeHint && cityAccess === 'read_write'
+                      ? 'border-[#BFDBFE]'
+                      : 'border-[#E2E8F0]'
+                  }`}
+                >
                   <label className="flex items-center gap-1 text-[11px] text-[#64748B]">
                     <MapPin className="h-3 w-3" />
                     <span>المدينة والمقر</span>
@@ -784,12 +921,14 @@ export const ContactDetailPage: React.FC = () => {
                   </label>
                   <input
                     type="text"
+                    maxLength={80}
                     value={draftCity}
                     disabled={!canUpdateContact || cityAccess === 'read_only'}
                     onChange={(e) => setDraftCity(e.target.value)}
                     onBlur={() => {
-                      if (draftCity !== (contact.city ?? '')) {
-                        void commitPatch({ city: draftCity.trim() || undefined });
+                      const clean = draftCity.trim().slice(0, 80);
+                      if (clean !== (contact.city ?? '')) {
+                        void commitPatch({ city: clean });
                       }
                     }}
                     className="mt-0.5 w-full bg-transparent text-[13px] font-semibold text-[#0F172A] focus:outline-none disabled:opacity-75"
@@ -797,12 +936,20 @@ export const ContactDetailPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Status & Classification (FLS) */}
+              {/* 8. Status & Classification (FLS) */}
               {statusAccess !== 'hidden' && (
-                <div className="rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] px-3.5 py-2.5 focus-within:border-[#2563EB]">
+                <div
+                  className={`rounded-xl border bg-[#FFFFFF] px-3.5 py-2.5 focus-within:border-[#2563EB] ${
+                    editModeHint && statusAccess === 'read_write'
+                      ? 'border-[#BFDBFE]'
+                      : 'border-[#E2E8F0]'
+                  }`}
+                >
                   <label className="flex items-center gap-1 text-[11px] text-[#64748B]">
                     <span>حالة وتصنيف العميل</span>
-                    {statusAccess === 'read_only' && <Lock className="h-2.5 w-2.5 text-[#D97706]" />}
+                    {statusAccess === 'read_only' && (
+                      <Lock className="h-2.5 w-2.5 text-[#D97706]" />
+                    )}
                   </label>
                   <select
                     value={activeStatus}
@@ -821,7 +968,7 @@ export const ContactDetailPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Dynamic Tenant Custom Fields (respecting FLS: read_write / read_only / hidden) */}
+              {/* Dynamic Custom Fields (respecting FLS: read_write / read_only / hidden) */}
               {contactCustomFields.map((cf) => {
                 const access = getFieldAccess('contacts', cf.fieldKey);
                 if (access === 'hidden') return null;
@@ -829,7 +976,9 @@ export const ContactDetailPage: React.FC = () => {
                 return (
                   <div
                     key={cf.id}
-                    className="rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] px-3.5 py-2.5 focus-within:border-[#2563EB]"
+                    className={`rounded-xl border bg-[#FFFFFF] px-3.5 py-2.5 focus-within:border-[#2563EB] ${
+                      editModeHint && !locked ? 'border-[#BFDBFE]' : 'border-[#E2E8F0]'
+                    }`}
                   >
                     <label className="flex items-center justify-between text-[11px] text-[#64748B]">
                       <span>
@@ -856,9 +1005,30 @@ export const ContactDetailPage: React.FC = () => {
                           </option>
                         ))}
                       </select>
+                    ) : cf.fieldType === 'boolean' ? (
+                      <label className="mt-1 inline-flex items-center gap-2 text-[12px] font-semibold text-[#0F172A]">
+                        <input
+                          type="checkbox"
+                          disabled={locked}
+                          checked={Boolean(draftCustomValues[cf.fieldKey])}
+                          onChange={(e) => {
+                            const next = { ...draftCustomValues, [cf.fieldKey]: e.target.checked };
+                            setDraftCustomValues(next);
+                            void commitPatch({ customValues: next });
+                          }}
+                          className="h-4 w-4 rounded border-[#CBD5E1] accent-[#2563EB]"
+                        />
+                        <span>{draftCustomValues[cf.fieldKey] ? 'نعم' : 'لا'}</span>
+                      </label>
                     ) : (
                       <input
-                        type={cf.fieldType === 'number' || cf.fieldType === 'currency' ? 'number' : 'text'}
+                        type={
+                          cf.fieldType === 'number' || cf.fieldType === 'currency'
+                            ? 'number'
+                            : cf.fieldType === 'date'
+                            ? 'date'
+                            : 'text'
+                        }
                         disabled={locked}
                         value={String(draftCustomValues[cf.fieldKey] ?? '')}
                         onChange={(e) =>
@@ -872,22 +1042,32 @@ export const ContactDetailPage: React.FC = () => {
                 );
               })}
 
-              {/* Full-width Notes & Internal Guidelines */}
+              {/* 9. Full-width Notes & Internal Guidelines (FLS) */}
               {notesAccess !== 'hidden' && (
-                <div className="sm:col-span-2 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-3.5 py-3 focus-within:border-[#2563EB] focus-within:bg-[#FFFFFF]">
+                <div
+                  className={`sm:col-span-2 rounded-xl border bg-[#F8FAFC] px-3.5 py-3 focus-within:border-[#2563EB] focus-within:bg-[#FFFFFF] ${
+                    editModeHint && notesAccess === 'read_write'
+                      ? 'border-[#BFDBFE]'
+                      : 'border-[#E2E8F0]'
+                  }`}
+                >
                   <label className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-[#64748B]">
                     <FileText className="h-3.5 w-3.5" />
                     <span>الملاحظات والتعليمات الداخلية المعتمدة</span>
-                    {notesAccess === 'read_only' && <Lock className="h-2.5 w-2.5 text-[#D97706]" />}
+                    {notesAccess === 'read_only' && (
+                      <Lock className="h-2.5 w-2.5 text-[#D97706]" />
+                    )}
                   </label>
                   <textarea
                     rows={3}
+                    maxLength={1000}
                     value={draftNotes}
                     disabled={!canUpdateContact || notesAccess === 'read_only'}
                     onChange={(e) => setDraftNotes(e.target.value)}
                     onBlur={() => {
-                      if (draftNotes !== (contact.notes ?? '')) {
-                        void commitPatch({ notes: draftNotes.trim() || undefined });
+                      const clean = draftNotes.trim().slice(0, 1000);
+                      if (clean !== (contact.notes ?? '')) {
+                        void commitPatch({ notes: clean });
                       }
                     }}
                     placeholder="أضف ملاحظات المتابعة والتوصيات الفنية لبقية الفريق..."
@@ -899,7 +1079,7 @@ export const ContactDetailPage: React.FC = () => {
           </section>
 
           {/* Card 2: الصفقات المرتبطة — Deals Related List */}
-          <section className="rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] overflow-hidden shadow-2xs">
+          <section className="rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] overflow-hidden">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E2E8F0] px-5 py-4">
               <div className="flex items-center gap-3">
                 <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#C7D2FE] bg-[#EEF2FF] text-[#4F46E5] shrink-0">
@@ -914,7 +1094,10 @@ export const ContactDetailPage: React.FC = () => {
                   </div>
                   <p className="text-[11px] text-[#64748B] tabular-nums">
                     إجمالي القيمة التراكمية:{' '}
-                    <strong className="text-[#0F172A]">{formatCurrencySAR(totalDealsAmount)}</strong>
+                    <strong className="text-[#0F172A]">
+                      {totalDealsAmount.toLocaleString('en-US')}
+                    </strong>{' '}
+                    ر.س
                   </p>
                 </div>
               </div>
@@ -922,7 +1105,7 @@ export const ContactDetailPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setDealModalOpen(true)}
-                className="inline-flex h-8 items-center gap-1 rounded-lg border border-[#BFDBFE] bg-[#EFF6FF] px-3 text-[12px] font-bold text-[#2563EB] hover:bg-[#DBEAFE]"
+                className="inline-flex h-8 items-center gap-1 rounded-lg border border-[#BFDBFE] bg-[#EFF6FF] px-3 text-[12px] font-bold text-[#2563EB] hover:bg-[#DBEAFE] whitespace-nowrap"
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span>إضافة صفقة جديدة</span>
@@ -951,43 +1134,52 @@ export const ContactDetailPage: React.FC = () => {
                       const stageBadgeCls =
                         DEAL_STAGE_BADGE[d.stage] ??
                         'border-[#E2E8F0] bg-[#F8FAFC] text-[#334155]';
+                      const lastTouchSrc = resolveDealLastTouchSource(d.id, d.leadUniqueId);
                       return (
                         <tr key={d.id} className="hover:bg-[#F8FAFC]/80">
                           <td className="px-4 py-3">
                             <Link
-                              to="/deals"
-                              className="block font-bold text-[#2563EB] hover:underline"
+                              to={`/deals/${d.id}`}
+                              className="block font-bold text-[#2563EB] hover:underline leading-snug"
                             >
                               {d.title}
                             </Link>
-                            <span className="mt-0.5 block text-[11px] text-[#64748B]">
+                            <span className="mt-0.5 block text-[11px] text-[#64748B] truncate max-w-[230px]">
                               {d.nextStep || d.accountName}
                             </span>
                           </td>
-                          <td className="px-3 py-3 font-bold text-[#0F172A] tabular-nums whitespace-nowrap">
-                            {formatCurrencySAR(d.amount)}
+                          <td className="px-3 py-3 whitespace-nowrap tabular-nums">
+                            <span className="block font-bold text-[#0F172A]">
+                              {d.amount.toLocaleString('en-US')}
+                            </span>
+                            <span className="text-[10px] text-[#94A3B8]">ر.س</span>
                           </td>
                           <td className="px-3 py-3 whitespace-nowrap">
                             <span
-                              className={`inline-flex items-center rounded border px-2 py-0.5 text-[11px] font-bold ${stageBadgeCls}`}
+                              className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-bold ${stageBadgeCls}`}
                             >
-                              {d.stage === 'مكتملة' ? 'صفقة مغلقة ✓ (Won)' : d.stage}
+                              <span>{d.stage}</span>
+                              {d.stage === 'مكتملة' && <Check className="h-3 w-3" />}
                             </span>
                           </td>
-                          <td className="px-3 py-3 text-[#475569] tabular-nums whitespace-nowrap">
+                          <td className="px-3 py-3 whitespace-nowrap text-[#475569] tabular-nums">
                             {d.closeDate}
                           </td>
-                          <td className="px-3 py-3 text-[#475569]">
-                            <span className="inline-flex items-center gap-1.5">
-                              <span className="h-1.5 w-1.5 rounded-full bg-[#2563EB]" />
-                              <span>{contact.primarySource || 'تحويل مباشر'}</span>
+                          <td className="px-3 py-3">
+                            <span className="inline-flex items-center gap-1.5 text-[11px] text-[#334155]">
+                              <span
+                                className={`h-1.5 w-1.5 rounded-full shrink-0 ${
+                                  d.stage === 'مكتملة' ? 'bg-[#2563EB]' : 'bg-[#6366F1]'
+                                }`}
+                              />
+                              <span className="truncate max-w-[160px]">{lastTouchSrc}</span>
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center">
                             <Link
-                              to="/deals"
-                              title="فتح تفاصيل الصفقة"
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#E2E8F0] bg-[#FFFFFF] text-[#475569] hover:border-[#2563EB] hover:text-[#2563EB]"
+                              to={`/deals/${d.id}`}
+                              aria-label={`فتح تفاصيل صفقة ${d.title}`}
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#64748B] hover:bg-[#EFF6FF] hover:text-[#2563EB]"
                             >
                               <ExternalLink className="h-3.5 w-3.5" />
                             </Link>
@@ -1002,7 +1194,7 @@ export const ContactDetailPage: React.FC = () => {
           </section>
 
           {/* Card 3: سجل الدخول والمصادر — Touchpoints Subform */}
-          <section className="rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] overflow-hidden shadow-2xs">
+          <section className="rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] overflow-hidden">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E2E8F0] px-5 py-4">
               <div className="flex items-center gap-3">
                 <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#BFDBFE] bg-[#EFF6FF] text-[#2563EB] shrink-0">
@@ -1026,7 +1218,7 @@ export const ContactDetailPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setTpOpen((p) => !p)}
-                className="inline-flex h-8 items-center gap-1 rounded-lg border border-[#CBD5E1] bg-[#FFFFFF] px-3 text-[12px] font-semibold text-[#334155] hover:border-[#2563EB] hover:text-[#2563EB]"
+                className="inline-flex h-8 items-center gap-1 rounded-lg border border-[#CBD5E1] bg-[#FFFFFF] px-3 text-[12px] font-semibold text-[#334155] hover:border-[#2563EB] hover:text-[#2563EB] whitespace-nowrap"
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span>تسجيل نقطة دخول يدوية</span>
@@ -1051,6 +1243,7 @@ export const ContactDetailPage: React.FC = () => {
                 </select>
                 <input
                   type="text"
+                  maxLength={140}
                   value={tpCampaign}
                   onChange={(e) => setTpCampaign(e.target.value)}
                   placeholder="اسم الحملة أو المصدر..."
@@ -1058,6 +1251,7 @@ export const ContactDetailPage: React.FC = () => {
                 />
                 <input
                   type="text"
+                  maxLength={300}
                   value={tpSummary}
                   onChange={(e) => setTpSummary(e.target.value)}
                   placeholder="ملخص التفاعل (مثال: طلب عرض مالي)..."
@@ -1094,7 +1288,7 @@ export const ContactDetailPage: React.FC = () => {
                       <th className="px-4 py-2.5 whitespace-nowrap">التاريخ والوقت</th>
                       <th className="px-3 py-2.5 whitespace-nowrap">القناة</th>
                       <th className="px-3 py-2.5 whitespace-nowrap">الحملة الإعلانية</th>
-                      <th className="px-3 py-2.5 whitespace-nowrap">معرف الإعلان (Ad ID)</th>
+                      <th className="px-3 py-2.5 whitespace-nowrap">معرف الإعلان (Ad ID / CAPI)</th>
                       <th className="px-3 py-2.5 whitespace-nowrap">وسوم UTM</th>
                       <th className="px-4 py-2.5 whitespace-nowrap">نوع التفاعل</th>
                     </tr>
@@ -1108,9 +1302,13 @@ export const ContactDetailPage: React.FC = () => {
                       return (
                         <tr key={tp.id} className="hover:bg-[#F8FAFC]/80">
                           <td className="px-4 py-3 whitespace-nowrap tabular-nums">
-                            <span className="block font-semibold text-[#0F172A]">{tp.occurredAt}</span>
+                            <span className="block font-semibold text-[#0F172A]">
+                              {tp.occurredAt}
+                            </span>
                             {isFirstTouch && (
-                              <span className="text-[10px] font-bold text-[#2563EB]">First-Touch</span>
+                              <span className="text-[10px] font-bold text-[#2563EB]">
+                                First-Touch
+                              </span>
                             )}
                           </td>
                           <td className="px-3 py-3 whitespace-nowrap">
@@ -1129,8 +1327,10 @@ export const ContactDetailPage: React.FC = () => {
                           >
                             {tp.adId || '—'}
                           </td>
-                          <td className="px-3 py-3 font-mono text-[11px] text-[#64748B]" dir="ltr">
-                            {tp.utmSource || 'direct'}
+                          <td className="px-3 py-3" dir="ltr">
+                            <span className="inline-block rounded bg-[#F8FAFC] border border-[#F1F5F9] px-1.5 py-0.5 font-mono text-[10px] text-[#64748B]">
+                              {tp.utmSource || 'direct'}
+                            </span>
                           </td>
                           <td className="px-4 py-3 text-[#334155]">
                             {tp.summary || tp.eventType || 'تواصل مباشر'}
@@ -1145,10 +1345,10 @@ export const ContactDetailPage: React.FC = () => {
           </section>
         </div>
 
-        {/* LEFT ACTION COLUMN (35% -> 4 cols): Card A TOP (Tasks) + Card B BOTTOM (flex-1 Unified Chat) */}
-        <div className="lg:col-span-4 flex flex-col gap-4">
+        {/* LEFT ACTION COLUMN (35%): Card A TOP (Tasks) + Card B BOTTOM (flex-1 Unified Chat) */}
+        <div className="min-w-0 flex flex-col gap-4">
           {/* Card A (TOP): المهام والأنشطة القادمة */}
-          <section className="shrink-0 rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] p-4 space-y-3 shadow-2xs">
+          <section className="shrink-0 rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] p-4 space-y-3">
             <div className="flex items-center justify-between gap-2 border-b border-[#F1F5F9] pb-2.5">
               <div className="flex items-center gap-2">
                 <span className="flex h-7 w-7 items-center justify-center rounded-md bg-[#EEF2FF] text-[#4F46E5]">
@@ -1166,10 +1366,12 @@ export const ContactDetailPage: React.FC = () => {
                   setTaskOpen((p) => !p);
                   window.setTimeout(() => taskInputRef.current?.focus(), 60);
                 }}
-                aria-label="إضافة مهمة جديدة"
-                className="flex h-7 w-7 items-center justify-center rounded-md text-[#2563EB] hover:bg-[#EFF6FF]"
+                aria-label="إضافة مهمة"
+                title="إضافة مهمة"
+                className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px] font-bold text-[#2563EB] hover:bg-[#EFF6FF]"
               >
-                <Plus className="h-4 w-4" />
+                <Plus className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">إضافة مهمة</span>
               </button>
             </div>
 
@@ -1181,16 +1383,17 @@ export const ContactDetailPage: React.FC = () => {
                 <input
                   ref={taskInputRef}
                   type="text"
+                  maxLength={160}
                   value={taskTitle}
                   onChange={(e) => setTaskTitle(e.target.value)}
                   placeholder="عنوان المهمة أو المكالمة..."
-                  className="h-8 w-full rounded-lg border border-[#CBD5E1] bg-[#FFFFFF] px-2.5 text-xs text-[#0F172A]"
+                  className="h-8 w-full rounded-lg border border-[#CBD5E1] bg-[#FFFFFF] px-2.5 text-xs text-[#0F172A] focus:border-[#2563EB] focus:outline-none"
                 />
                 <div className="grid grid-cols-2 gap-2">
                   <select
                     value={taskPriority}
                     onChange={(e) => setTaskPriority(e.target.value as CrmTask['priority'])}
-                    className="h-8 rounded-lg border border-[#CBD5E1] bg-[#FFFFFF] px-2 text-xs"
+                    className="h-8 rounded-lg border border-[#CBD5E1] bg-[#FFFFFF] px-2 text-xs text-[#0F172A]"
                   >
                     <option value="عالية">أولوية عاجلة</option>
                     <option value="متوسطة">أولوية متوسطة</option>
@@ -1200,7 +1403,7 @@ export const ContactDetailPage: React.FC = () => {
                     type="date"
                     value={taskDueDate}
                     onChange={(e) => setTaskDueDate(e.target.value)}
-                    className="h-8 rounded-lg border border-[#CBD5E1] bg-[#FFFFFF] px-2 text-xs tabular-nums"
+                    className="h-8 rounded-lg border border-[#CBD5E1] bg-[#FFFFFF] px-2 text-xs text-[#0F172A] tabular-nums"
                   />
                 </div>
                 <div className="flex justify-end gap-1.5">
@@ -1225,7 +1428,7 @@ export const ContactDetailPage: React.FC = () => {
             <div className="space-y-2">
               {contactTasks.length === 0 ? (
                 <p className="rounded-lg border border-dashed border-[#E2E8F0] p-4 text-center text-xs text-[#64748B]">
-                  لا توجد مهام مجدولة حالياً — اضغط &quot;+&quot; لإضافة مهمة متابعة.
+                  لا توجد مهام مجدولة حالياً — اضغط &quot;+ إضافة مهمة&quot; لإنشاء متابعة.
                 </p>
               ) : (
                 contactTasks.map((t) => {
@@ -1242,7 +1445,7 @@ export const ContactDetailPage: React.FC = () => {
                       key={t.id}
                       className={`rounded-xl border p-3 transition-colors ${
                         done
-                          ? 'border-[#F1F5F9] bg-[#F8FAFC]/70'
+                          ? 'border-[#F1F5F9] bg-[#F8FAFC]/80'
                           : 'border-[#E2E8F0] bg-[#FFFFFF] hover:border-[#CBD5E1]'
                       }`}
                     >
@@ -1252,29 +1455,40 @@ export const ContactDetailPage: React.FC = () => {
                           checked={done}
                           onChange={() => void toggleTaskStatus(t.id)}
                           aria-label={`تحديد المهمة ${t.title}`}
-                          className="mt-0.5 h-4 w-4 rounded border-[#CBD5E1] text-[#2563EB] cursor-pointer"
+                          className="mt-0.5 h-4 w-4 rounded border-[#CBD5E1] accent-[#2563EB] cursor-pointer shrink-0"
                         />
                         <div className="min-w-0 flex-1 space-y-1.5">
                           <p
-                            className={`text-[12px] font-semibold leading-snug ${
-                              done ? 'line-through text-[#94A3B8]' : 'text-[#0F172A]'
+                            className={`text-[12px] font-bold leading-snug ${
+                              done ? 'line-through text-[#94A3B8] font-semibold' : 'text-[#0F172A]'
                             }`}
                           >
                             {t.title}
                           </p>
-                          <div className="flex flex-wrap items-center gap-2 text-[10px]">
-                            <span className={`rounded border px-1.5 py-0.5 font-bold ${priorityBadge}`}>
-                              {t.priority === 'عالية'
-                                ? 'أولوية عاجلة'
-                                : t.priority === 'متوسطة'
-                                ? 'أولوية متوسطة'
-                                : 'أولوية منخفضة'}
-                            </span>
-                            <span className="inline-flex items-center gap-1 text-[#64748B] tabular-nums">
-                              <Clock className="h-3 w-3" />
-                              <span>{t.dueDate}</span>
-                            </span>
-                          </div>
+                          {done ? (
+                            <p className="text-[10px] text-[#94A3B8] tabular-nums">
+                              تمت الإفادة بواسطة: {t.assignedToName} ({t.dueDate})
+                            </p>
+                          ) : (
+                            <div className="flex flex-wrap items-center gap-2 text-[10px]">
+                              <span
+                                className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-bold ${priorityBadge}`}
+                              >
+                                {t.priority === 'عالية' && <AlertCircle className="h-2.5 w-2.5" />}
+                                <span>
+                                  {t.priority === 'عالية'
+                                    ? 'أولوية عاجلة'
+                                    : t.priority === 'متوسطة'
+                                    ? 'أولوية متوسطة'
+                                    : 'أولوية منخفضة'}
+                                </span>
+                              </span>
+                              <span className="inline-flex items-center gap-1 text-[#64748B] tabular-nums">
+                                <Clock className="h-3 w-3" />
+                                <span>{t.dueDate}</span>
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1284,8 +1498,8 @@ export const ContactDetailPage: React.FC = () => {
             </div>
           </section>
 
-          {/* Card B (Bottom, filling remaining height flex-1 flex flex-col): المحادثة المباشرة الموحدة */}
-          <section className="flex-1 flex flex-col min-h-[460px] rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] overflow-hidden shadow-2xs">
+          {/* Card B (Bottom, flex-1 flex flex-col): المحادثة المباشرة الموحدة */}
+          <section className="flex-1 flex flex-col min-h-[480px] rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] overflow-hidden">
             {/* Chat Header */}
             <div className="flex items-center justify-between gap-2 border-b border-[#E2E8F0] px-4 py-3 shrink-0">
               <div className="flex items-center gap-2.5 min-w-0">
@@ -1317,7 +1531,7 @@ export const ContactDetailPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => openInboxForContact(contact.id)}
-                  className="inline-flex items-center gap-1 rounded-full bg-[#ECFDF5] px-2.5 py-0.5 text-[10px] font-bold text-[#059669] hover:bg-[#D1FAE5]"
+                  className="inline-flex items-center gap-1 rounded-full bg-[#ECFDF5] px-2.5 py-0.5 text-[10px] font-bold text-[#059669] hover:bg-[#D1FAE5] whitespace-nowrap"
                 >
                   <span className="h-1.5 w-1.5 rounded-full bg-[#10B981]" />
                   <span>النافذة الكاملة</span>
@@ -1327,7 +1541,7 @@ export const ContactDetailPage: React.FC = () => {
             </div>
 
             {/* Inherited Lead Chat Merge Strip */}
-            <div className="flex items-center justify-between gap-2 border-b border-[#E2E8F0] bg-[#EEF2FF]/70 px-3.5 py-2 text-[11px] shrink-0">
+            <div className="flex items-center justify-between gap-2 border-b border-[#E2E8F0] bg-[#EEF2FF]/75 px-3.5 py-2 text-[11px] shrink-0">
               <div className="flex items-center gap-1.5 min-w-0 text-[#334155]">
                 <Zap className="h-3.5 w-3.5 text-[#4F46E5] shrink-0" />
                 <span className="truncate font-medium">تم دمج سجل المحادثة تلقائياً بالمعرف</span>
@@ -1336,59 +1550,86 @@ export const ContactDetailPage: React.FC = () => {
                 <span className="rounded bg-[#FFFFFF] border border-[#C7D2FE] px-1.5 py-0.5 font-mono text-[10px] font-bold text-[#2563EB] tabular-nums">
                   {permanentUuid}
                 </span>
-                <span className="text-[10px] text-[#64748B]">منذ مرحلة الـ Lead</span>
+                <span className="text-[10px] text-[#64748B] whitespace-nowrap">
+                  منذ مرحلة الـ Lead
+                </span>
               </div>
             </div>
 
             {/* Scrollable Chat History */}
             <div className="flex-1 overflow-y-auto p-3.5 space-y-3 bg-[#F8FAFC]/70">
-              {/* Conversion Milestone Banner */}
-              <div className="flex justify-center">
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-[#C7D2FE] bg-[#EEF2FF] px-3 py-1 text-[10px] font-semibold text-[#4F46E5]">
-                  <CheckCircle2 className="h-3 w-3" />
-                  <span>تم تحويل السجل بنجاح لجهة اتصال وصفقة تجارية</span>
-                </span>
-              </div>
-
+              {/* Inbound messages first, or chronological order */}
               {contactMessages.length === 0 ? (
-                <div className="rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] p-3.5 text-xs leading-relaxed text-[#475569]">
-                  {contact.lastMessageSnippet ||
-                    'سجل المحادثات جاهز — أرسل رسالة عبر واتساب أو استخدم قوالب "/" السريعة بالأسفل.'}
-                </div>
-              ) : (
-                [...contactMessages].reverse().map((m) => {
-                  const outbound = m.direction === 'outbound';
-                  return (
-                    <div
-                      key={m.id}
-                      className={`flex flex-col ${outbound ? 'items-start' : 'items-end'}`}
-                    >
-                      <span className="mb-1 text-[10px] text-[#94A3B8] tabular-nums">
-                        {m.timestampLabel} {outbound ? '• فريق المبيعات' : `• ${contact.fullName}`}
-                      </span>
-                      <div
-                        className={`max-w-[90%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed shadow-2xs ${
-                          outbound
-                            ? 'bg-[#2563EB] text-[#FFFFFF]'
-                            : 'border border-[#E2E8F0] bg-[#FFFFFF] text-[#0F172A]'
-                        }`}
-                      >
-                        <p>{m.body}</p>
-                      </div>
-                      {outbound && (
-                        <span className="mt-1 inline-flex items-center gap-1 text-[10px] text-[#2563EB]">
-                          <CheckCheck className="h-3 w-3" />
-                          <span>تمت القراءة</span>
-                        </span>
-                      )}
+                <>
+                  <div className="flex flex-col items-start">
+                    <span className="mb-1 text-[10px] text-[#94A3B8]">
+                      مرحلة الاستفسار الأول • {contact.primarySource || contact.fullName}
+                    </span>
+                    <div className="max-w-[90%] rounded-2xl rounded-tr-sm border border-[#E2E8F0] bg-[#FFFFFF] px-3.5 py-2.5 text-xs leading-relaxed text-[#0F172A]">
+                      <p>
+                        {contact.lastMessageSnippet ||
+                          'سجل المحادثات جاهز — أرسل رسالة عبر واتساب أو استخدم قوالب "/" السريعة بالأسفل.'}
+                      </p>
                     </div>
-                  );
-                })
+                  </div>
+                  {/* Conversion Milestone Banner */}
+                  <div className="flex justify-center py-0.5">
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[#A7F3D0] bg-[#ECFDF5]/80 px-3 py-1 text-[10px] font-semibold text-[#059669]">
+                      <CheckCircle2 className="h-3 w-3 shrink-0" />
+                      <span>
+                        تم تحويل السجل بنجاح لجهة اتصال وصفقة تجارية
+                        {matchedOriginLead?.convertedAt ? ` (${matchedOriginLead.convertedAt})` : ''}
+                      </span>
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Conversion Milestone Banner */}
+                  <div className="flex justify-center py-0.5">
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[#A7F3D0] bg-[#ECFDF5]/80 px-3 py-1 text-[10px] font-semibold text-[#059669]">
+                      <CheckCircle2 className="h-3 w-3 shrink-0" />
+                      <span>
+                        تم تحويل السجل بنجاح لجهة اتصال وصفقة تجارية
+                        {matchedOriginLead?.convertedAt ? ` (${matchedOriginLead.convertedAt})` : ''}
+                      </span>
+                    </span>
+                  </div>
+
+                  {[...contactMessages].reverse().map((m) => {
+                    const outbound = m.direction === 'outbound';
+                    return (
+                      <div
+                        key={m.id}
+                        className={`flex flex-col ${outbound ? 'items-end' : 'items-start'}`}
+                      >
+                        <span className="mb-1 text-[10px] text-[#94A3B8] tabular-nums">
+                          {m.timestampLabel} — {outbound ? m.senderName : m.campaign || m.senderName}
+                        </span>
+                        <div
+                          className={`max-w-[90%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed ${
+                            outbound
+                              ? 'rounded-tl-sm bg-[#2563EB] text-[#FFFFFF]'
+                              : 'rounded-tr-sm border border-[#E2E8F0] bg-[#FFFFFF] text-[#0F172A]'
+                          }`}
+                        >
+                          <p>{m.body}</p>
+                        </div>
+                        {outbound && (
+                          <span className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-[#2563EB]">
+                            <CheckCheck className="h-3 w-3" />
+                            <span>تمت القراءة</span>
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </>
               )}
             </div>
 
             {/* Bottom Pinned Quick Replies + Send Box */}
-            <div className="shrink-0 border-t border-[#E2E8F0] bg-[#FFFFFF] p-3 space-y-2.5">
+            <div className="shrink-0 border-t border-[#E2E8F0] bg-[#FFFFFF] p-3 space-y-2">
               {showSlashPalette && (
                 <div className="rounded-lg border border-[#E2E8F0] bg-[#FFFFFF] p-1.5 shadow-md space-y-1">
                   {QUICK_REPLIES.map((qr) => (
@@ -1406,7 +1647,7 @@ export const ContactDetailPage: React.FC = () => {
               )}
 
               <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
-                <span className="text-[10px] font-semibold text-[#64748B] whitespace-nowrap">
+                <span className="text-[10px] font-semibold text-[#64748B] whitespace-nowrap shrink-0">
                   ردود سريعة:
                 </span>
                 {QUICK_REPLIES.map((qr) => (
@@ -1421,13 +1662,12 @@ export const ContactDetailPage: React.FC = () => {
                 ))}
               </div>
 
-              <form onSubmit={handleSendChat} className="flex items-center gap-1.5">
-
+              <form onSubmit={handleSendChat} className="flex items-center gap-1.5 w-full">
                 <button
                   type="button"
                   onClick={() => setChatText((p) => (p ? p : '/'))}
                   title="إدراج قالب سريع"
-                  className="hidden sm:flex h-9 w-8 items-center justify-center rounded-lg text-[#64748B] hover:bg-[#F8FAFC]"
+                  className="flex h-9 w-7 items-center justify-center rounded-lg text-[#64748B] hover:bg-[#F8FAFC] shrink-0"
                 >
                   <Paperclip className="h-4 w-4" />
                 </button>
@@ -1435,24 +1675,25 @@ export const ContactDetailPage: React.FC = () => {
                   type="button"
                   onClick={() => setChatText((p) => `${p} 👋`.trimStart())}
                   title="إدراج تعبير"
-                  className="hidden sm:flex h-9 w-8 items-center justify-center rounded-lg text-[#64748B] hover:bg-[#F8FAFC]"
+                  className="hidden sm:flex h-9 w-7 items-center justify-center rounded-lg text-[#64748B] hover:bg-[#F8FAFC] shrink-0"
                 >
                   <Smile className="h-4 w-4" />
                 </button>
 
                 <input
                   type="text"
+                  maxLength={2000}
                   value={chatText}
                   onChange={(e) => setChatText(e.target.value)}
                   placeholder="اكتب رداً أو رسالة واتساب مباشرة..."
                   aria-label="اكتب رداً أو رسالة واتساب مباشرة"
-                  className="h-9 flex-1 min-w-0 rounded-lg border border-[#CBD5E1] bg-[#FFFFFF] px-3 text-xs text-[#0F172A] focus:border-[#2563EB] focus:outline-none"
+                  className="h-9 flex-1 min-w-0 rounded-lg border border-[#CBD5E1] bg-[#F8FAFC] px-3 text-xs text-[#0F172A] focus:bg-[#FFFFFF] focus:border-[#2563EB] focus:outline-none"
                 />
 
                 <button
                   type="submit"
                   disabled={!chatText.trim()}
-                  className="inline-flex h-9 items-center gap-1 rounded-lg bg-[#2563EB] px-3 text-xs font-bold text-[#FFFFFF] hover:bg-[#1D4ED8] disabled:opacity-45 shrink-0"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#2563EB] px-3 text-xs font-bold text-[#FFFFFF] hover:bg-[#1D4ED8] disabled:opacity-45 whitespace-nowrap shrink-0"
                 >
                   <span>إرسال</span>
                   <Send className="h-3.5 w-3.5" />
@@ -1468,7 +1709,7 @@ export const ContactDetailPage: React.FC = () => {
         open={dealModalOpen}
         contact={contact}
         onClose={() => setDealModalOpen(false)}
-        onCreated={() => {}}
+        onCreated={() => showSaved()}
       />
     </div>
   );

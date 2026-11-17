@@ -51,7 +51,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
         />
 
         <main className="flex-1 p-4 lg:p-6">
-          <div className="mx-auto max-w-[1440px]">{children}</div>
+          <div className="w-full">{children}</div>
         </main>
       </div>
 

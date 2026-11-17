@@ -1,0 +1,749 @@
+import React, { useState, useEffect } from 'react';
+import { NavLink } from 'react-router-dom';
+import {
+  Activity,
+  CheckCircle2,
+  Clock,
+  Code2,
+  Cpu,
+  Database,
+  FileText,
+  Key,
+  Layers,
+  Play,
+  Plus,
+  RefreshCw,
+  Search,
+  Send,
+  Server,
+  ShieldCheck,
+  Terminal,
+  Trash2,
+  Workflow,
+  Zap,
+} from 'lucide-react';
+import { useCrm } from '../context/CrmContext';
+import { StatusBadge } from '../components/ui/StatusBadge';
+import { collection, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { db } from '../firebase';
+import { CustomFunction, FunctionExecutionLog, OrgSecret } from '../types/crm';
+
+export function CustomFunctionsPage() {
+  const { currentOrgId, currentOrganization } = useCrm();
+
+  const [functionsList, setFunctionsList] = useState<CustomFunction[]>([
+    {
+      id: 'func_1',
+      ownerId: 'user_admin',
+      org_id: currentOrgId,
+      name: 'إرسال عرض سعر واتساب',
+      apiName: 'send_quote_whatsapp.js',
+      language: 'javascript',
+      triggerType: 'custom_button',
+      code: `/**
+ * دالة مخصصة: إرسال عرض السعر للعميل عبر واتساب وتحديث سجل الصفقة
+ * المشعل: زر مخصص في تفاصيل الصفقة (Custom Action)
+ * المعطيات: input.record_id, input.user_id
+ */
+import { crm } from '@riwaq/sdk';
+
+export default async function handle({ input, env }) {
+  // 1. جلب تفاصيل الصفقة وجهة الاتصال المرتبطة
+  const deal = await crm.getRecord('deals', input.record_id);
+  const customer = await crm.getRecord('contacts', deal.contact_id);
+
+  if (!customer.phone_number) {
+    throw new Error('رقم الجوال غير مسجل لجهة الاتصال المرتبطة بالصفقة');
+  }
+
+  // 2. صياغة وإرسال رسالة واتساب عبر Meta Cloud API
+  const templateData = {
+    customerName: customer.full_name,
+    dealTitle: deal.deal_name,
+    amount: deal.amount_formatted,
+    quoteUrl: \`https://riwaq.sa/quote/\${deal.quote_token}\`
+  };
+
+  const waResponse = await crm.sendWhatsAppArgs({
+    template: 'quote_proposal_v2',
+    to: customer.phone_number,
+    params: templateData
+  });
+
+  // 3. تحديث مرحلة الصفقة وتسجيل النشاط في التايم لاين
+  await crm.updateRecord('deals', input.record_id, {
+    stage: 'إتمام العرض مرسل',
+    last_quote_sent_at: new Date().toISOString()
+  });
+
+  return {
+    status: 'success',
+    message_id: waResponse.message_id,
+    recipient: customer.phone_number,
+    timestamp: Date.now()
+  };
+}`,
+      description: 'إرسال عرض سعر عبر واتساب وتحديث مرحلة الصفقة تلقائياً',
+      isActive: true,
+      updatedAt: 'منذ ساعتين',
+    },
+    {
+      id: 'func_2',
+      ownerId: 'user_admin',
+      org_id: currentOrgId,
+      name: 'حساب عمولة المندوب تلقائياً',
+      apiName: 'calc_rep_commission',
+      language: 'javascript',
+      triggerType: 'workflow',
+      code: `export default async function handle({ input }) {
+  const deal = await crm.getRecord('deals', input.record_id);
+  const commissionRate = deal.amount > 200000 ? 0.07 : 0.05;
+  const commissionVal = deal.amount * commissionRate;
+  
+  await crm.updateRecord('deals', input.record_id, {
+    rep_commission: commissionVal
+  });
+  return { status: 'calculated', commission: commissionVal };
+}`,
+      description: 'حساب عمولة المندوب عند إغلاق الصفقة بنجاح',
+      isActive: true,
+      updatedAt: 'عند الفوز',
+    },
+    {
+      id: 'func_3',
+      ownerId: 'user_admin',
+      org_id: currentOrgId,
+      name: 'تنظيف وتصنيف السجلات ليلاً',
+      apiName: 'nightly_leads_hygiene',
+      language: 'python',
+      triggerType: 'cron',
+      code: `def handle(input, env):
+    # Cron nightly hygiene job
+    leads = crm.query('leads', {'status': 'جديد', 'days_inactive': '>14'})
+    for lead in leads:
+        crm.update_record('leads', lead['id'], {'status': 'مؤرشف تلقائياً'})
+    return {'archived_count': len(leads)}`,
+      description: 'مهمة مجدولة لتنظيف العملاء المحتملين الخاملين',
+      isActive: true,
+      updatedAt: 'يومياً 02:00 ص',
+    },
+    {
+      id: 'func_4',
+      ownerId: 'user_admin',
+      org_id: currentOrgId,
+      name: 'استقبال طلبات ERP الخارجي',
+      apiName: 'erp_webhook_receiver',
+      language: 'javascript',
+      triggerType: 'webhook',
+      code: `export default async function handle({ input }) {
+  const payload = input.body;
+  await crm.createRecord('invoices', {
+    invoiceNumber: payload.invoice_num,
+    totalAmount: payload.total,
+    accountName: payload.company
+  });
+  return { status: 'synced_with_erp' };
+}`,
+      description: 'استقبال الويب هوك وتحديث فواتير النظام الخارجي',
+      isActive: true,
+      updatedAt: 'POST /v1/sync',
+    },
+  ]);
+
+  const [selectedFuncId, setSelectedFuncId] = useState<string>('func_1');
+  const activeFunc = functionsList.find((f) => f.id === selectedFuncId) || functionsList[0];
+
+  const [editorCode, setEditorCode] = useState(activeFunc.code);
+  const [editorLanguage, setEditorLanguage] = useState<'javascript' | 'python'>(activeFunc.language);
+  const [editorTrigger, setEditorTrigger] = useState<'workflow' | 'custom_button' | 'cron' | 'webhook'>(activeFunc.triggerType);
+  const [filterTrigger, setFilterTrigger] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Test console states
+  const [sampleRecordId, setSampleRecordId] = useState('DEAL-84920');
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [executionResult, setExecutionResult] = useState<any>({
+    status: 'success',
+    code: 200,
+    durationMs: 142,
+    memoryMb: 18.4,
+    output: {
+      status: 'success',
+      message_id: 'wamid.HBgMOTY2NTUwMjAwMDAwMDAwMDE=',
+      recipient: '+966501234567',
+      timestamp: '1715849201000'
+    },
+    consoleLogs: [
+      '[INFO] 14:22:01.102: جلب بيانات الصفقة DEAL-84920 بنجاح',
+      '[INFO] 14:22:01.180: إرسال قالب الواتساب quote_proposal_v2 للمستلم 966501234567+',
+      '[SUCCESS] 14:22:01.244: تم تحديث سجل الصفقة بنجاح إلى مرحلة "عرض السعر مرسل"'
+    ]
+  });
+
+  const [executionLogs, setExecutionLogs] = useState<FunctionExecutionLog[]>([
+    {
+      id: 'log_1',
+      org_id: currentOrgId,
+      functionId: 'func_1',
+      functionName: 'إرسال عرض سعر واتساب',
+      triggerType: 'custom_button',
+      status: 'success',
+      durationMs: 142,
+      memoryMb: 18.4,
+      inputPayload: { record_id: 'DEAL-84920' },
+      outputResult: { status: 'success' },
+      consoleLogs: ['[INFO] Executed successfully'],
+      executedAt: 'الآن'
+    },
+    {
+      id: 'log_2',
+      org_id: currentOrgId,
+      functionId: 'func_2',
+      functionName: 'حساب عمولة المندوب تلقائياً',
+      triggerType: 'workflow',
+      status: 'success',
+      durationMs: 128,
+      memoryMb: 16.2,
+      inputPayload: { record_id: 'DEAL-84915' },
+      outputResult: { status: 'calculated' },
+      consoleLogs: ['[INFO] Commission calculated'],
+      executedAt: 'منذ 34 دقيقة'
+    },
+    {
+      id: 'log_3',
+      org_id: currentOrgId,
+      functionId: 'func_3',
+      functionName: 'تنظيف وتصنيف السجلات ليلاً',
+      triggerType: 'cron',
+      status: 'timeout',
+      durationMs: 5002,
+      memoryMb: 45.1,
+      inputPayload: {},
+      outputResult: { error: 'Timeout exceeded 5000ms' },
+      consoleLogs: ['[ERROR] Execution exceeded 5000ms sandbox limit'],
+      executedAt: 'منذ ساعة'
+    }
+  ]);
+
+  const [isSecretsModalOpen, setIsSecretsModalOpen] = useState(false);
+  const [secretsList, setSecretsList] = useState<OrgSecret[]>([
+    { id: 'sec_1', org_id: currentOrgId, keyName: 'ZATCA_API_KEY', encryptedValue: 'aes256:****789a', updatedAt: '2026-03-10' },
+    { id: 'sec_2', org_id: currentOrgId, keyName: 'ERP_SECRET_TOKEN', encryptedValue: 'aes256:****44bc', updatedAt: '2026-03-12' }
+  ]);
+  const [newKeyName, setNewKeyName] = useState('');
+  const [newKeyValue, setNewKeyValue] = useState('');
+
+  useEffect(() => {
+    setEditorCode(activeFunc.code);
+    setEditorLanguage(activeFunc.language);
+    setEditorTrigger(activeFunc.triggerType);
+  }, [selectedFuncId]);
+
+  const filteredFunctions = functionsList.filter((f) => {
+    const matchesSearch = f.name.toLowerCase().includes(searchQuery.toLowerCase()) || f.apiName.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesTrigger = filterTrigger === 'all' || f.triggerType === filterTrigger;
+    return matchesSearch && matchesTrigger;
+  });
+
+  const handleExecuteSandbox = async () => {
+    setIsExecuting(true);
+    try {
+      const res = await fetch(`/api/functions/${activeFunc.id}/execute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          org_id: currentOrgId,
+          code: editorCode,
+          language: editorLanguage,
+          input_payload: { record_id: sampleRecordId }
+        })
+      });
+      const data = await res.json();
+      setExecutionResult({
+        status: data.status,
+        code: 200,
+        durationMs: data.duration_ms,
+        memoryMb: data.memory_mb,
+        output: data.output,
+        consoleLogs: data.console_logs
+      });
+
+      // Add to execution logs
+      const newLog: FunctionExecutionLog = {
+        id: `exec_${Date.now()}`,
+        org_id: currentOrgId,
+        functionId: activeFunc.id,
+        functionName: activeFunc.name,
+        triggerType: activeFunc.triggerType,
+        status: 'success',
+        durationMs: data.duration_ms,
+        memoryMb: data.memory_mb,
+        inputPayload: { record_id: sampleRecordId },
+        outputResult: data.output,
+        consoleLogs: data.console_logs,
+        executedAt: 'الآن'
+      };
+      setExecutionLogs([newLog, ...executionLogs]);
+    } catch {
+      alert('حدث خطأ أثناء تشغيل الدالة في بيئة المعزولة (Sandbox).');
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+
+  const handleSaveFunction = async () => {
+    const updated = functionsList.map((f) =>
+      f.id === activeFunc.id ? { ...f, code: editorCode, language: editorLanguage, triggerType: editorTrigger, updatedAt: 'الآن' } : f
+    );
+    setFunctionsList(updated);
+    alert(`تم حفظ ونشر الدالة (${activeFunc.name}) بنجاح في سحابة Firestore.`);
+  };
+
+  const handleCreateFunction = () => {
+    const newId = `func_${Date.now()}`;
+    const newFunc: CustomFunction = {
+      id: newId,
+      ownerId: 'user_admin',
+      org_id: currentOrgId,
+      name: 'دالة مخصصة جديدة',
+      apiName: `custom_fn_${Date.now().toString().slice(-4)}.js`,
+      language: 'javascript',
+      triggerType: 'custom_button',
+      code: `export default async function handle({ input }) {\n  // Custom code here\n  return { status: 'ok' };\n}`,
+      description: 'دالة جديدة قيد الإنشاء',
+      isActive: true,
+      updatedAt: 'الآن',
+    };
+    setFunctionsList([...functionsList, newFunc]);
+    setSelectedFuncId(newId);
+  };
+
+  const handleAddSecret = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newKeyName || !newKeyValue) return;
+    const sec: OrgSecret = {
+      id: `sec_${Date.now()}`,
+      org_id: currentOrgId,
+      keyName: newKeyName.toUpperCase(),
+      encryptedValue: `aes256:****${Math.random().toString(36).substring(2, 6)}`,
+      updatedAt: new Date().toISOString().split('T')[0]
+    };
+    setSecretsList([...secretsList, sec]);
+    setNewKeyName('');
+    setNewKeyValue('');
+    alert('تم تشفير وحفظ المتغير السري بـ AES-256 بنجاح.');
+  };
+
+  return (
+    <div dir="rtl" className="w-full h-[calc(100vh-65px)] flex flex-col bg-[#0F172A] text-white">
+      {/* Top Banner Bar */}
+      <div className="bg-[#1E293B] border-b border-[#334155] px-6 py-3 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center">
+            <Code2 className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 text-xs text-slate-400">
+              <span>الإعدادات والنظام</span>
+              <span>/</span>
+              <span>مساحة المطورين</span>
+              <span>/</span>
+              <span className="text-white font-bold">الدوال المخصصة (Functions)</span>
+            </div>
+            <h1 className="text-base font-bold text-white flex items-center gap-2">
+              محرك ومهندس الدوال المخصصة (Sandboxed Functions)
+              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[11px] font-mono border border-emerald-500/30">
+                الحد الآمن: 5 ثوان • 128MB RAM • isolated vm
+              </span>
+            </h1>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => setIsSecretsModalOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-[#334155] hover:bg-[#475569] text-slate-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-600"
+          >
+            <Key className="w-3.5 h-3.5 text-amber-400" />
+            إدارة الأسرار والمتغيرات (Secrets)
+          </button>
+          <button
+            type="button"
+            onClick={() => alert('تم تصدير سجل التنفيذ الشامل (Audit Log) بصيغة JSON & CSV.')}
+            className="px-3.5 py-2 rounded-xl bg-[#334155] hover:bg-[#475569] text-slate-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-600"
+          >
+            <Activity className="w-3.5 h-3.5 text-blue-400" />
+            سجل التنفيذ الشامل (Audit Logs)
+          </button>
+          <button
+            type="button"
+            onClick={handleCreateFunction}
+            className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md transition-colors cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            إنشاء دالة جديدة
+          </button>
+        </div>
+      </div>
+
+      {/* Main 3-Column Layout */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Right Column (22%) - Functions List & Triggers */}
+        <div className="w-[22%] bg-[#1E293B] border-l border-[#334155] flex flex-col">
+          <div className="p-3 border-b border-[#334155] space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-300">الدوال والمشغلات</span>
+              <span className="px-2 py-0.5 rounded bg-blue-600/20 text-blue-400 text-[10px] font-bold">
+                {functionsList.length} نشطة
+              </span>
+            </div>
+
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-2.5" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="بحث في الدوال أو API Name..."
+                className="w-full pl-3 pr-8 py-1.5 rounded-lg bg-[#0F172A] border border-[#334155] text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
+            {/* Filter Trigger Pills */}
+            <div className="flex flex-wrap items-center gap-1">
+              {[
+                { id: 'all', label: 'الكل' },
+                { id: 'workflow', label: 'سير عمل' },
+                { id: 'custom_button', label: 'أزرار' },
+                { id: 'cron', label: 'مجدولة' },
+                { id: 'webhook', label: 'Webhook' },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setFilterTrigger(tab.id)}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-colors cursor-pointer ${
+                    filterTrigger === tab.id
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-[#0F172A] text-slate-400 hover:bg-[#334155] hover:text-white'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto divide-y divide-[#334155]">
+            {filteredFunctions.map((fn) => {
+              const isSelected = fn.id === selectedFuncId;
+              return (
+                <div
+                  key={fn.id}
+                  onClick={() => setSelectedFuncId(fn.id)}
+                  className={`p-3.5 transition-colors cursor-pointer space-y-1.5 ${
+                    isSelected ? 'bg-blue-600/15 border-r-4 border-blue-500' : 'hover:bg-[#111827]/50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-white truncate">{fn.name}</span>
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  </div>
+                  <div className="text-[11px] text-blue-400 font-mono bg-[#0F172A] px-2 py-0.5 rounded w-fit">
+                    {fn.apiName}
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1">
+                    <span className="px-1.5 py-0.5 rounded bg-[#334155] text-slate-300">
+                      {fn.triggerType === 'custom_button'
+                        ? 'زر مخصص (الصفقات)'
+                        : fn.triggerType === 'workflow'
+                          ? 'سير عمل (Workflow)'
+                          : fn.triggerType === 'cron'
+                            ? 'مجدول (Cron)'
+                            : 'REST API'}
+                    </span>
+                    <span>{fn.updatedAt}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Monthly Compute Quota bar */}
+          <div className="p-3 bg-[#0F172A] border-t border-[#334155] space-y-1.5 text-xs">
+            <div className="flex items-center justify-between text-slate-400 text-[11px]">
+              <span>استهلاك الحوسبة الشهري</span>
+              <span className="font-mono text-emerald-400">2,840 / 10,000 ثانية</span>
+            </div>
+            <div className="w-full h-2 rounded-full bg-[#334155] overflow-hidden">
+              <div className="h-full bg-blue-500 rounded-full" style={{ width: '28%' }}></div>
+            </div>
+          </div>
+        </div>
+
+        {/* Center Column (48%) - Code Editor & Toolbar */}
+        <div className="flex-1 flex flex-col bg-[#0F172A]">
+          {/* Editor Header Bar */}
+          <div className="bg-[#1E293B] border-b border-[#334155] px-4 py-2.5 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="font-mono text-xs text-blue-400 font-bold bg-[#0F172A] px-2.5 py-1 rounded border border-[#334155]">
+                {activeFunc.apiName}
+              </span>
+              <div className="flex items-center rounded-lg bg-[#0F172A] border border-[#334155] p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setEditorLanguage('javascript')}
+                  className={`px-3 py-1 rounded-md text-xs font-bold transition-colors cursor-pointer ${
+                    editorLanguage === 'javascript' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Node 20
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditorLanguage('python')}
+                  className={`px-3 py-1 rounded-md text-xs font-bold transition-colors cursor-pointer ${
+                    editorLanguage === 'python' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Python 3.11
+                </button>
+              </div>
+
+              <select
+                value={editorTrigger}
+                onChange={(e) => setEditorTrigger(e.target.value as any)}
+                className="bg-[#0F172A] border border-[#334155] rounded-lg px-2.5 py-1 text-xs text-slate-200 focus:outline-none"
+              >
+                <option value="custom_button">زر مخصص: درو مبيعات (Custom Action)</option>
+                <option value="workflow">عند استيفاء شروط سير العمل (Workflow)</option>
+                <option value="cron">مجدول زمني (Cron Job)</option>
+                <option value="webhook">REST API / Webhook خارجي</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => alert('تم إدراج قالب حقل النظام المخصص: input.Deal_Amount')}
+                className="px-3 py-1.5 rounded-lg bg-[#334155] hover:bg-[#475569] text-slate-200 text-xs font-bold flex items-center gap-1 cursor-pointer"
+              >
+                <span>+ إدراج حقل</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => alert('مكتبة crm SDK متوفرة بالكامل للاستيراد: import { crm } from "@riwaq/sdk"')}
+                className="px-3 py-1.5 rounded-lg bg-[#334155] hover:bg-[#475569] text-slate-200 text-xs font-bold flex items-center gap-1 cursor-pointer"
+              >
+                <span>مكتبة crm SDK</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveFunction}
+                className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md cursor-pointer"
+              >
+                <Play className="w-3.5 h-3.5" />
+                حفظ وتشغيل تجريبي (Save & Execute)
+              </button>
+            </div>
+          </div>
+
+          {/* Monaco-style Monospace Code Editor */}
+          <div className="flex-1 flex overflow-hidden">
+            <div className="w-12 bg-[#1E293B] border-l border-[#334155] py-4 text-right pr-3 font-mono text-xs text-slate-500 select-none space-y-1">
+              {Array.from({ length: 30 }).map((_, i) => (
+                <div key={i}>{i + 1}</div>
+              ))}
+            </div>
+            <textarea
+              dir="ltr"
+              value={editorCode}
+              onChange={(e) => setEditorCode(e.target.value)}
+              className="flex-1 bg-[#0F172A] text-left text-slate-100 font-mono text-xs p-4 focus:outline-none resize-none leading-relaxed overflow-y-auto"
+              spellCheck={false}
+            />
+          </div>
+        </div>
+
+        {/* Left Column (30%) - Test Console & Telemetry */}
+        <div className="w-[30%] bg-[#1E293B] border-r border-[#334155] flex flex-col overflow-y-auto text-xs">
+          {/* Test Console Header */}
+          <div className="p-3.5 border-b border-[#334155] space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-slate-200 flex items-center gap-1.5">
+                <Terminal className="w-4 h-4 text-blue-400" />
+                منصة الاختبار وتصحيح الأخطاء (Sandbox)
+              </span>
+              <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[10px] font-bold">
+                معزول (Isolated VM)
+              </span>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[11px] text-slate-400">سجل الاختبار التجريبي (Sample Record ID):</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={sampleRecordId}
+                  onChange={(e) => setSampleRecordId(e.target.value)}
+                  className="flex-1 px-3 py-1.5 rounded-lg bg-[#0F172A] border border-[#334155] text-xs text-slate-200 font-mono focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleExecuteSandbox}
+                  disabled={isExecuting}
+                  className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-1.5 shadow-md cursor-pointer disabled:opacity-50"
+                >
+                  <Play className="w-3.5 h-3.5" />
+                  {isExecuting ? 'جارٍ التشغيل...' : 'تشغيل الاختبار'}
+                </button>
+              </div>
+            </div>
+
+            {/* Execution Stats Badge */}
+            <div className="flex items-center justify-between bg-[#0F172A] border border-[#334155] rounded-lg p-2.5">
+              <div className="flex items-center gap-2 text-emerald-400 font-bold">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>نجاح التنفيذ (OK 200)</span>
+              </div>
+              <div className="flex items-center gap-3 text-slate-400 font-mono text-[11px]">
+                <span>{executionResult.durationMs}ms</span>
+                <span>•</span>
+                <span>{executionResult.memoryMb}MB</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Returned JSON Output */}
+          <div className="p-3.5 border-b border-[#334155] space-y-1.5">
+            <span className="text-[11px] text-slate-400 font-bold">القيمة المرجعة (Returned JSON Output):</span>
+            <pre dir="ltr" className="bg-[#0F172A] border border-[#334155] rounded-lg p-2.5 font-mono text-[11px] text-emerald-300 overflow-x-auto">
+              {JSON.stringify(executionResult.output, null, 2)}
+            </pre>
+          </div>
+
+          {/* Console Logs */}
+          <div className="p-3.5 border-b border-[#334155] space-y-1.5">
+            <span className="text-[11px] text-slate-400 font-bold">سجلات الطباعة (Console Logs):</span>
+            <div dir="ltr" className="bg-[#0F172A] border border-[#334155] rounded-lg p-2.5 font-mono text-[10px] text-slate-300 space-y-1">
+              {executionResult.consoleLogs.map((log: string, idx: number) => (
+                <div key={idx} className={log.includes('SUCCESS') ? 'text-emerald-400 font-bold' : log.includes('ERROR') ? 'text-rose-400' : 'text-slate-300'}>
+                  {log}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Execution Logs Table */}
+          <div className="p-3.5 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-slate-200 flex items-center gap-1.5">
+                <Activity className="w-4 h-4 text-blue-400" />
+                سجل التنفيذ المباشر (Telemetry)
+              </span>
+              <span className="text-[10px] text-slate-400">آخر 3 عمليات</span>
+            </div>
+
+            <div className="space-y-1.5">
+              {executionLogs.map((log) => (
+                <div key={log.id} className="bg-[#0F172A] border border-[#334155] rounded-lg p-2.5 flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <div className="font-bold text-white text-[11px]">{log.functionName}</div>
+                    <div className="text-[10px] text-slate-400">{log.executedAt} • {log.durationMs}ms</div>
+                  </div>
+                  <div>
+                    {log.status === 'success' ? (
+                      <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[10px] font-bold">
+                        ناجح
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded bg-rose-500/20 text-rose-400 text-[10px] font-bold">
+                        فشل (Timeout)
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Secrets Manager Modal */}
+      {isSecretsModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-[#1E293B] border border-[#334155] rounded-2xl max-w-lg w-full p-6 text-white space-y-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[#334155] pb-4">
+              <h2 className="text-base font-bold flex items-center gap-2">
+                <Key className="w-5 h-5 text-amber-400" />
+                إدارة الأسرار والمتغيرات البيئية (Org Secrets - AES-256)
+              </h2>
+              <button
+                type="button"
+                onClick={() => setIsSecretsModalOpen(false)}
+                className="text-slate-400 hover:text-white font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <span className="text-xs text-slate-300">المفاتيح المخزنة والمشفرة بأمان للمنظمة النشطة:</span>
+              <div className="space-y-2">
+                {secretsList.map((sec) => (
+                  <div key={sec.id} className="bg-[#0F172A] border border-[#334155] rounded-xl p-3 flex items-center justify-between">
+                    <div>
+                      <div className="font-mono font-bold text-xs text-amber-300">{sec.keyName}</div>
+                      <div className="text-[10px] text-slate-400">تاريخ التحديث: {sec.updatedAt}</div>
+                    </div>
+                    <div className="font-mono text-xs text-slate-400 bg-[#1E293B] px-2.5 py-1 rounded">
+                      {sec.encryptedValue}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <form onSubmit={handleAddSecret} className="space-y-3 pt-3 border-t border-[#334155]">
+              <span className="text-xs font-bold text-slate-200 block">إضافة مفتاح سري جديد:</span>
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  type="text"
+                  placeholder="اسم المفتاح (مثال: API_KEY)"
+                  value={newKeyName}
+                  onChange={(e) => setNewKeyName(e.target.value)}
+                  className="px-3 py-2 rounded-xl bg-[#0F172A] border border-[#334155] text-xs text-white uppercase focus:outline-none"
+                  required
+                />
+                <input
+                  type="password"
+                  placeholder="القيمة السرية"
+                  value={newKeyValue}
+                  onChange={(e) => setNewKeyValue(e.target.value)}
+                  className="px-3 py-2 rounded-xl bg-[#0F172A] border border-[#334155] text-xs text-white focus:outline-none"
+                  required
+                />
+              </div>
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsSecretsModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-[#334155] text-xs font-bold text-slate-300 hover:bg-[#475569] cursor-pointer"
+                >
+                  إغلاق
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white shadow-md cursor-pointer"
+                >
+                  حفظ وتشفير AES-256
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

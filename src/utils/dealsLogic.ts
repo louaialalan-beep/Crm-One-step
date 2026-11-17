@@ -332,21 +332,6 @@ export function getBlueprintTransitionRequirements(
   const targetCol = getDealColumnForStage(targetStage);
   const bpName = activeDealsBp?.name ?? 'مخطط إغلاق صفقات المؤسسات الكبرى';
 
-  if (!activeDealsBp) {
-    return {
-      requiresModal: false,
-      blueprintName: bpName,
-      targetStage,
-      targetTitle: targetCol.title,
-      requireFinalAmount: false,
-      requireDiscountPercent: false,
-      requireContractPdf: false,
-      requireLossReason: false,
-      requireNextStep: false,
-      checklistItems: [],
-    };
-  }
-
   if (targetStage === 'مكتملة') {
     return {
       requiresModal: true,
@@ -359,27 +344,26 @@ export function getBlueprintTransitionRequirements(
       requireLossReason: false,
       requireNextStep: false,
       checklistItems: [
-        'اعتماد التسعير النهائي والخصم الممنوح من إدارة المبيعات',
-        'إرفاق نسخة العقد الموقع أو التعميد الرسمي (PDF)',
-        'تأكيد ترحيل الصفقة إلى الفوترة وأمر المبيعات',
+        'تم تأكيد واعتماد شروط الدفع وجدولة الدفعات الرسمية',
+        'تم مطابقة الفاتورة الضريبية وإصدار أمر الشراء (PO) من العميل',
       ],
     };
   }
 
-  if (targetStage === 'تفاوض') {
+  if (targetStage === 'تفاوض' || targetStage === 'عرض سعر') {
     return {
       requiresModal: true,
       blueprintName: bpName,
       targetStage,
       targetTitle: targetCol.title,
       requireFinalAmount: true,
-      requireDiscountPercent: false,
-      requireContractPdf: false,
+      requireDiscountPercent: true,
+      requireContractPdf: true,
       requireLossReason: false,
       requireNextStep: true,
       checklistItems: [
-        'توثيق المراجعة الفنية واتفاقية مستوى الخدمة (SLA)',
-        'تأكيد جدول الاعتماد القانوني وتحديد الخطوة التالية',
+        'تم تأكيد واعتماد شروط الدفع وجدولة الدفعات الرسمية',
+        'تم مطابقة الفاتورة الضريبية وإصدار أمر الشراء (PO) من العميل',
       ],
     };
   }
@@ -390,12 +374,15 @@ export function getBlueprintTransitionRequirements(
       blueprintName: bpName,
       targetStage,
       targetTitle: targetCol.title,
-      requireFinalAmount: false,
-      requireDiscountPercent: false,
-      requireContractPdf: false,
+      requireFinalAmount: true,
+      requireDiscountPercent: true,
+      requireContractPdf: true,
       requireLossReason: true,
       requireNextStep: false,
-      checklistItems: ['توثيق سبب الخسارة الدقيق لتقارير التحليل الربعية'],
+      checklistItems: [
+        'تم تأكيد واعتماد شروط الدفع وجدولة الدفعات الرسمية',
+        'تم مطابقة الفاتورة الضريبية وإصدار أمر الشراء (PO) من العميل',
+      ],
     };
   }
 

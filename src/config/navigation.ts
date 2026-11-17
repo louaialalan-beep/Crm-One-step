@@ -18,7 +18,9 @@ export interface NavModuleItem {
     | 'CheckSquare'
     | 'BarChart3'
     | 'PieChart'
-    | 'Settings';
+    | 'Settings'
+    | 'MessageSquare'
+    | 'Send';
   subItems?: SubNavItem[];
 }
 
@@ -54,6 +56,18 @@ export const SIDEBAR_MODULES: NavModuleItem[] = [
     iconName: 'Briefcase',
   },
   {
+    id: 'whatsapp_inbox',
+    label: 'صندوق واتساب والحملات',
+    path: '/whatsapp-inbox',
+    iconName: 'MessageSquare',
+  },
+  {
+    id: 'campaigns',
+    label: 'الحملات التسويقية',
+    path: '/campaigns',
+    iconName: 'Send',
+  },
+  {
     id: 'billing',
     label: 'عروض الأسعار والفواتير',
     path: '/quotes',
@@ -67,7 +81,7 @@ export const SIDEBAR_MODULES: NavModuleItem[] = [
   {
     id: 'tasks',
     label: 'المهام والأنشطة',
-    path: '/tasks',
+    path: '/activities',
     iconName: 'CheckSquare',
   },
   {
@@ -150,6 +164,11 @@ export const ROUTE_METADATA: Record<string, RouteMeta> = {
     title: 'المهام والأنشطة',
     section: 'التشغيل والمتابعة',
     description: 'جدولة مهام المتابعة وسجل نقاط التماس اليومية مع العملاء.',
+  },
+  '/activities': {
+    title: 'المهام والأنشطة اليومية',
+    section: 'التشغيل والمتابعة',
+    description: 'إدارة الجداول الزمنية، مكالمات المتابعة، والاجتماعات البيعية.',
   },
   '/reports': {
     title: 'التقارير',

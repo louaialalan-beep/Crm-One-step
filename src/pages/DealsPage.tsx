@@ -18,7 +18,7 @@ import {
   type DealsViewMode,
 } from '../utils/dealsLogic';
 import { CreateDealModal } from '../components/deals/CreateDealModal';
-import { DealBlueprintModal } from '../components/deals/DealBlueprintModal';
+import { BlueprintTransitionModal } from '../components/deals/BlueprintTransitionModal';
 import { DealsBulkActionBar } from '../components/deals/DealsBulkActionBar';
 import { DealsChartView } from '../components/deals/DealsChartView';
 import { DealsDockedFilterPanel } from '../components/deals/DealsDockedFilterPanel';
@@ -215,6 +215,29 @@ export const DealsPage: React.FC = () => {
     setToastMsg('تم نقل الصفقة إلى سلة المحذوفات');
   };
 
+  const handleExportDealsCsv = () => {
+    const header = ['المعرف', 'عنوان الصفقة', 'الشركة', 'القيمة', 'المرحلة', 'الاحتمال', 'تاريخ الإغلاق', 'المسؤول'];
+    const rows = filteredDeals.map((d) => [
+      d.leadUniqueId || d.id,
+      `"${d.title.replace(/"/g, '""')}"`,
+      `"${d.accountName.replace(/"/g, '""')}"`,
+      String(d.amount),
+      d.stage,
+      `${d.probability}%`,
+      d.closeDate,
+      `"${d.ownerName.replace(/"/g, '""')}"`,
+    ]);
+    const csv = [header.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'riwaq-deals-export.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+    setToastMsg(`تم تصدير ${filteredDeals.length} صفقة بصيغة CSV بنجاح`);
+  };
+
   return (
     <div className="space-y-4 pb-16">
       <DealsHeader
@@ -236,6 +259,7 @@ export const DealsPage: React.FC = () => {
           setCreateInitialStage('تأهيل مبدئي');
           setCreateModalOpen(true);
         }}
+        onExportCsv={handleExportDealsCsv}
         canCreateDeal={canCreateDeal}
         canViewAmount={canViewAmount}
       />
@@ -346,7 +370,7 @@ export const DealsPage: React.FC = () => {
         }}
       />
 
-      <DealBlueprintModal
+      <BlueprintTransitionModal
         open={Boolean(pendingBlueprint)}
         deal={pendingBlueprint?.deal ?? null}
         requirement={pendingBlueprint?.requirement ?? null}
