@@ -164,6 +164,18 @@ export interface CreateDealInput {
   attributionSource?: string;
 }
 
+export interface CreateAccountInput {
+  name: string;
+  industry: string;
+  city?: string;
+  tier: Account['tier'];
+  annualRevenue: number;
+  employeesCount?: number;
+  website?: string;
+  accountManager?: string;
+  leadUniqueId?: string;
+}
+
 function stripUndefined<T extends object>(obj: T): Record<string, unknown> {
   const clean: Record<string, unknown> = {};
   for (const [key, val] of Object.entries(obj)) {
@@ -420,6 +432,10 @@ interface CrmContextValue {
       assignedToName?: string;
     }
   ) => Promise<void>;
+
+  // Accounts Module Actions
+  createAccount: (input: CreateAccountInput) => Promise<Account>;
+  updateAccountFields: (accountId: string, patch: Partial<Account>) => Promise<void>;
 }
 
 const CrmContext = createContext<CrmContextValue | null>(null);
@@ -3422,6 +3438,109 @@ export function CrmProvider({ children }: { children: React.ReactNode }) {
     [currentUser.fullName, data.deals, firebaseUser]
   );
 
+  // Accounts Module Actions
+  const createAccount = useCallback(
+    async (input: CreateAccountInput): Promise<Account> => {
+      const ownerId = firebaseUser?.uid ?? PREVIEW_OWNER_ID;
+      const newId = `acc_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+      const cleanName = input.name.trim().slice(0, 150) || 'منشأة أعمال جديدة';
+      const cleanIndustry = input.industry.trim().slice(0, 100) || 'تقنية المعلومات والبرمجيات';
+      const cleanManager = (input.accountManager || currentUser.fullName || 'طارق العتيبي')
+        .trim()
+        .slice(0, 120);
+
+      const newAcc: Account = {
+        id: newId,
+        ownerId,
+        org_id: currentOrgId,
+        name: cleanName,
+        industry: cleanIndustry,
+        city: input.city?.trim().slice(0, 80) || 'الرياض',
+        tier: input.tier,
+        annualRevenue: Math.max(0, Number(input.annualRevenue) || 0),
+        employeesCount:
+          input.employeesCount !== undefined
+            ? Math.max(0, Number(input.employeesCount) || 0)
+            : 120,
+        website: input.website?.trim().slice(0, 200) || undefined,
+        accountManager: cleanManager,
+        leadUniqueId: input.leadUniqueId?.trim().slice(0, 16) || undefined,
+      };
+
+      setData((prev) => ({
+        ...prev,
+        accounts: [newAcc, ...prev.accounts],
+      }));
+
+      setSignals((prev) => [
+        {
+          id: `sig_acc_${Date.now()}`,
+          title: `تم تسجيل منشأة جديدة: ${newAcc.name}`,
+          description: `التصنيف: ${newAcc.tier} · القطاع: ${newAcc.industry}`,
+          category: 'deal',
+          timeLabel: 'الآن',
+          unread: true,
+          route: `/accounts/${newAcc.id}`,
+        },
+        ...prev,
+      ]);
+
+      if (firebaseUser) {
+        try {
+          const { id: _id, ...rest } = newAcc;
+          await setDoc(doc(db, 'accounts', newId), {
+            ...stripUndefined(rest),
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        } catch (err) {
+          handleFirestoreError(err, OperationType.CREATE, `accounts/${newId}`);
+        }
+      }
+
+      return newAcc;
+    },
+    [currentOrgId, currentUser.fullName, firebaseUser]
+  );
+
+  const updateAccountFields = useCallback(
+    async (accountId: string, patch: Partial<Account>) => {
+      setData((prev) => ({
+        ...prev,
+        accounts: prev.accounts.map((a) =>
+          a.id === accountId ? { ...a, ...patch } : a
+        ),
+      }));
+
+      if (!firebaseUser) return;
+      const target = data.accounts.find((a) => a.id === accountId);
+      if (!target) return;
+
+      const allowedPatch: Record<string, unknown> = {};
+      if (patch.name !== undefined) allowedPatch.name = patch.name.trim().slice(0, 150);
+      if (patch.industry !== undefined) allowedPatch.industry = patch.industry.trim().slice(0, 100);
+      if (patch.city !== undefined) allowedPatch.city = patch.city.trim().slice(0, 80);
+      if (patch.tier !== undefined) allowedPatch.tier = patch.tier;
+      if (patch.annualRevenue !== undefined)
+        allowedPatch.annualRevenue = Math.max(0, Number(patch.annualRevenue) || 0);
+      if (patch.employeesCount !== undefined)
+        allowedPatch.employeesCount = Math.max(0, Number(patch.employeesCount) || 0);
+      if (patch.website !== undefined) allowedPatch.website = patch.website.trim().slice(0, 200);
+      if (patch.accountManager !== undefined)
+        allowedPatch.accountManager = patch.accountManager.trim().slice(0, 120);
+
+      try {
+        await updateDoc(doc(db, 'accounts', target.id), {
+          ...stripUndefined(allowedPatch),
+          updatedAt: serverTimestamp(),
+        });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.UPDATE, `accounts/${target.id}`);
+      }
+    },
+    [data.accounts, firebaseUser]
+  );
+
   // Scoped & Role-Visibility Filtered Collections
   const scopedLeads = useMemo(
     () =>
@@ -4342,6 +4461,8 @@ export function CrmProvider({ children }: { children: React.ReactNode }) {
     softDeleteDeals,
     addDealTouchpoint,
     addDealTask,
+    createAccount,
+    updateAccountFields,
   };
 
   return <CrmContext.Provider value={value}>{children}</CrmContext.Provider>;

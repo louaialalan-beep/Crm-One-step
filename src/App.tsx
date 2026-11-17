@@ -25,6 +25,10 @@ import { FinancialModulePage } from './pages/FinancialModulePage';
 import { CustomFunctionsPage } from './pages/CustomFunctionsPage';
 import { AssignmentRulesPage } from './pages/AssignmentRulesPage';
 import { CustomFieldsBuilderPage } from './pages/CustomFieldsBuilderPage';
+import { ApprovalsAndAuditPage } from './pages/ApprovalsAndAuditPage';
+import { ReportsPage } from './pages/ReportsPage';
+import { AccountsPage } from './pages/AccountsPage';
+import { AccountDetailPage } from './pages/AccountDetailPage';
 import {
   DataDeletionStatusPage,
   PrivacyPolicyPage,
@@ -42,7 +46,8 @@ export default function App() {
             <Route path="/leads/:id" element={<LeadDetailPage />} />
             <Route path="/contacts" element={<ContactsPage />} />
             <Route path="/contacts/:id" element={<ContactDetailPage />} />
-            <Route path="/accounts" element={<ModulePlaceholderPage />} />
+            <Route path="/accounts" element={<AccountsPage />} />
+            <Route path="/accounts/:id" element={<AccountDetailPage />} />
             <Route path="/deals" element={<DealsPage />} />
             <Route path="/deals/:id" element={<DealDetailPage />} />
             <Route path="/quotes" element={<FinancialModulePage />} />
@@ -52,7 +57,7 @@ export default function App() {
             <Route path="/activities" element={<ActivitiesPage />} />
             <Route path="/whatsapp-inbox" element={<WhatsappInboxPage />} />
             <Route path="/campaigns" element={<CampaignsPage />} />
-            <Route path="/reports" element={<AnalyticsPage />} />
+            <Route path="/reports" element={<ReportsPage />} />
             <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="/settings" element={<SetupHubPage />} />
             <Route path="/settings/users" element={<UsersManagementPage />} />
@@ -64,6 +69,8 @@ export default function App() {
             <Route path="/settings/blueprints" element={<BlueprintBuilderPage />} />
             <Route path="/settings/functions" element={<CustomFunctionsPage />} />
             <Route path="/settings/workflows" element={<WorkflowRulesPage />} />
+            <Route path="/settings/approvals" element={<ApprovalsAndAuditPage defaultTab="rules" />} />
+            <Route path="/settings/audit-log" element={<ApprovalsAndAuditPage defaultTab="audit" />} />
             <Route path="/settings/assignment-rules" element={<AssignmentRulesPage />} />
             <Route path="/settings/scoring-rules" element={<AssignmentRulesPage />} />
             <Route path="/settings/ai-scoring" element={<AssignmentRulesPage />} />
