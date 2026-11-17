@@ -51,6 +51,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const location = useLocation();
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     billing: true,
+    tasks: true,
     settings: location.pathname.startsWith('/settings'),
   });
 
@@ -59,6 +60,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       setExpandedGroups((prev) => ({ ...prev, settings: true }));
     } else if (['/quotes', '/sales-orders', '/invoices'].includes(location.pathname)) {
       setExpandedGroups((prev) => ({ ...prev, billing: true }));
+    } else if (['/tasks', '/activities', '/calendar'].includes(location.pathname)) {
+      setExpandedGroups((prev) => ({ ...prev, tasks: true }));
     }
   }, [location.pathname]);
 
@@ -69,7 +72,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const isModuleActive = (mod: NavModuleItem) => {
     if (mod.path === '/') return location.pathname === '/';
     if (mod.id === 'tasks') {
-      return location.pathname === '/tasks' || location.pathname === '/activities';
+      return (
+        location.pathname === '/tasks' ||
+        location.pathname === '/activities' ||
+        location.pathname === '/calendar'
+      );
     }
     if (mod.subItems) {
       return mod.subItems.some((sub) => location.pathname === sub.path);

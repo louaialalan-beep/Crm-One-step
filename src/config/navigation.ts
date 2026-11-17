@@ -83,6 +83,10 @@ export const SIDEBAR_MODULES: NavModuleItem[] = [
     label: 'المهام والأنشطة',
     path: '/activities',
     iconName: 'CheckSquare',
+    subItems: [
+      { id: 'activities_list', label: 'قائمة المهام والأنشطة', path: '/activities' },
+      { id: 'unified_calendar', label: 'التقويم الموحد (الشهر والأسبوع)', path: '/calendar' },
+    ],
   },
   {
     id: 'reports',
@@ -169,6 +173,11 @@ export const ROUTE_METADATA: Record<string, RouteMeta> = {
     title: 'المهام والأنشطة اليومية',
     section: 'التشغيل والمتابعة',
     description: 'إدارة الجداول الزمنية، مكالمات المتابعة، والاجتماعات البيعية.',
+  },
+  '/calendar': {
+    title: 'التقويم الموحد (المهام والاجتماعات والصفقات)',
+    section: 'التشغيل والمتابعة',
+    description: 'واجهة تقويم شهرية وأسبوعية تفاعلية تربط المهام والاجتماعات ومواعيد إغلاق الصفقات.',
   },
   '/reports': {
     title: 'التقارير',

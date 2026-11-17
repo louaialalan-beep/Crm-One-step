@@ -34,6 +34,7 @@ import { doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useCrm } from '../context/CrmContext';
 import type { CrmTask } from '../types/crm';
+import { UnifiedCalendarModule } from '../components/calendar/UnifiedCalendarModule';
 
 type ActivityKind = 'all' | 'task' | 'meeting' | 'call';
 type QuickScopeKey = 'all_sections' | 'today' | 'overdue' | 'upcoming' | 'completed';
@@ -926,7 +927,15 @@ export const ActivitiesPage: React.FC = () => {
         </div>
       )}
 
-      {/* 2. 2-COLUMN ACTIVITY WORKSPACE (`w-full px-6 py-5`, Right 68% | Left 32%) */}
+      {/* 2. WORKSPACE: LIST VIEW OR UNIFIED CALENDAR MODULE */}
+      {viewMode === 'calendar' ? (
+        <div className="w-full px-6 py-5">
+          <UnifiedCalendarModule
+            embedded
+            onSwitchToListView={() => setViewMode('list')}
+          />
+        </div>
+      ) : (
       <div className="w-full px-6 py-5 grid grid-cols-1 xl:grid-cols-[minmax(0,68fr)_minmax(0,32fr)] gap-5 items-start">
         {/* RIGHT COLUMN (68%) */}
         <div className="space-y-5 min-w-0">
@@ -1601,6 +1610,7 @@ export const ActivitiesPage: React.FC = () => {
           </section>
         </aside>
       </div>
+      )}
 
       {/* Create Activity Modal ("مهمة" | "اجتماع" | "تسجيل مكالمة") */}
       {createModalOpen && (

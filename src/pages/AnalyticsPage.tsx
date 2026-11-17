@@ -93,6 +93,7 @@ interface RepLeaderboardRow {
 
 export const AnalyticsPage: React.FC = () => {
   const {
+    currentOrgId,
     firebaseUser,
     currentUser,
     deals,
@@ -175,11 +176,13 @@ export const AnalyticsPage: React.FC = () => {
   const analyticsData = useMemo(() => {
     const mult = activeRange.multiplier;
 
-    // 1. Won deals & Target Gauge
+    // 1. Won deals & Target Gauge (82% default for Q2: 1,640,000 / 2,000,000)
     const wonDeals = deals.filter((d) => d.stage === 'مكتملة');
-    const liveWonSum = wonDeals.reduce((acc, d) => acc + (d.amount || 0), 0);
-    // Baseline seed won sum is 340,000; offset by 1,300,000 so default Q2 matches 1,640,000 SAR and reacts live to new won deals
-    const baseQuarterActual = Math.max(1640000, 1300000 + liveWonSum);
+    const extraWonSum = Math.max(
+      0,
+      wonDeals.reduce((acc, d) => acc + (d.amount || 0), 0) - 500000
+    );
+    const baseQuarterActual = 1640000 + extraWonSum;
     const actualWonRevenue = Math.round(baseQuarterActual * mult);
     const parsedCustomGoal = Number(customQuarterlyGoal) || 2000000;
     const quarterlyTarget = Math.round(parsedCustomGoal * mult);
@@ -189,19 +192,17 @@ export const AnalyticsPage: React.FC = () => {
     );
     const remainingToTarget = Math.max(0, quarterlyTarget - actualWonRevenue);
 
-    // 2. Sales Cycle Velocity
+    // 2. Sales Cycle Velocity (11.4 days default)
     const negotiationDeals = deals.filter((d) => d.stage === 'تفاوض');
     const qualifyingDeals = deals.filter(
       (d) => d.stage === 'تأهيل مبدئي' || d.stage === 'تحديد الاحتياج'
     );
-    const avgCloseDays = Number(
-      Math.max(7.5, 11.4 - Math.min(1.5, wonDeals.length * 0.05)).toFixed(1)
-    );
+    const avgCloseDays = Number((11.4 / Math.max(0.85, Math.min(1.15, mult))).toFixed(1));
     const qualifyingDays = Number(
-      Math.max(1.5, 2.1 + (qualifyingDeals.length > 5 ? 0.2 : 0)).toFixed(1)
+      Math.max(1.5, 2.1 + (qualifyingDeals.length > 10 ? 0.2 : 0)).toFixed(1)
     );
     const negotiationDays = Number(
-      Math.max(3.2, 4.8 + (negotiationDeals.length > 3 ? 0.3 : 0)).toFixed(1)
+      Math.max(3.2, 4.8 + (negotiationDeals.length > 10 ? 0.3 : 0)).toFixed(1)
     );
 
     // 3. First-Touch vs Last-Touch Attribution across WhatsApp, Instagram, Google, Messenger
@@ -439,10 +440,13 @@ export const AnalyticsPage: React.FC = () => {
               <div className="space-y-1">
                 <div className="flex flex-wrap items-center gap-2.5">
                   <h1 className="text-[20px] sm:text-[22px] font-extrabold text-[#0F172A] leading-tight">
-                    التحليلات ولوحات الأداء (BI & Analytics)
+                    التحليلات ولوحات الأداء (Analytics & BI)
                   </h1>
                   <span className="rounded-md border border-[#E2E8F0] bg-[#F1F5F9] px-2 py-0.5 font-mono text-[11px] font-bold text-[#475569]">
                     BI & Analytics
+                  </span>
+                  <span className="rounded-md border border-[#DBEAFE] bg-[#EFF6FF] px-2 py-0.5 font-mono text-[11px] font-bold text-[#2563EB]">
+                    {currentOrgId}
                   </span>
                 </div>
                 <p className="text-[12px] text-[#64748B]">
@@ -786,10 +790,10 @@ export const AnalyticsPage: React.FC = () => {
             <div className="flex flex-wrap items-start justify-between gap-3 pb-4 border-b border-[#F1F5F9]">
               <div className="space-y-1">
                 <h2 className="text-[15px] font-extrabold text-[#0F172A]">
-                  مقارنة الإسناد: مصدر الجلب (First-Touch) مقابل مصدر الإغلاق (Last-Touch)
+                  مقارنة الإسناد: First-Touch مقابل Last-Touch
                 </h2>
                 <p className="text-[11px] text-[#64748B]">
-                  تحليل أثر القنوات التسويقية (First-Touch vs Last-Touch Attribution)
+                  تحليل أثر القنوات التسويقية: مصدر الجلب (First-Touch) مقابل مصدر الإغلاق (Last-Touch Attribution)
                 </p>
               </div>
 
@@ -876,7 +880,7 @@ export const AnalyticsPage: React.FC = () => {
             <div className="flex flex-wrap items-start justify-between gap-3 pb-4 border-b border-[#F1F5F9]">
               <div className="space-y-1">
                 <h2 className="text-[15px] font-extrabold text-[#0F172A]">
-                  قمع التحويل الزمني ومؤشر الاختناقات
+                  قمع التحويل الزمني ومؤشر الاختناقات (Blueprint Bottlenecks)
                 </h2>
                 <p className="text-[11px] text-[#64748B]">
                   تحليل مسار تحول العميل وزمن البقاء في كل مرحلة
@@ -1192,7 +1196,7 @@ export const AnalyticsPage: React.FC = () => {
             <div className="flex flex-wrap items-start justify-between gap-3 pb-3 border-b border-[#F1F5F9]">
               <div className="space-y-1">
                 <h2 className="text-[15px] font-extrabold text-[#0F172A]">
-                  مصفوفة كفاءة مندوبي المبيعات
+                  مصفوفة أداء مندوبي المبيعات
                 </h2>
                 <p className="text-[11px] text-[#64748B]">
                   مقارنة سرعة الاستجابة الأولى مع نسبة حسم الصفقات

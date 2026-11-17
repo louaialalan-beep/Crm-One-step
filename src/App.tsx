@@ -29,6 +29,7 @@ import { ApprovalsAndAuditPage } from './pages/ApprovalsAndAuditPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { AccountsPage } from './pages/AccountsPage';
 import { AccountDetailPage } from './pages/AccountDetailPage';
+import { CalendarPage } from './pages/CalendarPage';
 import {
   DataDeletionStatusPage,
   PrivacyPolicyPage,
@@ -55,6 +56,7 @@ export default function App() {
             <Route path="/invoices" element={<FinancialModulePage />} />
             <Route path="/tasks" element={<ActivitiesPage />} />
             <Route path="/activities" element={<ActivitiesPage />} />
+            <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/whatsapp-inbox" element={<WhatsappInboxPage />} />
             <Route path="/campaigns" element={<CampaignsPage />} />
             <Route path="/reports" element={<ReportsPage />} />
