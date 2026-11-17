@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import { buildSeedDataset } from '../data/seedData.ts';
 import {
   aggregateLeadsForChart,
@@ -58,7 +58,7 @@ describe('leadsLogic domain utilities', () => {
       dockedFilter: DEFAULT_DOCKED_FILTER,
     });
     assert.ok(myLeads.length >= 4);
-    assert.ok(myLeads.every((l) => l.assignedToName === 'سلمان القحطاني'));
+    assert.ok(myLeads.every((l) => isMyLead(l.assignedToName, 'سلمان عبد العزيز القحطاني')));
 
     const slaWhatsapp = filterLeads(seed.leads, {
       quickFilter: 'all',

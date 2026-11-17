@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import { buildSeedDataset } from '../data/seedData';
 import {
@@ -40,8 +40,8 @@ describe('dealsLogic domain utilities', () => {
     assert.equal(toWon.requireContractPdf, true);
     assert.ok(toWon.checklistItems.length >= 2);
 
-    const toProposal = getBlueprintTransitionRequirements(seed.blueprints, 'عرض سعر');
-    assert.equal(toProposal.requiresModal, false);
+    const toQualifying = getBlueprintTransitionRequirements(seed.blueprints, 'تأهيل مبدئي');
+    assert.equal(toQualifying.requiresModal, false);
   });
 
   it('computes pipeline totals, weighted revenue, and Last-Touch attribution', () => {

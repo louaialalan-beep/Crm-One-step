@@ -10,48 +10,117 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 const META_GRAPH_VERSION = 'v21.0';
-const META_VERIFY_TOKEN = process.env.META_VERIFY_TOKEN || 'riwaq_meta_verify_token_2026';
-const META_APP_SECRET = process.env.META_APP_SECRET || 'riwaq_meta_app_secret_2026';
-const META_APP_ID = process.env.META_APP_ID || '108492049182301';
 
-// Derive a deterministic 32-byte key for AES-256-CBC encryption
-function getEncryptionKeyBuffer(): Buffer {
-  const rawKey =
-    process.env.META_ENCRYPTION_KEY ||
-    '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+// Environment variable configuration without insecure hardcoded fallbacks
+const META_VERIFY_TOKEN = process.env.META_VERIFY_TOKEN || '';
+const META_APP_SECRET = process.env.META_APP_SECRET || '';
+const META_APP_ID = process.env.META_APP_ID || '';
+
+// Ephemeral key generated once per process ONLY for non-production local development
+let ephemeralDevKey: Buffer | null = null;
+
+function resolveEncryptionKeyBuffer(): Buffer {
+  const rawKey = process.env.META_ENCRYPTION_KEY?.trim();
+
+  if (!rawKey) {
+    if (IS_PRODUCTION) {
+      throw new Error(
+        '[FATAL SECURITY ERROR] META_ENCRYPTION_KEY is missing in production. Refusing to start without a valid 32-byte key.'
+      );
+    }
+    if (!ephemeralDevKey) {
+      ephemeralDevKey = crypto.randomBytes(32);
+      console.warn(
+        '[SECURITY WARNING] META_ENCRYPTION_KEY is not set. Using an ephemeral random 32-byte key for local development only.'
+      );
+    }
+    return ephemeralDevKey;
+  }
+
+  // 64 hex characters = 32 bytes
   if (/^[0-9a-fA-F]{64}$/.test(rawKey)) {
     return Buffer.from(rawKey, 'hex');
   }
+
+  // Exact 32-byte UTF-8 string
+  const utf8Buf = Buffer.from(rawKey, 'utf8');
+  if (utf8Buf.length === 32) {
+    return utf8Buf;
+  }
+
+  if (IS_PRODUCTION) {
+    throw new Error(
+      '[FATAL SECURITY ERROR] META_ENCRYPTION_KEY must be a 64-character hex string or a 32-byte UTF-8 key in production.'
+    );
+  }
+
   return crypto.createHash('sha256').update(rawKey).digest();
 }
 
-export function encryptTokenAes256(plainToken: string): string {
-  const iv = crypto.randomBytes(16);
-  const key = getEncryptionKeyBuffer();
-  const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
-  let encrypted = cipher.update(plainToken, 'utf8', 'hex');
-  encrypted += cipher.final('hex');
-  return `aes256:${iv.toString('hex')}:${encrypted}`;
+function validateStartupEnvironment(): void {
+  // Validate encryption key immediately on startup
+  resolveEncryptionKeyBuffer();
+
+  if (IS_PRODUCTION) {
+    const missingVars: string[] = [];
+    if (!META_VERIFY_TOKEN) missingVars.push('META_VERIFY_TOKEN');
+    if (!META_APP_SECRET) missingVars.push('META_APP_SECRET');
+    if (!META_APP_ID) missingVars.push('META_APP_ID');
+
+    if (missingVars.length > 0) {
+      console.error(
+        `[SECURITY WARNING] Missing Meta production environment variables: ${missingVars.join(', ')}`
+      );
+    }
+  }
 }
 
+/**
+ * Authenticated Encryption using AES-256-GCM with a 12-byte random IV.
+ * Stored format: `iv:authTag:ciphertext` (all hex-encoded).
+ */
+export function encryptTokenAes256(plainToken: string): string {
+  const iv = crypto.randomBytes(12);
+  const key = resolveEncryptionKeyBuffer();
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  let ciphertext = cipher.update(plainToken, 'utf8', 'hex');
+  ciphertext += cipher.final('hex');
+  const authTag = cipher.getAuthTag();
+  return `${iv.toString('hex')}:${authTag.toString('hex')}:${ciphertext}`;
+}
+
+/**
+ * Authenticated Decryption using AES-256-GCM.
+ * Verifies the 16-byte authentication tag and throws/rejects tampered ciphertexts.
+ */
 export function decryptTokenAes256(encryptedPayload: string): string {
-  try {
-    const parts = encryptedPayload.split(':');
-    if (parts.length !== 3 || parts[0] !== 'aes256') {
-      return encryptedPayload;
-    }
-    const iv = Buffer.from(parts[1], 'hex');
-    const encryptedText = parts[2];
-    const key = getEncryptionKeyBuffer();
-    const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
-    let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-    return decrypted;
-  } catch {
-    return '';
+  if (!encryptedPayload) return '';
+  const parts = encryptedPayload.split(':');
+  if (parts.length !== 3) {
+    throw new Error('Invalid AES-256-GCM payload format: expected iv:authTag:ciphertext');
   }
+
+  const [ivHex, authTagHex, ciphertextHex] = parts;
+  const iv = Buffer.from(ivHex, 'hex');
+  const authTag = Buffer.from(authTagHex, 'hex');
+
+  if (iv.length !== 12) {
+    throw new Error('Invalid AES-256-GCM IV length: expected 12 bytes');
+  }
+  if (authTag.length !== 16) {
+    throw new Error('Invalid AES-256-GCM AuthTag length: expected 16 bytes');
+  }
+
+  const key = resolveEncryptionKeyBuffer();
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+  decipher.setAuthTag(authTag);
+
+  let decrypted = decipher.update(ciphertextHex, 'hex', 'utf8');
+  decrypted += decipher.final('utf8');
+  return decrypted;
 }
 
 export function sha256HashNormalized(value: string): string {
@@ -61,65 +130,107 @@ export function sha256HashNormalized(value: string): string {
     .digest('hex');
 }
 
-// Verify Meta X-Hub-Signature-256 HMAC SHA-256
-function verifyMetaWebhookSignature(rawBody: Buffer, signatureHeader?: string): boolean {
-  if (!signatureHeader || !signatureHeader.startsWith('sha256=')) {
+/**
+ * Verify Meta X-Hub-Signature-256 HMAC SHA-256
+ */
+export function verifyMetaWebhookSignature(
+  rawBody: Buffer,
+  signatureHeader?: string,
+  appSecret: string = META_APP_SECRET
+): boolean {
+  if (!appSecret || !signatureHeader || !signatureHeader.startsWith('sha256=')) {
     return false;
   }
   const expectedSig =
     'sha256=' +
-    crypto.createHmac('sha256', META_APP_SECRET).update(rawBody).digest('hex');
+    crypto.createHmac('sha256', appSecret).update(rawBody).digest('hex');
   try {
     const sigBuf = Buffer.from(signatureHeader, 'utf8');
     const expBuf = Buffer.from(expectedSig, 'utf8');
-    if (sigBuf.length !== expBuf.length) return false;
+    if (sigBuf.length !== expBuf.length) {
+      return false;
+    }
     return crypto.timingSafeEqual(sigBuf, expBuf);
   } catch {
     return false;
   }
 }
 
-// Parse Meta signed_request for Data Deletion Callback
-function parseMetaSignedRequest(
+/**
+ * Parse and strictly verify Meta signed_request for Data Deletion Callback.
+ * Rejects immediately if algorithm !== 'HMAC-SHA256', if buffer lengths mismatch,
+ * or if timingSafeEqual returns false. NEVER returns unverified data.
+ */
+export function parseMetaSignedRequest(
   signedRequest: string,
   appSecret: string
-): { user_id?: string; algorithm?: string; issued_at?: number } | null {
-  try {
-    const [encodedSig, payload] = signedRequest.split('.');
-    if (!encodedSig || !payload) return null;
-
-    const base64UrlToBuffer = (str: string) => {
-      const base64 = str.replace(/-/g, '+').replace(/_/g, '/');
-      return Buffer.from(base64, 'base64');
-    };
-
-    const sig = base64UrlToBuffer(encodedSig);
-    const dataStr = base64UrlToBuffer(payload).toString('utf8');
-    const data = JSON.parse(dataStr) as {
-      user_id?: string;
-      algorithm?: string;
-      issued_at?: number;
-    };
-
-    if ((data.algorithm || '').toUpperCase() !== 'HMAC-SHA256') {
-      return data;
-    }
-
-    const expectedSig = crypto
-      .createHmac('sha256', appSecret)
-      .update(payload)
-      .digest();
-
-    if (sig.length === expectedSig.length && crypto.timingSafeEqual(sig, expectedSig)) {
-      return data;
-    }
-    return data;
-  } catch {
-    return null;
+): { user_id?: string; algorithm?: string; issued_at?: number } {
+  if (!signedRequest || !appSecret) {
+    throw new Error('Missing signed_request or Meta appSecret');
   }
+
+  const parts = signedRequest.split('.');
+  if (parts.length !== 2) {
+    throw new Error('Malformed signed_request: expected encodedSig.payload');
+  }
+
+  const [encodedSig, payload] = parts;
+  if (!encodedSig || !payload) {
+    throw new Error('Empty signature or payload in signed_request');
+  }
+
+  const base64UrlToBuffer = (str: string): Buffer => {
+    const base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+    const padLength = (4 - (base64.length % 4)) % 4;
+    return Buffer.from(base64 + '='.repeat(padLength), 'base64');
+  };
+
+  const sig = base64UrlToBuffer(encodedSig);
+  const dataStr = base64UrlToBuffer(payload).toString('utf8');
+  const data = JSON.parse(dataStr) as {
+    user_id?: string;
+    algorithm?: string;
+    issued_at?: number;
+  };
+
+  if (data.algorithm?.toUpperCase() !== 'HMAC-SHA256') {
+    throw new Error(
+      `Unsupported or missing signed_request algorithm: ${String(data.algorithm)}`
+    );
+  }
+
+  const expectedSig = crypto
+    .createHmac('sha256', appSecret)
+    .update(payload)
+    .digest();
+
+  if (sig.length !== expectedSig.length) {
+    throw new Error('Signature buffer length mismatch');
+  }
+
+  if (!crypto.timingSafeEqual(sig, expectedSig)) {
+    throw new Error('Invalid HMAC-SHA256 signature on signed_request');
+  }
+
+  return data;
 }
 
-// Exponential backoff retry wrapper with Graph API Error 190 detection
+interface StructuredGraphApiError {
+  code?: number;
+  message?: string;
+  response?: {
+    data?: {
+      error?: {
+        code?: number;
+        message?: string;
+      };
+    };
+  };
+}
+
+/**
+ * Exponential backoff retry wrapper with structured Graph API Error 190 detection
+ */
 async function fetchGraphWithExponentialBackoff<T>(
   fn: () => Promise<T>,
   maxRetries = 3
@@ -136,11 +247,16 @@ async function fetchGraphWithExponentialBackoff<T>(
       const data = await fn();
       return { success: true, data, retryCount: attempt };
     } catch (err: unknown) {
-      const errObj = err as { code?: number; message?: string };
-      const code = errObj?.code;
-      const message = errObj?.message || 'Graph API fetch failed';
+      const structuredErr = err as StructuredGraphApiError;
+      const graphErrorCode =
+        structuredErr?.code ?? structuredErr?.response?.data?.error?.code;
+      const message =
+        structuredErr?.response?.data?.error?.message ||
+        structuredErr?.message ||
+        'Graph API fetch failed';
+
       // Error 190 = OAuthException (Access token expired / revoked) -> Do not retry, alert Admin immediately
-      if (code === 190 || message.includes('190')) {
+      if (graphErrorCode === 190) {
         return {
           success: false,
           retryCount: attempt,
@@ -149,11 +265,12 @@ async function fetchGraphWithExponentialBackoff<T>(
             'Graph API Error 190: OAuth Access Token has expired or been invalidated (reconnect_required)',
         };
       }
+
       if (attempt === maxRetries) {
         return {
           success: false,
           retryCount: attempt,
-          errorCode: code || 500,
+          errorCode: graphErrorCode || 500,
           errorMessage: message,
         };
       }
@@ -207,6 +324,8 @@ function getNextRoundRobinRep(orgId: string): string {
 }
 
 async function startServer() {
+  validateStartupEnvironment();
+
   const app = express();
 
   // Capture rawBody on /api/webhooks/meta for HMAC SHA-256 verification
@@ -251,9 +370,7 @@ async function startServer() {
       url: authUrl,
       redirectUri,
       scopes: scopes.split(','),
-      appIdConfigured: Boolean(
-        process.env.META_APP_ID && process.env.META_APP_ID !== 'YOUR_META_APP_ID'
-      ),
+      appIdConfigured: Boolean(META_APP_ID && META_APP_ID !== 'YOUR_META_APP_ID'),
     });
   });
 
@@ -266,7 +383,7 @@ async function startServer() {
       const parsed = JSON.parse(stateRaw) as { org_id?: string };
       if (parsed.org_id) orgId = parsed.org_id;
     } catch {
-      // ignore
+      // ignore invalid JSON state
     }
 
     const rawToken = code
@@ -305,7 +422,7 @@ async function startServer() {
     void metaOAuthCallbackHandler(req, res);
   });
 
-  // 3. Exchange Short-Lived Token for AES-256 Encrypted Long-Lived Token & Page Tokens
+  // 3. Exchange Short-Lived Token for AES-256-GCM Encrypted Long-Lived Token & Page Tokens
   app.post('/api/meta/exchange-token', async (req: Request, res: Response) => {
     const {
       org_id = 'org_riwaq_main',
@@ -322,19 +439,18 @@ async function startServer() {
     let longLivedRaw =
       short_lived_token || `EAA_RIWAQ_LONG_LIVED_${org_id}_${Date.now()}`;
 
-    // If real META_APP_ID & META_APP_SECRET are set and token looks like a real Graph token, attempt Graph exchange
     if (
-      process.env.META_APP_ID &&
-      process.env.META_APP_ID !== 'YOUR_META_APP_ID' &&
-      process.env.META_APP_SECRET &&
-      process.env.META_APP_SECRET !== 'YOUR_META_APP_SECRET' &&
+      META_APP_ID &&
+      META_APP_ID !== 'YOUR_META_APP_ID' &&
+      META_APP_SECRET &&
+      META_APP_SECRET !== 'YOUR_META_APP_SECRET' &&
       short_lived_token.startsWith('EAA')
     ) {
       try {
         const params = new URLSearchParams({
           grant_type: 'fb_exchange_token',
-          client_id: process.env.META_APP_ID,
-          client_secret: process.env.META_APP_SECRET,
+          client_id: META_APP_ID,
+          client_secret: META_APP_SECRET,
           fb_exchange_token: short_lived_token,
         });
         const response = await fetch(
@@ -413,14 +529,21 @@ async function startServer() {
       subscribed_fields?: string[];
     };
 
-    const decryptedPageToken = decryptTokenAes256(page_token_enc);
+    let decryptedPageToken = '';
+    if (page_token_enc) {
+      try {
+        decryptedPageToken = decryptTokenAes256(page_token_enc);
+      } catch {
+        decryptedPageToken = '';
+      }
+    }
 
-    // Attempt live Graph API subscription if real token is present
     let graphSubscribed = true;
     if (
       decryptedPageToken &&
       !decryptedPageToken.startsWith('EAA_PAGE_TOKEN_') &&
-      process.env.META_APP_ID !== 'YOUR_META_APP_ID'
+      META_APP_ID &&
+      META_APP_ID !== 'YOUR_META_APP_ID'
     ) {
       try {
         const resp = await fetch(
@@ -455,10 +578,23 @@ async function startServer() {
   // 5. GET /api/webhooks/meta — Verify hub.verify_token and return hub.challenge (200 OK)
   app.get('/api/webhooks/meta', (req: Request, res: Response) => {
     const mode = req.query['hub.mode'];
-    const token = req.query['hub.verify_token'];
+    const token = String(req.query['hub.verify_token'] || '');
     const challenge = req.query['hub.challenge'];
 
-    if (mode === 'subscribe' && token === META_VERIFY_TOKEN) {
+    if (!META_VERIFY_TOKEN) {
+      res.status(503).json({
+        error: 'META_VERIFY_TOKEN is not configured on the server',
+      });
+      return;
+    }
+
+    const tokenBuf = Buffer.from(token, 'utf8');
+    const expectedBuf = Buffer.from(META_VERIFY_TOKEN, 'utf8');
+    const tokenMatches =
+      tokenBuf.length === expectedBuf.length &&
+      crypto.timingSafeEqual(tokenBuf, expectedBuf);
+
+    if (mode === 'subscribe' && tokenMatches) {
       res.status(200).send(String(challenge ?? ''));
       return;
     }
@@ -545,9 +681,17 @@ async function startServer() {
         const fetchOutcome = await fetchGraphWithExponentialBackoff(async () => {
           if (body.simulate_error_190) {
             const err = new Error(
-              'Error validating access token: Session has expired (Code 190)'
-            ) as Error & { code?: number };
+              'Error validating access token: Session has expired'
+            ) as Error & StructuredGraphApiError;
             err.code = 190;
+            err.response = {
+              data: {
+                error: {
+                  code: 190,
+                  message: 'Error validating access token: Session has expired',
+                },
+              },
+            };
             throw err;
           }
           return valueObj;
@@ -679,11 +823,21 @@ async function startServer() {
     };
 
     const rawBodyBuffer = Buffer.from(JSON.stringify(rawPayloadObj), 'utf8');
+    // For UI simulation only: if META_APP_SECRET is not set in local dev, derive from ephemeral key
+    const simulationSigningSecret =
+      META_APP_SECRET || resolveEncryptionKeyBuffer().toString('hex');
     const validSignature =
       'sha256=' +
-      crypto.createHmac('sha256', META_APP_SECRET).update(rawBodyBuffer).digest('hex');
+      crypto
+        .createHmac('sha256', simulationSigningSecret)
+        .update(rawBodyBuffer)
+        .digest('hex');
 
-    const signatureVerified = verifyMetaWebhookSignature(rawBodyBuffer, validSignature);
+    const signatureVerified = verifyMetaWebhookSignature(
+      rawBodyBuffer,
+      validSignature,
+      simulationSigningSecret
+    );
 
     if (scenario === 'error_190') {
       res.status(200).json({
@@ -703,7 +857,6 @@ async function startServer() {
     const assignedRep = getNextRoundRobinRep(org_id);
     const leadUniqueId = `RWQ-${Math.floor(10000 + Math.random() * 90000)}`;
 
-    // Apply dynamic field mappings for leadgen
     const rawAnswers: Record<string, string> = {
       full_name: 'سلطان بن فهد السديري',
       phone_number: '+966 50 882 4419',
@@ -754,7 +907,7 @@ async function startServer() {
       phone = '+966501234567',
       amount = 350000,
       currency = 'SAR',
-      pixel_id = process.env.META_PIXEL_ID || '119283746501928',
+      pixel_id = process.env.META_PIXEL_ID || '',
     } = req.body as {
       org_id?: string;
       event_name?: 'LeadQualified' | 'Purchase';
@@ -809,9 +962,19 @@ async function startServer() {
 
     let fbUserId = explicitUserId || 'fb_user_unknown';
     if (signedRequest) {
-      const parsed = parseMetaSignedRequest(signedRequest, META_APP_SECRET);
-      if (parsed?.user_id) {
-        fbUserId = parsed.user_id;
+      try {
+        const parsed = parseMetaSignedRequest(signedRequest, META_APP_SECRET);
+        if (parsed.user_id) {
+          fbUserId = parsed.user_id;
+        }
+      } catch (err) {
+        res.status(401).json({
+          error:
+            err instanceof Error
+              ? err.message
+              : 'Invalid signed_request signature',
+        });
+        return;
       }
     }
 
@@ -849,7 +1012,12 @@ async function startServer() {
 
   // 10. WhatsApp Cloud API & Campaigns Backend Endpoints
   app.post('/api/whatsapp/send', (req: Request, res: Response) => {
-    const { org_id = 'org_riwaq_main', recipient_phone, message_body, template_id } = req.body || {};
+    const {
+      org_id = 'org_riwaq_main',
+      recipient_phone,
+      message_body,
+      template_id,
+    } = req.body || {};
     res.status(200).json({
       success: true,
       org_id,
@@ -893,17 +1061,16 @@ async function startServer() {
   // 11. Custom Functions Sandboxed Execution Engine
   app.post('/api/functions/:id/execute', (req: Request, res: Response) => {
     const { id } = req.params;
-    const { org_id = 'org_riwaq_main', input_payload = {}, code, language = 'javascript' } = req.body || {};
-    
-    const startTime = Date.now();
-    const durationMs = Math.floor(120 + Math.random() * 50); // e.g. 142ms
-    const memoryMb = Number((15 + Math.random() * 5).toFixed(1)); // e.g. 18.4MB
-    
+    const { org_id = 'org_riwaq_main', input_payload = {} } = req.body || {};
+
+    const durationMs = Math.floor(120 + Math.random() * 50);
+    const memoryMb = Number((15 + Math.random() * 5).toFixed(1));
+
     const consoleLogs = [
       `[INFO] ${new Date().toLocaleTimeString()} Initializing 128MB isolated VM sandbox for function ID: ${id}`,
       `[INFO] ${new Date().toLocaleTimeString()} Executing whitelisted crm SDK: getRecord('deals', '${input_payload.record_id || 'DEAL-84920'}')`,
       `[INFO] ${new Date().toLocaleTimeString()} Dispatching WhatsApp Cloud API notification via template quote_proposal_v2`,
-      `[SUCCESS] ${new Date().toLocaleTimeString()} Function completed successfully with 200 OK status.`
+      `[SUCCESS] ${new Date().toLocaleTimeString()} Function completed successfully with 200 OK status.`,
     ];
 
     const outputResult = {
@@ -912,7 +1079,7 @@ async function startServer() {
       message_id: `wamid_riwaq_${Date.now()}`,
       recipient: '+966501234567',
       timestamp: new Date().toISOString(),
-      updated_deal_stage: 'Closed Won'
+      updated_deal_stage: 'Closed Won',
     };
 
     res.status(200).json({
@@ -942,9 +1109,8 @@ async function startServer() {
     });
   });
 
-
   // Mount Vite middleware in development or serve static build in production
-  if (process.env.NODE_ENV !== 'production') {
+  if (!IS_PRODUCTION) {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
