@@ -20,7 +20,9 @@ import {
 import { useCrm } from '../context/CrmContext';
 import { CrmAddonFlags, OrganizationPlan } from '../types/crm';
 
-export const SubscriptionPage: React.FC = () => {
+export const SubscriptionPage: React.FC<{ defaultTab?: 'subscription' | 'company' }> = ({
+  defaultTab = 'subscription',
+}) => {
   const navigate = useNavigate();
   const {
     organizations,
@@ -31,10 +33,15 @@ export const SubscriptionPage: React.FC = () => {
     updateOrganizationSubscription,
   } = useCrm();
 
+  const [activeSubTab, setActiveSubTab] = useState<'subscription' | 'company'>(defaultTab);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [newOrgName, setNewOrgName] = useState('');
   const [newOrgPlan, setNewOrgPlan] = useState<OrganizationPlan>('Enterprise');
   const [showCreateModal, setShowCreateModal] = useState(false);
+
+  React.useEffect(() => {
+    setActiveSubTab(defaultTab);
+  }, [defaultTab]);
 
   const triggerToast = (msg: string) => {
     setToastMessage(msg);

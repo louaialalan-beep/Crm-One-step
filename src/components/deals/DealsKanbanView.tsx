@@ -26,6 +26,7 @@ interface DealsKanbanViewProps {
   selectedIds: string[];
   onToggleSelect: (dealId: string) => void;
   onRequestStageChange: (deal: Deal, targetStage: DealStage) => void;
+  onDropDealToStage?: (deal: Deal, targetStage: DealStage) => void;
   onQuickAddInStage: (stage: DealStage) => void;
   canUpdateDeal: boolean;
   canCreateDeal: boolean;
@@ -52,6 +53,7 @@ export const DealsKanbanView: React.FC<DealsKanbanViewProps> = ({
   selectedIds,
   onToggleSelect,
   onRequestStageChange,
+  onDropDealToStage,
   onQuickAddInStage,
   canUpdateDeal,
   canCreateDeal,
@@ -81,6 +83,7 @@ export const DealsKanbanView: React.FC<DealsKanbanViewProps> = ({
             onDragOver={(e) => {
               if (!canUpdateDeal) return;
               e.preventDefault();
+              e.dataTransfer.dropEffect = 'move';
               setDragOverColId(col.id);
             }}
             onDragLeave={() => {
@@ -97,7 +100,11 @@ export const DealsKanbanView: React.FC<DealsKanbanViewProps> = ({
               const draggedDeal = deals.find((d) => d.id === droppedId);
               if (!draggedDeal) return;
               if (col.matchStages.includes(draggedDeal.stage)) return;
-              onRequestStageChange(draggedDeal, col.targetStage);
+              if (onDropDealToStage) {
+                onDropDealToStage(draggedDeal, col.targetStage);
+              } else {
+                onRequestStageChange(draggedDeal, col.targetStage);
+              }
             }}
             className={`w-[248px] shrink-0 xl:w-auto xl:flex-1 xl:min-w-[208px] rounded-2xl border p-2 transition-colors ${
               isDropTarget

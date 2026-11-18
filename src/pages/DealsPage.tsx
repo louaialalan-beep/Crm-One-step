@@ -32,6 +32,7 @@ export const DealsPage: React.FC = () => {
     contacts,
     touchpoints,
     blueprints,
+    users,
     currentUser,
     activeProfile,
     canViewField,
@@ -68,12 +69,17 @@ export const DealsPage: React.FC = () => {
   const canEditAmount = canEditField('deals', 'amount');
 
   const availableOwners = useMemo(() => {
-    const set = new Set<string>(DEAL_OWNERS);
+    const activeOrgUserNames = users
+      .filter((u) => u.status === 'active')
+      .map((u) => u.fullName);
+    const set = new Set<string>(
+      activeOrgUserNames.length > 0 ? activeOrgUserNames : DEAL_OWNERS
+    );
     for (const d of deals) {
       if (d.ownerName) set.add(d.ownerName);
     }
     return Array.from(set);
-  }, [deals]);
+  }, [deals, users]);
 
   const availableAttributions = useMemo(() => {
     const set = new Set<string>();
@@ -184,6 +190,21 @@ export const DealsPage: React.FC = () => {
       probability: col.defaultProbability,
     });
     setToastMsg(`تم نقل الصفقة "${deal.title}" إلى مرحلة ${col.title}`);
+  };
+
+  const handleDropDealToStage = async (deal: Deal, targetStage: DealStage) => {
+    if (!canUpdateDeal || deal.stage === targetStage) return;
+    const req = getBlueprintTransitionRequirements(blueprints, targetStage);
+    if (req.requiresModal) {
+      setPendingBlueprint({ deal, requirement: req });
+      return;
+    }
+    const col = getDealColumnForStage(targetStage);
+    await updateDealFields(deal.id, {
+      stage: targetStage,
+      probability: col.defaultProbability,
+    });
+    setToastMsg(`تم نقل الصفقة "${deal.title}" إلى مرحلة ${col.title} (${col.defaultProbability}%)`);
   };
 
   const handleConfirmBlueprintTransition = async (payload: {
@@ -303,6 +324,7 @@ export const DealsPage: React.FC = () => {
           selectedIds={selectedIds}
           onToggleSelect={handleToggleSelect}
           onRequestStageChange={handleRequestStageChange}
+          onDropDealToStage={handleDropDealToStage}
           onQuickAddInStage={(stage) => {
             setCreateInitialStage(stage);
             setCreateModalOpen(true);

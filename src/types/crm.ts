@@ -198,6 +198,24 @@ export type DealStage =
   | 'مكتملة'
   | 'خسارة';
 
+export type CurrencyRateMode = 'fixed' | 'live';
+
+export interface OrganizationCurrency {
+  code: string;
+  name: string;
+  englishName?: string;
+  symbol: string;
+  symbolPosition?: 'prefix' | 'suffix';
+  decimals?: number;
+  rateMode: CurrencyRateMode;
+  rateToBase: number;
+  liveSpreadPercent?: number;
+  isPrimary: boolean;
+  isActive: boolean;
+  isCustom?: boolean;
+  updatedAt: string;
+}
+
 export interface Deal {
   id: string;
   ownerId: string;
@@ -206,7 +224,8 @@ export interface Deal {
   accountId: string;
   accountName: string;
   amount: number;
-  currency: 'SAR' | 'USD' | 'AED';
+  currency: string;
+  exchangeRate?: number;
   stage: DealStage;
   probability: number;
   closeDate: string;
@@ -216,6 +235,36 @@ export interface Deal {
   contactId?: string;
 }
 
+export type TaxMode = 'exclusive' | 'inclusive';
+
+export type LineItemUnit = 'حبة' | 'ساعة' | 'اشتراك' | 'مشروع';
+
+export type DiscountType = 'percentage' | 'fixed';
+
+export interface FinancialLineItem {
+  id: string;
+  productName: string;
+  description?: string;
+  unit: LineItemUnit;
+  quantity: number;
+  unitPrice: number;
+  discountType: DiscountType;
+  discountValue: number;
+  taxRate: 15 | 0;
+  // Quantity tracking for Sales Orders
+  deliveredQuantity?: number;
+  invoicedQuantity?: number;
+}
+
+export interface InvoicePaymentRecord {
+  id: string;
+  date: string;
+  amount: number;
+  method: 'تحويل بنكي' | 'مدى' | 'بطاقة ائتمانية' | 'نقدي';
+  referenceNumber: string;
+  notes?: string;
+}
+
 export interface Quote {
   id: string;
   ownerId: string;
@@ -223,10 +272,27 @@ export interface Quote {
   quoteNumber: string;
   subject: string;
   dealId: string;
+  dealTitle?: string;
   accountName: string;
-  totalAmount: number;
-  status: 'مسودة' | 'مرسل' | 'مؤهل' | 'مكتملة' | 'خسارة';
+  contactName?: string;
+  leadUniqueId?: string;
+  ownerName?: string;
+  issueDate?: string;
   validUntil: string;
+  currency?: string;
+  exchangeRate?: number;
+  paymentTerms?: string;
+  deliveryDuration?: string;
+  termsAndConditions?: string;
+  customerNotes?: string;
+  taxMode?: TaxMode;
+  lineItems?: FinancialLineItem[];
+  subtotalAmount?: number;
+  discountTotal?: number;
+  taxableAmount?: number;
+  vatAmount?: number;
+  totalAmount: number;
+  status: 'مسودة' | 'مرسل' | 'مؤهل' | 'مقبول' | 'مكتملة' | 'مرفوض' | 'منتهي' | 'خسارة';
 }
 
 export interface SalesOrder {
@@ -235,10 +301,30 @@ export interface SalesOrder {
   org_id?: string;
   orderNumber: string;
   quoteId?: string;
+  quoteNumber?: string;
+  customerPoNumber?: string;
+  dealId?: string;
+  dealTitle?: string;
   accountName: string;
-  totalAmount: number;
-  status: 'قيد التجهيز' | 'مؤهل' | 'مكتملة' | 'مؤجلة';
+  contactName?: string;
+  leadUniqueId?: string;
+  ownerName?: string;
+  orderDate?: string;
   deliveryDate: string;
+  billingAddress?: string;
+  shippingAddress?: string;
+  shippingMethod?: string;
+  currency?: string;
+  exchangeRate?: number;
+  paymentTerms?: string;
+  taxMode?: TaxMode;
+  lineItems?: FinancialLineItem[];
+  subtotalAmount?: number;
+  discountTotal?: number;
+  taxableAmount?: number;
+  vatAmount?: number;
+  totalAmount: number;
+  status: 'قيد التجهيز' | 'قيد التأكيد' | 'قيد التنفيذ' | 'تسليم جزئي' | 'مؤهل' | 'مكتملة' | 'مؤجلة' | 'ملغي';
 }
 
 export interface Invoice {
@@ -246,12 +332,40 @@ export interface Invoice {
   ownerId: string;
   org_id?: string;
   invoiceNumber: string;
+  invoiceType?: 'فاتورة ضريبية (B2B)' | 'فاتورة ضريبية مبسطة (B2C)' | 'إشعار دائن';
   salesOrderId?: string;
+  salesOrderNumber?: string;
+  quoteId?: string;
+  quoteNumber?: string;
+  dealId?: string;
+  dealTitle?: string;
   accountName: string;
+  contactName?: string;
+  leadUniqueId?: string;
+  ownerName?: string;
+  issueDate?: string;
+  supplyDate?: string;
+  dueDate: string;
+  sellerName?: string;
+  sellerCrNumber?: string;
+  sellerVatNumber?: string;
+  sellerAddress?: string;
+  buyerVatNumber?: string;
+  buyerAddress?: string;
+  bankName?: string;
+  ibanNumber?: string;
+  currency?: string;
+  exchangeRate?: number;
+  taxMode?: TaxMode;
+  lineItems?: FinancialLineItem[];
+  subtotalAmount?: number;
+  discountTotal?: number;
+  taxableAmount?: number;
+  vatAmount?: number;
   totalAmount: number;
   paidAmount: number;
-  status: 'مكتملة' | 'مؤجلة' | 'متأخرة' | 'مسودة';
-  dueDate: string;
+  payments?: InvoicePaymentRecord[];
+  status: 'مكتملة' | 'مدفوعة' | 'مدفوعة جزئياً' | 'غير مدفوعة' | 'مؤجلة' | 'متأخرة' | 'مسودة';
 }
 
 export type TouchpointChannel =
@@ -312,6 +426,15 @@ export interface CrmTask {
   leadUniqueId?: string;
 }
 
+export interface BlueprintStageRequirementConfig {
+  requireFinalAmount?: boolean;
+  requireDiscountPercent?: boolean;
+  requireContractPdf?: boolean;
+  requireLossReason?: boolean;
+  requireNextStep?: boolean;
+  checklistItems?: string[];
+}
+
 export interface Blueprint {
   id: string;
   ownerId: string;
@@ -321,6 +444,16 @@ export interface Blueprint {
   active: boolean;
   stagesCount: number;
   description?: string;
+  stageSteps?: string[];
+  stageRequirements?: Record<string, BlueprintStageRequirementConfig>;
+}
+
+export interface QuickReplyTemplate {
+  id: string;
+  command: string;
+  label: string;
+  template: string;
+  module?: 'leads' | 'contacts' | 'deals' | 'all';
 }
 
 export interface WorkflowRule {
@@ -350,6 +483,7 @@ export interface RecycleBinItem {
 
 export interface SignalNotification {
   id: string;
+  org_id?: string;
   title: string;
   description: string;
   category: 'deal' | 'lead' | 'task' | 'system';

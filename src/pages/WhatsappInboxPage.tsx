@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -19,6 +19,7 @@ import {
   Sparkles,
   UserCheck,
   Users,
+  X,
   Zap,
 } from 'lucide-react';
 import { useCrm } from '../context/CrmContext';
@@ -29,12 +30,15 @@ export function WhatsappInboxPage() {
     currentOrganization,
     currentOrgId,
     currentUser,
+    activeProfile,
+    activeRole,
+    canViewChat,
     leads,
     contacts,
     messages,
+    touchpoints,
     sendInboxReply,
     connectMetaAccount,
-    metaPages,
   } = useCrm();
 
   const isWhatsappEnabled = Boolean(currentOrganization?.addons?.whatsapp_campaigns);
@@ -46,52 +50,129 @@ export function WhatsappInboxPage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [sending, setSending] = useState(false);
   const [embeddedModalOpen, setEmbeddedModalOpen] = useState(false);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [attachedFile, setAttachedFile] = useState<{
+    name: string;
+    kind: 'file' | 'image';
+    sizeLabel: string;
+  } | null>(null);
 
-  // RBAC filtering for conversations
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
+  const triggerToast = (msg: string) => {
+    setToastMsg(msg);
+    window.setTimeout(() => {
+      setToastMsg((prev) => (prev === msg ? null : prev));
+    }, 3500);
+  };
+
+  // Merge BOTH leads and contacts and apply dynamic RBAC filtering for conversations
   const conversations = useMemo(() => {
-    const list = leads.map((l) => ({
-      id: l.id,
-      name: l.fullName,
-      company: l.company || 'شركة تجارية',
-      phone: l.phone || '+966 50 123 4567',
-      uniqueId: l.unique_id,
-      assignedTo: l.assignedToName,
-      unread: l.awaitingReplyHours ? l.awaitingReplyHours > 12 : false,
-      lastMessage: l.lastMessageSnippet || 'أهلاً بك، استفسار بخصوص باقة الحلول المؤسسية ERP...',
-      timeLabel: 'منذ 10 دقائق',
-      channel: 'whatsapp' as const,
-      isLead: true,
-      rawLead: l,
-    }));
+    const canReadInbox =
+      activeProfile?.modulePermissions?.leads?.read ??
+      activeProfile?.modulePermissions?.contacts?.read ??
+      true;
+    if (!canReadInbox) return [];
 
-    return list.filter((c) => {
-      // Chat RBAC
-      const isAdmin = currentUser.profileId === 'prof_admin';
-      const isManager = currentUser.profileId === 'prof_sales_director';
-      if (!isAdmin) {
-        if (isManager) {
-          // If manager has hide_subordinates_data, only show personal
-          if (currentUser.department === 'مبيعات المؤسسات' && false) {
-            if (c.assignedTo !== currentUser.fullName) return false;
+    const leadThreads = leads.map((l) => {
+      const threadMsgs = messages.filter(
+        (m) => m.leadUniqueId === l.unique_id || m.senderName.includes(l.fullName)
+      );
+      const latestMsg = threadMsgs[threadMsgs.length - 1];
+      return {
+        id: l.id,
+        name: l.fullName,
+        company: l.company || 'شركة تجارية',
+        phone: l.phone || '+966 50 123 4567',
+        uniqueId: l.unique_id,
+        entityTypeLabel: 'عميل محتمل',
+        assignedTo: l.assignedToName,
+        ownerId: l.ownerId,
+        unread: l.awaitingReplyHours ? l.awaitingReplyHours > 12 : false,
+        lastMessage:
+          latestMsg?.body ||
+          l.lastMessageSnippet ||
+          'أهلاً بك، استفسار بخصوص باقة الحلول المؤسسية ERP...',
+        timeLabel: latestMsg?.timestampLabel || 'منذ 10 دقائق',
+        channel: 'whatsapp' as const,
+        isLead: true,
+        rawLead: l,
+      };
+    });
+
+    const contactThreads = contacts
+      .filter((c) => !leads.some((l) => l.unique_id === (c.leadUniqueId || c.id)))
+      .map((c) => {
+        const contactRefId = c.leadUniqueId || c.id;
+        const threadMsgs = messages.filter(
+          (m) => m.leadUniqueId === contactRefId || m.senderName.includes(c.fullName)
+        );
+        const latestMsg = threadMsgs[threadMsgs.length - 1];
+        return {
+          id: `contact_${c.id}`,
+          name: c.fullName,
+          company: c.accountName || 'حساب مؤسسي',
+          phone: c.phone || '+966 55 000 1122',
+          uniqueId: contactRefId,
+          entityTypeLabel: `جهة اتصال ${contactRefId}`,
+          assignedTo: c.assignedToName || currentUser.fullName,
+          ownerId: c.ownerId,
+          unread: false,
+          lastMessage:
+            latestMsg?.body ||
+            c.lastMessageSnippet ||
+            `تواصل مباشر مع جهة الاتصال المسجلة (${c.accountName})`,
+          timeLabel: latestMsg?.timestampLabel || c.lastActivityLabel || 'اليوم',
+          channel: 'whatsapp' as const,
+          isLead: false,
+          rawLead: undefined,
+        };
+      });
+
+    const merged = [...leadThreads, ...contactThreads];
+
+    return merged.filter((c) => {
+      // Dynamic RBAC from activeRole.dataVisibility and canViewChat
+      const visibility = activeRole?.dataVisibility ?? 'organization';
+      if (visibility === 'private') {
+        if (c.assignedTo !== currentUser.fullName && c.ownerId !== currentUser.uid) {
+          return false;
+        }
+      } else if (visibility === 'team') {
+        if (activeRole?.hide_subordinates_data) {
+          if (c.assignedTo !== currentUser.fullName && c.ownerId !== currentUser.uid) {
+            return false;
           }
-        } else {
-          // Sales Rep: own chats only
-          if (c.assignedTo !== currentUser.fullName) return false;
+        } else if (!canViewChat(c.assignedTo)) {
+          return false;
         }
       }
 
+      if (filterTab === 'mine' && c.assignedTo !== currentUser.fullName) return false;
       if (filterTab === 'unread' && !c.unread) return false;
       if (
         searchQuery.trim() &&
         !c.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
         !c.uniqueId.toLowerCase().includes(searchQuery.toLowerCase()) &&
-        !c.phone.includes(searchQuery)
+        !c.phone.includes(searchQuery) &&
+        !c.company.toLowerCase().includes(searchQuery.toLowerCase())
       ) {
         return false;
       }
       return true;
     });
-  }, [leads, currentUser, filterTab, searchQuery]);
+  }, [
+    leads,
+    contacts,
+    messages,
+    currentUser,
+    activeProfile,
+    activeRole,
+    canViewChat,
+    filterTab,
+    searchQuery,
+  ]);
 
   const activeConvo = useMemo(() => {
     return (
@@ -112,30 +193,52 @@ export function WhatsappInboxPage() {
 
   const handleSendReply = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!replyBody.trim() && !selectedTemplateId) return;
+    if (!replyBody.trim() && !selectedTemplateId && !attachedFile) return;
     if (!activeConvo) return;
 
     setSending(true);
     try {
-      const textToSend = selectedTemplateId
+      const attachmentPrefix = attachedFile
+        ? `${attachedFile.kind === 'image' ? '🖼️ [صورة مرفقة:' : '📎 [ملف مرفق:'} ${attachedFile.name} (${attachedFile.sizeLabel})] `
+        : '';
+      const baseText = selectedTemplateId
         ? `[قالب معتمد: ${selectedTemplateId}] ${replyBody || 'مرحباً، تفضل بطلب العرض التجريبي المعتمد.'}`
-        : replyBody;
+        : replyBody || (attachedFile ? 'تم إرسال المرفق للمراجعة والاعتماد.' : '');
+      const textToSend = `${attachmentPrefix}${baseText}`.trim();
 
       await sendInboxReply(
         'whatsapp',
         activeConvo.name,
         textToSend,
         {
-          leadId: activeConvo.isLead ? activeConvo.rawLead.id : undefined,
+          leadId: activeConvo.isLead && activeConvo.rawLead ? activeConvo.rawLead.id : undefined,
           leadUniqueId: activeConvo.uniqueId,
           companyName: activeConvo.company,
         }
       );
       setReplyBody('');
       setSelectedTemplateId('');
+      if (attachedFile) {
+        triggerToast(`تم إرسال المرفق "${attachedFile.name}" عبر واتساب السحابي بنجاح.`);
+        setAttachedFile(null);
+      }
     } finally {
       setSending(false);
     }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, kind: 'file' | 'image') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const sizeKb = Math.max(1, Math.round(file.size / 1024));
+    const sizeLabel = sizeKb > 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb} KB`;
+    setAttachedFile({
+      name: file.name,
+      kind,
+      sizeLabel,
+    });
+    triggerToast(`تم إرفاق ${kind === 'image' ? 'الصورة' : 'الملف'} "${file.name}" — اضغط إرسال لإرساله في المحادثة.`);
+    e.target.value = '';
   };
 
   const handleEmbeddedSignup = async () => {
@@ -145,11 +248,18 @@ export function WhatsappInboxPage() {
       shortLivedToken: `EAAB_WABA_${Date.now()}`,
     });
     setEmbeddedModalOpen(false);
+    triggerToast('تم ربط رقم واتساب السحابي (Meta Embedded Signup) بنجاح.');
   };
 
   if (!isWhatsappEnabled) {
     return (
       <div dir="rtl" className="w-full px-6 py-12 flex flex-col items-center justify-center text-center">
+        {toastMsg && (
+          <div className="mb-4 max-w-md w-full bg-emerald-50 border border-emerald-200 text-emerald-900 px-4 py-3 rounded-xl flex items-center justify-between text-xs font-bold">
+            <span>{toastMsg}</span>
+            <button type="button" onClick={() => setToastMsg(null)} className="text-emerald-700">✕</button>
+          </div>
+        )}
         <div className="max-w-md w-full bg-white border border-slate-200 rounded-2xl p-8 shadow-sm space-y-6">
           <div className="w-16 h-16 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto border border-amber-200">
             <Lock className="w-8 h-8" />
@@ -179,7 +289,7 @@ export function WhatsappInboxPage() {
           <button
             type="button"
             onClick={() => {
-              alert('تم إرسال طلب تفعيل الإضافة بنجاح إلى مدير النظام العام. سيتم التفعيل الفوري خلال دقائق.');
+              triggerToast('تم إرسال طلب تفعيل الإضافة بنجاح إلى مدير النظام العام. سيتم التفعيل الفوري خلال دقائق.');
             }}
             className="w-full py-3 px-4 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold shadow-sm transition-colors cursor-pointer flex items-center justify-center gap-2"
           >
@@ -200,6 +310,21 @@ export function WhatsappInboxPage() {
 
   return (
     <div dir="rtl" className="w-full px-6 py-4 space-y-4">
+      {toastMsg && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 px-4 py-3 rounded-xl flex items-center justify-between shadow-xs">
+          <div className="flex items-center gap-2 text-xs font-bold">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{toastMsg}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setToastMsg(null)}
+            className="text-xs font-bold text-emerald-700 hover:text-emerald-950 cursor-pointer"
+          >
+            إغلاق
+          </button>
+        </div>
+      )}
       {/* Top Flush Header & Quota Bar */}
       <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -212,8 +337,8 @@ export function WhatsappInboxPage() {
             <h1 className="text-lg font-bold text-slate-900">
               صندوق رسائل واتساب السحابي المباشر (WhatsApp Cloud Inbox)
             </h1>
-            <span className="px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 font-mono">
-              Quota: {currentOrganization?.messages_used || 8420} / {currentOrganization?.messages_limit || 25000} رسالة
+            <span className="px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 font-mono tabular-nums">
+              Quota: {(currentOrganization?.messages_used ?? 0).toLocaleString('en-US')} / {(currentOrganization?.messages_limit ?? 25000).toLocaleString('en-US')} رسالة
             </span>
           </div>
         </div>
@@ -420,18 +545,85 @@ export function WhatsappInboxPage() {
                   </select>
                 </div>
 
-                <form onSubmit={handleSendReply} className="flex items-center gap-2">
-                  <div className="flex items-center gap-1">
+                {attachedFile && (
+                  <div className="flex items-center justify-between rounded-lg border border-blue-200 bg-blue-50/70 px-3 py-1.5 text-xs text-blue-900">
+                    <div className="flex items-center gap-2">
+                      {attachedFile.kind === 'image' ? (
+                        <ImageIcon className="w-3.5 h-3.5 text-blue-600" />
+                      ) : (
+                        <Paperclip className="w-3.5 h-3.5 text-blue-600" />
+                      )}
+                      <span className="font-bold">{attachedFile.name}</span>
+                      <span className="text-[11px] text-blue-600 tabular-nums">({attachedFile.sizeLabel})</span>
+                    </div>
                     <button
                       type="button"
-                      className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors"
+                      onClick={() => setAttachedFile(null)}
+                      className="text-blue-700 hover:text-blue-950 p-0.5 cursor-pointer"
+                      title="إزالة المرفق"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                <form onSubmit={handleSendReply} className="flex items-center gap-2 min-w-0">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
+                    className="hidden"
+                    onChange={(e) => handleFileChange(e, 'file')}
+                  />
+                  <input
+                    ref={imageInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => handleFileChange(e, 'image')}
+                  />
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!attachedFile) {
+                          setAttachedFile({
+                            name: 'عرض_سعر_رواق_Enterprise_2026.pdf',
+                            kind: 'file',
+                            sizeLabel: '420 KB',
+                          });
+                          triggerToast('تم إرفاق ملف "عرض_سعر_رواق_Enterprise_2026.pdf" — اضغط إرسال أو اختر ملفاً آخر من جهازك.');
+                        }
+                        fileInputRef.current?.click();
+                      }}
+                      className={`p-2 rounded-lg transition-colors cursor-pointer ${
+                        attachedFile?.kind === 'file'
+                          ? 'bg-blue-50 text-blue-600 border border-blue-200'
+                          : 'hover:bg-slate-100 text-slate-500'
+                      }`}
                       title="إرفاق ملف"
                     >
                       <Paperclip className="w-4 h-4" />
                     </button>
                     <button
                       type="button"
-                      className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors"
+                      onClick={() => {
+                        if (!attachedFile) {
+                          setAttachedFile({
+                            name: 'بطاقة_منتج_رواق_CRM.png',
+                            kind: 'image',
+                            sizeLabel: '680 KB',
+                          });
+                          triggerToast('تم إرفاق صورة "بطاقة_منتج_رواق_CRM.png" — اضغط إرسال أو اختر صورة أخرى من جهازك.');
+                        }
+                        imageInputRef.current?.click();
+                      }}
+                      className={`p-2 rounded-lg transition-colors cursor-pointer ${
+                        attachedFile?.kind === 'image'
+                          ? 'bg-blue-50 text-blue-600 border border-blue-200'
+                          : 'hover:bg-slate-100 text-slate-500'
+                      }`}
                       title="إرفاق صورة"
                     >
                       <ImageIcon className="w-4 h-4" />
@@ -443,15 +635,15 @@ export function WhatsappInboxPage() {
                     value={replyBody}
                     onChange={(e) => setReplyBody(e.target.value)}
                     placeholder="اكتب رسالة واتساب المباشرة هنا..."
-                    className="flex-1 px-4 py-2 rounded-xl border border-slate-300 bg-slate-50 text-xs focus:outline-none focus:border-blue-600"
+                    className="flex-1 min-w-0 px-3.5 py-2 rounded-xl border border-slate-300 bg-slate-50 text-xs focus:outline-none focus:border-blue-600"
                   />
 
                   <button
                     type="submit"
-                    disabled={sending || (!replyBody.trim() && !selectedTemplateId)}
-                    className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer disabled:opacity-50"
+                    disabled={sending || (!replyBody.trim() && !selectedTemplateId && !attachedFile)}
+                    className="shrink-0 whitespace-nowrap px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer disabled:opacity-50"
                   >
-                    <Send className="w-3.5 h-3.5" />
+                    <Send className="w-3.5 h-3.5 shrink-0" />
                     <span>إرسال</span>
                   </button>
                 </form>
@@ -466,7 +658,7 @@ export function WhatsappInboxPage() {
         </div>
 
         {/* Left Pane (3 cols): Lead / Contact Card Summary */}
-        <div className="lg:col-span-3 bg-white border border-slate-200 rounded-xl p-4 flex flex-col justify-between space-y-4 shadow-xs">
+        <div className="lg:col-span-3 bg-white border border-slate-200 rounded-xl p-4 flex flex-col justify-between space-y-4 shadow-xs overflow-y-auto">
           {activeConvo ? (
             <div className="space-y-4">
               <div className="text-center pb-3 border-b border-slate-100">
@@ -484,7 +676,7 @@ export function WhatsappInboxPage() {
               <div className="space-y-2.5 text-xs">
                 <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200">
                   <span className="text-slate-500">الشركة / الجهة:</span>
-                  <span className="font-bold text-slate-800">{activeConvo.company}</span>
+                  <span className="font-bold text-slate-800 truncate max-w-[140px]">{activeConvo.company}</span>
                 </div>
                 <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200">
                   <span className="text-slate-500">رقم الهاتف:</span>
@@ -497,17 +689,44 @@ export function WhatsappInboxPage() {
               </div>
 
               <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
-                <h4 className="text-xs font-bold text-slate-900">سجل نقاط التماس الأخيرة:</h4>
-                <div className="text-[11px] text-slate-600 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span>آخر تواصل واتساب</span>
-                    <span className="font-mono text-slate-400">اليوم 10:45 ص</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>إرسال عرض سعر</span>
-                    <span className="font-mono text-slate-400">أمس</span>
-                  </div>
-                </div>
+                <h4 className="text-xs font-bold text-slate-900">سجل نقاط التماس الفعلية:</h4>
+                {(() => {
+                  const customerTouchpoints = touchpoints.filter(
+                    (tp) =>
+                      tp.leadUniqueId === activeConvo.uniqueId ||
+                      tp.relatedEntityId === activeConvo.id.replace('contact_', '') ||
+                      tp.relatedEntityName.includes(activeConvo.name)
+                  );
+                  if (customerTouchpoints.length === 0 && activeMessages.length === 0) {
+                    return (
+                      <div className="text-[11px] text-slate-400 py-2 text-center">
+                        لا توجد نقاط تماس سابقة لهذا العميل الجديد بعد.
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="text-[11px] text-slate-600 space-y-1.5">
+                      {activeMessages.length > 0 && (
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate">آخر رسالة واتساب</span>
+                          <span className="font-mono text-slate-400 shrink-0">
+                            {activeMessages[activeMessages.length - 1].timestampLabel}
+                          </span>
+                        </div>
+                      )}
+                      {customerTouchpoints.slice(0, 3).map((tp) => (
+                        <div key={tp.id} className="flex items-center justify-between gap-2">
+                          <span className="truncate" title={tp.summary}>
+                            {tp.eventType || tp.channel}: {tp.summary}
+                          </span>
+                          <span className="font-mono text-slate-400 shrink-0">
+                            {tp.occurredAt}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           ) : (

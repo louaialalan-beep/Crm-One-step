@@ -1140,7 +1140,7 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({
             <div className="flex-1 space-y-3 overflow-y-auto p-5">
               {drillDownRecords.map((rec, idx) => {
                 const rwq = String(
-                  rec.unique_id ?? rec.leadUniqueId ?? 'RWQ-10482'
+                  rec.unique_id ?? rec.leadUniqueId ?? rec.id ?? '—'
                 );
                 const title = String(
                   rec.title ??

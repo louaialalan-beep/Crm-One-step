@@ -9,13 +9,22 @@ interface QuickDealModalProps {
   onClose: () => void;
 }
 
+const QUICK_STAGE_PROB: Record<DealStage, number> = {
+  'تأهيل مبدئي': 20,
+  'تحديد الاحتياج': 20,
+  'عرض سعر': 50,
+  'تفاوض': 80,
+  'مكتملة': 100,
+  'خسارة': 0,
+};
+
 export const QuickDealModal: React.FC<QuickDealModalProps> = ({ open, onClose }) => {
   const { accounts, createQuickDeal } = useCrm();
   const [title, setTitle] = useState('');
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? '');
   const [amount, setAmount] = useState('150000');
   const [stage, setStage] = useState<DealStage>('عرض سعر');
-  const [probability, setProbability] = useState('60');
+  const [probability, setProbability] = useState('50');
   const [closeDate, setCloseDate] = useState('2026-12-20');
   const [nextStep, setNextStep] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -43,12 +52,13 @@ export const QuickDealModal: React.FC<QuickDealModalProps> = ({ open, onClose })
     setErrors({});
     setSubmitting(true);
     try {
+      const canonicalProb = QUICK_STAGE_PROB[stage] ?? (Number(probability) || 50);
       await createQuickDeal({
         title,
         accountId: selectedAccountId,
         amount: numericAmount,
         stage,
-        probability: Math.min(100, Math.max(0, Number(probability) || 50)),
+        probability: Math.min(100, Math.max(0, canonicalProb)),
         closeDate,
         nextStep,
       });
@@ -149,7 +159,11 @@ export const QuickDealModal: React.FC<QuickDealModalProps> = ({ open, onClose })
               <select
                 id="quick-deal-stage"
                 value={stage}
-                onChange={(e) => setStage(e.target.value as DealStage)}
+                onChange={(e) => {
+                  const nextStage = e.target.value as DealStage;
+                  setStage(nextStage);
+                  setProbability(String(QUICK_STAGE_PROB[nextStage] ?? 50));
+                }}
                 className="input-control w-full px-3 py-2 text-[13px]"
               >
                 {DEAL_STAGES_ORDER.filter((s) => s !== 'خسارة').map((st) => (

@@ -58,7 +58,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   useEffect(() => {
     if (location.pathname.startsWith('/settings')) {
       setExpandedGroups((prev) => ({ ...prev, settings: true }));
-    } else if (['/quotes', '/sales-orders', '/invoices'].includes(location.pathname)) {
+    } else if (['/quotes', '/sales-orders', '/invoices', '/purchase-orders'].includes(location.pathname)) {
       setExpandedGroups((prev) => ({ ...prev, billing: true }));
     } else if (['/tasks', '/activities', '/calendar'].includes(location.pathname)) {
       setExpandedGroups((prev) => ({ ...prev, tasks: true }));

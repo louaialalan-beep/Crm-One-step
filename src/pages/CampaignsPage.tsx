@@ -31,6 +31,87 @@ export function CampaignsPage() {
   const [dailyBatchLimit, setDailyBatchLimit] = useState(1000);
   const [abTestingEnabled, setAbTestingEnabled] = useState(true);
   const [launching, setLaunching] = useState(false);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  const [campaignsByOrg, setCampaignsByOrg] = useState<
+    Record<
+      string,
+      Array<{
+        id: string;
+        name: string;
+        channel: string;
+        audience: string;
+        budget: number;
+        template: string;
+        statusLabel: string;
+        owner: string;
+      }>
+    >
+  >({
+    org_riwaq_main: [
+      {
+        id: 'CMP-WA-8902',
+        name: 'حملة عروض الربع الثاني - قطاع التجزئة',
+        channel: 'واتساب السحابي الرسمي (WhatsApp Cloud)',
+        audience: 'العملاء المهتمين - الرياض وجدة (10,000 عميل)',
+        budget: 18500,
+        template: 'q2_retail_offer_v2',
+        statusLabel: 'الدفعة رقم 3 من 8 — قيد المعالجة والإرسال اللحظي',
+        owner: 'طارق العتيبي',
+      },
+    ],
+  });
+
+  const campaignsList = campaignsByOrg[currentOrgId] ?? [];
+  const isMainSeedOrg = currentOrgId === 'org_riwaq_main';
+  const sentMessagesCount = isMainSeedOrg
+    ? 18400 + (campaignsList.length - 1) * 1000
+    : campaignsList.length * 1000;
+  const deliveredRateLabel = campaignsList.length > 0 ? '98.2%' : '0%';
+  const readRateLabel = campaignsList.length > 0 ? '74.5%' : '0%';
+  const incomingRepliesCount = isMainSeedOrg
+    ? 1420 + (campaignsList.length - 1) * 85
+    : campaignsList.length * 85;
+  const quotaUsed = currentOrganization?.messages_used ?? 0;
+  const quotaLimit = currentOrganization?.messages_limit ?? 25000;
+
+  const [newCampName, setNewCampName] = useState('');
+  const [newCampChannel, setNewCampChannel] = useState('واتساب السحابي الرسمي (WhatsApp Cloud)');
+  const [newCampAudience, setNewCampAudience] = useState('العملاء المهتمين - الرياض وجدة (10,000 عميل)');
+  const [newCampBudget, setNewCampBudget] = useState<number>(15000);
+  const [newCampTemplate, setNewCampTemplate] = useState('q2_retail_offer_v2');
+
+  const triggerToast = (msg: string) => {
+    setToastMsg(msg);
+    window.setTimeout(() => {
+      setToastMsg((prev) => (prev === msg ? null : prev));
+    }, 3800);
+  };
+
+  const handleCreateCampaignSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const resolvedName = newCampName.trim() || 'حملة عروض المؤسسات السحابية الجديدة';
+    const newId = `CMP-WA-${Math.floor(1000 + Math.random() * 9000)}`;
+    setCampaignsByOrg((prev) => ({
+      ...prev,
+      [currentOrgId]: [
+        {
+          id: newId,
+          name: resolvedName,
+          channel: newCampChannel,
+          audience: newCampAudience,
+          budget: Number(newCampBudget) || 15000,
+          template: newCampTemplate,
+          statusLabel: 'الدفعة رقم 1 من 5 — تم الإطلاق الفوري ✓',
+          owner: 'طارق العتيبي',
+        },
+        ...(prev[currentOrgId] ?? []),
+      ],
+    }));
+    setNewCampName('');
+    setActiveTab('campaigns');
+    triggerToast(`تم حفظ وإطلاق الحملة "${resolvedName}" (${newId}) بنجاح وبدء جدولة الدفعات.`);
+  };
 
   const handleToggleAddon = async () => {
     const nextVal = !currentOrganization.addons.whatsapp_campaigns;
@@ -51,9 +132,9 @@ export function CampaignsPage() {
         body: JSON.stringify({ org_id: currentOrgId }),
       });
       await res.json();
-      alert('تم إطلاق الحملة بنجاح وبدء إرسال الدفعات عبر خادم واتساب السحابي.');
+      triggerToast('تم إطلاق الحملة بنجاح وبدء إرسال الدفعات عبر خادم واتساب السحابي.');
     } catch {
-      alert('تم إطلاق الحملة بنجاح.');
+      triggerToast('تم إطلاق الحملة بنجاح وبدء إرسال الدفعات.');
     } finally {
       setLaunching(false);
     }
@@ -89,6 +170,21 @@ export function CampaignsPage() {
 
   return (
     <div dir="rtl" className="w-full px-6 py-4 space-y-4 bg-[#F8FAFC] min-h-screen text-[13px]">
+      {toastMsg && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 px-4 py-3 rounded-xl flex items-center justify-between shadow-xs">
+          <div className="flex items-center gap-2 text-xs font-bold">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{toastMsg}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setToastMsg(null)}
+            className="text-xs font-bold text-emerald-700 hover:text-emerald-950 cursor-pointer"
+          >
+            إغلاق
+          </button>
+        </div>
+      )}
       {/* Header & KPI Strip */}
       <div className="bg-white border border-[#E2E8F0] rounded-xl p-4 shadow-xs space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-4">
@@ -100,15 +196,15 @@ export function CampaignsPage() {
               <span>/</span>
               <span className="text-[#0F172A] font-bold">حملات واتساب الذكية (Smart Broadcast)</span>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <h1 className="text-lg font-bold text-[#0F172A]">
                 حملات واتساب التسويقية الذكية
               </h1>
-              <span className="px-2.5 py-0.5 rounded-md bg-[#ECFDF5] text-[#059669] font-mono text-xs font-bold border border-[#A7F3D0]">
+              <span className="px-2.5 py-0.5 rounded-md bg-[#ECFDF5] text-[#059669] text-xs font-bold border border-[#A7F3D0] whitespace-nowrap">
                 رسمي Meta Cloud v19.0 • متصل بنجاح
               </span>
               <span className="text-xs text-[#64748B]">
-                رصيد الرسائل المتبقي: <strong className="text-[#0F172A] tabular-nums">42,500 / 50,000 رسالة</strong> • مستوى الإرسال: المستوى 3 (100k عميل/يوم)
+                رصيد الرسائل المستخدم: <strong className="text-[#0F172A] tabular-nums">{quotaUsed.toLocaleString('en-US')} / {quotaLimit.toLocaleString('en-US')} رسالة</strong>
               </span>
             </div>
           </div>
@@ -116,7 +212,7 @@ export function CampaignsPage() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => alert('تمت مزامنة قوالب الرسائل مع Meta Graph API بنجاح.')}
+              onClick={() => triggerToast('تمت مزامنة قوالب الرسائل مع Meta Graph API بنجاح.')}
               className="px-3.5 py-2 rounded-lg bg-[#F8FAFC] hover:bg-[#F1F5F9] border border-[#E2E8F0] text-[#0F172A] text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5 text-[#2563EB]" />
@@ -138,11 +234,11 @@ export function CampaignsPage() {
           <button
             type="button"
             onClick={() => setActiveTab('campaigns')}
-            className={`px-4 py-2 rounded-lg transition-colors cursor-pointer ${
+            className={`px-4 py-2 rounded-lg transition-colors cursor-pointer whitespace-nowrap ${
               activeTab === 'campaigns' ? 'bg-[#EFF6FF] text-[#2563EB] border border-[#BFDBFE]' : 'bg-white text-[#64748B] hover:bg-[#F8FAFC] border border-[#E2E8F0]'
             }`}
           >
-            الحملات النشطة والتقارير (6)
+            الحملات النشطة والتقارير ({campaignsList.length})
           </button>
           <button
             type="button"
@@ -160,7 +256,7 @@ export function CampaignsPage() {
               activeTab === 'templates' ? 'bg-[#EFF6FF] text-[#2563EB] border border-[#BFDBFE]' : 'bg-white text-[#64748B] hover:bg-[#F8FAFC] border border-[#E2E8F0]'
             }`}
           >
-            إدارة قوالب ميتا المعتمدة (24)
+            إدارة قوالب ميتا المعتمدة ({isMainSeedOrg ? 24 : 3})
           </button>
           <button
             type="button"
@@ -169,7 +265,7 @@ export function CampaignsPage() {
               activeTab === 'optout' ? 'bg-[#EFF6FF] text-[#2563EB] border border-[#BFDBFE]' : 'bg-white text-[#64748B] hover:bg-[#F8FAFC] border border-[#E2E8F0]'
             }`}
           >
-            قائمة الحظر وإلغاء الاشتراك (Opt-Out) (124)
+            قائمة الحظر وإلغاء الاشتراك (Opt-Out) ({isMainSeedOrg ? 124 : 0})
           </button>
           <button
             type="button"
@@ -183,13 +279,17 @@ export function CampaignsPage() {
         </div>
       </div>
 
-      {/* 4 KPI Cards */}
+      {/* 4 Dynamic Multi-Tenant KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <div className="bg-white border border-[#E2E8F0] rounded-xl p-3.5 shadow-xs flex items-center justify-between">
           <div>
             <span className="text-[11px] text-[#64748B]">تم الإرسال (Sent Messages)</span>
-            <div className="text-lg font-extrabold text-[#0F172A] tabular-nums mt-0.5">18,400 رسالة</div>
-            <div className="text-[10px] text-[#10B981] font-bold mt-1">▲ +12% هذا الأسبوع • تكلفة الرسالة: 0.12 ر.س</div>
+            <div className="text-lg font-extrabold text-[#0F172A] tabular-nums mt-0.5">
+              {sentMessagesCount.toLocaleString('en-US')} رسالة
+            </div>
+            <div className="text-[10px] text-[#10B981] font-bold mt-1">
+              {campaignsList.length > 0 ? `${campaignsList.length} حملة نشطة` : 'لا توجد حملات مرسلة بعد'}
+            </div>
           </div>
           <div className="w-10 h-10 rounded-xl bg-[#EFF6FF] text-[#2563EB] flex items-center justify-center">
             <Send className="w-5 h-5" />
@@ -199,8 +299,10 @@ export function CampaignsPage() {
         <div className="bg-white border border-[#E2E8F0] rounded-xl p-3.5 shadow-xs flex items-center justify-between">
           <div>
             <span className="text-[11px] text-[#64748B]">نسبة التسليم الفعلي (Delivered)</span>
-            <div className="text-lg font-extrabold text-[#10B981] tabular-nums mt-0.5">98.2%</div>
-            <div className="text-[10px] text-[#64748B] mt-1">18,068 مستلمة نجاح • 1.8% أرقام معطلة</div>
+            <div className="text-lg font-extrabold text-[#10B981] tabular-nums mt-0.5">{deliveredRateLabel}</div>
+            <div className="text-[10px] text-[#64748B] mt-1">
+              {campaignsList.length > 0 ? 'معدل تسليم فوري عبر Meta Cloud' : 'بانتظار إطلاق أول حملة'}
+            </div>
           </div>
           <div className="w-10 h-10 rounded-xl bg-[#ECFDF5] text-[#10B981] flex items-center justify-center">
             <CheckCircle2 className="w-5 h-5" />
@@ -210,8 +312,10 @@ export function CampaignsPage() {
         <div className="bg-white border border-[#E2E8F0] rounded-xl p-3.5 shadow-xs flex items-center justify-between">
           <div>
             <span className="text-[11px] text-[#64748B]">معدل القراءة والتفاعل (Read Rate)</span>
-            <div className="text-lg font-extrabold text-[#2563EB] tabular-nums mt-0.5">74.5%</div>
-            <div className="text-[10px] text-[#64748B] mt-1">(13,460 عميل فتح الرسالة) • متوسط وقت الفتح: 4 دقائق</div>
+            <div className="text-lg font-extrabold text-[#2563EB] tabular-nums mt-0.5">{readRateLabel}</div>
+            <div className="text-[10px] text-[#64748B] mt-1">
+              {campaignsList.length > 0 ? 'متوسط وقت الفتح: 4 دقائق' : '0 رسالة مقروءة'}
+            </div>
           </div>
           <div className="w-10 h-10 rounded-xl bg-[#EFF6FF] text-[#2563EB] flex items-center justify-center">
             <Users className="w-5 h-5" />
@@ -221,8 +325,12 @@ export function CampaignsPage() {
         <div className="bg-white border border-[#E2E8F0] rounded-xl p-3.5 shadow-xs flex items-center justify-between">
           <div>
             <span className="text-[11px] text-[#64748B]">الردود الواردة للمحادثات (Incoming Replies)</span>
-            <div className="text-lg font-extrabold text-[#7C3AED] tabular-nums mt-0.5">1,420</div>
-            <div className="text-[10px] text-[#10B981] font-bold mt-1">تحويل: 7.7% • صندوق الوارد: 118 صفقة منشأة</div>
+            <div className="text-lg font-extrabold text-[#7C3AED] tabular-nums mt-0.5">
+              {incomingRepliesCount.toLocaleString('en-US')}
+            </div>
+            <div className="text-[10px] text-[#10B981] font-bold mt-1">
+              {campaignsList.length > 0 ? 'توجيه مباشر لصندوق واتساب' : '0 ردود واردة'}
+            </div>
           </div>
           <div className="w-10 h-10 rounded-xl bg-[#F5F3FF] text-[#7C3AED] flex items-center justify-center">
             <MessageSquare className="w-5 h-5" />
@@ -230,40 +338,183 @@ export function CampaignsPage() {
         </div>
       </div>
 
+      {activeTab === 'create' && (
+        <div className="bg-white border border-[#2563EB] rounded-xl p-5 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
+            <div>
+              <h2 className="text-sm font-extrabold text-[#0F172A] flex items-center gap-2">
+                <Plus className="w-4 h-4 text-[#2563EB]" />
+                إطلاق حملة تسويقية جديدة (Smart Broadcast &amp; Meta Attribution)
+              </h2>
+              <p className="text-xs text-[#64748B] mt-0.5">
+                قم بإعداد بيانات الحملة، اختيار القالب المعتمد، وتحديد الجمهور المستهدف والميزانية المرصودة.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveTab('campaigns')}
+              className="px-3 py-1.5 rounded-lg border border-[#E2E8F0] text-xs font-bold text-[#64748B] hover:bg-[#F8FAFC] cursor-pointer"
+            >
+              إلغاء والعودة للحملات
+            </button>
+          </div>
+
+          <form onSubmit={handleCreateCampaignSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-[#0F172A] mb-1.5">
+                  اسم الحملة التسويقية *
+                </label>
+                <input
+                  type="text"
+                  value={newCampName}
+                  onChange={(e) => setNewCampName(e.target.value)}
+                  placeholder="مثال: حملة عروض نهاية العام - قطاع الأعمال"
+                  className="w-full px-3 py-2 rounded-lg border border-[#CBD5E1] bg-white text-xs text-[#0F172A] focus:outline-none focus:border-[#2563EB]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#0F172A] mb-1.5">
+                  قناة الإرسال
+                </label>
+                <select
+                  value={newCampChannel}
+                  onChange={(e) => setNewCampChannel(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-[#CBD5E1] bg-white text-xs text-[#0F172A] focus:outline-none focus:border-[#2563EB]"
+                >
+                  <option value="واتساب السحابي الرسمي (WhatsApp Cloud)">واتساب السحابي الرسمي (WhatsApp Cloud)</option>
+                  <option value="إنستغرام دايركت + واتساب (Omni-Channel)">إنستغرام دايركت + واتساب (Omni-Channel)</option>
+                  <option value="ماسنجر فيسبوك للأعمال (Messenger Ads)">ماسنجر فيسبوك للأعمال (Messenger Ads)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#0F172A] mb-1.5">
+                  الجمهور المستهدف (Segment)
+                </label>
+                <select
+                  value={newCampAudience}
+                  onChange={(e) => setNewCampAudience(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-[#CBD5E1] bg-white text-xs text-[#0F172A] focus:outline-none focus:border-[#2563EB]"
+                >
+                  <option value="العملاء المهتمين - الرياض وجدة (10,000 عميل)">العملاء المهتمين - الرياض وجدة (10,000 عميل)</option>
+                  <option value="عملاء VIP المتكررين (1,450 عميل)">عملاء VIP المتكررين (1,450 عميل)</option>
+                  <option value="العملاء المحتملين الجدد من إعلانات ميتا (3,200 عميل)">العملاء المحتملين الجدد من إعلانات ميتا (3,200 عميل)</option>
+                  <option value="الصفقات المؤجلة لإعادة التنشيط (840 عميل)">الصفقات المؤجلة لإعادة التنشيط (840 عميل)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#0F172A] mb-1.5">
+                  الميزانية التقديرية (ر.س)
+                </label>
+                <input
+                  type="number"
+                  min="100"
+                  value={newCampBudget}
+                  onChange={(e) => setNewCampBudget(Number(e.target.value))}
+                  className="w-full px-3 py-2 rounded-lg border border-[#CBD5E1] bg-white text-xs text-[#0F172A] tabular-nums focus:outline-none focus:border-[#2563EB]"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-[#0F172A] mb-1.5">
+                  قالب Meta HSM المعتمد
+                </label>
+                <select
+                  value={newCampTemplate}
+                  onChange={(e) => setNewCampTemplate(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-[#CBD5E1] bg-white text-xs text-[#0F172A] focus:outline-none focus:border-[#2563EB]"
+                >
+                  <option value="q2_retail_offer_v2">q2_retail_offer_v2 (خصم 30% لقطاع التجزئة - معتمد ✓)</option>
+                  <option value="consultation_booking_discount">consultation_booking_discount (حجز استشارة مجانية - معتمد ✓)</option>
+                  <option value="enterprise_renewal_2026">enterprise_renewal_2026 (ترقية باقة المؤسسات - معتمد ✓)</option>
+                </select>
+              </div>
+
+              <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl p-3 flex items-center justify-between text-xs">
+                <div>
+                  <div className="font-bold text-[#0F172A]">حماية Cooldown وتقسيم الدفعات مفعلة تلقائياً</div>
+                  <div className="text-[11px] text-[#64748B]">سيتم استبعاد أرقام Opt-Out وتوزيع الإرسال بمعدل {dailyBatchLimit} رسالة/يوم</div>
+                </div>
+                <span className="px-2.5 py-1 rounded bg-[#ECFDF5] text-[#059669] text-[11px] font-bold shrink-0">جاهز للإطلاق</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 border-t border-[#E2E8F0] pt-3">
+              <button
+                type="button"
+                onClick={() => setActiveTab('campaigns')}
+                className="px-4 py-2 rounded-lg border border-[#E2E8F0] text-xs font-bold text-[#64748B] hover:bg-[#F8FAFC] cursor-pointer"
+              >
+                إلغاء
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
+              >
+                <Send className="w-3.5 h-3.5" />
+                حفظ وإطلاق الحملة الآن
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* Main 2-Column Grid (58% Right / 42% Left) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Right Column (58% - 7 cols) - Anti-Spam, Batching & A/B Engine */}
         <div className="lg:col-span-7 space-y-4">
-          {/* Active Campaign Monitor Card */}
-          <div className="bg-white border border-[#E2E8F0] rounded-xl p-4 shadow-xs space-y-3">
-            <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#10B981] animate-pulse"></span>
-                <h3 className="text-sm font-bold text-[#0F172A]">حملة عروض الربع الثاني - قطاع التجزئة <span className="text-xs font-normal text-[#2563EB]">(قيد الإرسال الذكي)</span></h3>
+          {/* Active Campaign Monitor Cards */}
+          {campaignsList.map((camp) => (
+            <div key={camp.id} className="bg-white border border-[#E2E8F0] rounded-xl p-4 shadow-xs space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E2E8F0] pb-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#10B981] animate-pulse shrink-0"></span>
+                  <h3 className="text-sm font-bold text-[#0F172A] truncate">
+                    {camp.name}{' '}
+                    <span className="text-xs font-normal text-[#2563EB]">(قيد الإرسال الذكي)</span>
+                  </h3>
+                </div>
+                <span className="px-2.5 py-1 rounded bg-[#FEF3C7] text-[#B45309] text-[11px] font-bold whitespace-nowrap shrink-0">
+                  {camp.statusLabel}
+                </span>
               </div>
-              <span className="px-2.5 py-1 rounded bg-[#FEF3C7] text-[#B45309] text-[11px] font-bold">الدفعة رقم 3 من 8 — قيد المعالجة والإرسال اللحظي</span>
-            </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-[#64748B]">
-              <span>معرف المعاملة المعتمد: <strong className="font-mono text-[#0F172A]">CMP-WA-8902</strong> • أنشئت بواسطة: طارق العتيبي</span>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-[#64748B]">
+                <span>
+                  معرف المعاملة المعتمد: <strong className="font-mono text-[#0F172A]">{camp.id}</strong> • القناة: <strong className="text-[#0F172A]">{camp.channel}</strong> • الميزانية: <strong className="text-[#0F172A] tabular-nums">{camp.budget.toLocaleString('en-US')} ر.س</strong>
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleLaunchCampaign}
+                    disabled={launching}
+                    className="px-3.5 py-1.5 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold flex items-center gap-1 shadow-xs cursor-pointer disabled:opacity-50"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    {launching ? 'جارٍ الإرسال...' : 'إطلاق الدفعة التالية'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span>
+                  الجمهور المستهدف المحدد: <strong className="text-[#0F172A]">{camp.audience}</strong>
+                </span>
                 <button
                   type="button"
-                  onClick={handleLaunchCampaign}
-                  disabled={launching}
-                  className="px-3.5 py-1.5 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold flex items-center gap-1 shadow-xs cursor-pointer disabled:opacity-50"
+                  onClick={() => setActiveTab('create')}
+                  className="text-[#2563EB] font-bold hover:underline cursor-pointer"
                 >
-                  <Send className="w-3.5 h-3.5" />
-                  {launching ? 'جارٍ الإرسال...' : 'إطلاق الدفعة التالية'}
+                  تعديل الشريحة
                 </button>
               </div>
             </div>
-
-            <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl p-3 flex items-center justify-between text-xs">
-              <span>الجمهور المستهدف المحدد: <strong className="text-[#0F172A]">العملاء المهتمين - الرياض وجدة (10,000 عميل)</strong></span>
-              <button type="button" className="text-[#2563EB] font-bold hover:underline">تعديل الشريحة</button>
-            </div>
-          </div>
+          ))}
 
           {/* Anti-Spam & Smart Cooldown Card */}
           <div className="bg-white border border-[#E2E8F0] rounded-xl p-4 shadow-xs space-y-4">
@@ -441,8 +692,11 @@ export function CampaignsPage() {
               <h3 className="text-sm font-bold text-[#0F172A]">معينة قوالب Meta HSM المعتمدة</h3>
               <button
                 type="button"
-                onClick={() => alert('إدارة القوالب')}
-                className="text-xs text-[#2563EB] font-bold hover:underline"
+                onClick={() => {
+                  setActiveTab('templates');
+                  triggerToast('تم عرض قائمة قوالب Meta HSM المعتمدة للتحرير والمزامنة.');
+                }}
+                className="text-xs text-[#2563EB] font-bold hover:underline cursor-pointer"
               >
                 إدارة القوالب (24)
               </button>

@@ -349,27 +349,30 @@ export const UnifiedCalendarModule: React.FC<UnifiedCalendarModuleProps> = ({
       },
     ];
 
-    const curatedSeeds: UnifiedCalendarEvent[] = rawCuratedSeeds.map((seed) => {
-      const finalDay = dayOverrides[seed.id]?.day ?? seed.defaultDay;
-      const finalHour = dayOverrides[seed.id]?.hour ?? seed.defaultHour;
-      return {
-        id: seed.id,
-        title: seed.title,
-        category: seed.category,
-        dayOfMonth: finalDay,
-        hourSlot: finalHour,
-        timeRangeLabel: formatHourSlotRange(finalHour, seed.category),
-        dateIso: `${currentMonthMeta.key}-${String(finalDay).padStart(2, '0')}`,
-        companyName: seed.companyName,
-        ownerName: seed.ownerName,
-        rwqId: seed.rwqId,
-        priority: seed.priority,
-        meetingLinkLabel: seed.meetingLinkLabel,
-        participantsCount: seed.participantsCount,
-        completed: completedOverrides[seed.id] ?? seed.completed,
-        sourceCollection: 'curated',
-      };
-    });
+    const curatedSeeds: UnifiedCalendarEvent[] =
+      currentOrgId === 'org_riwaq_main'
+        ? rawCuratedSeeds.map((seed) => {
+            const finalDay = dayOverrides[seed.id]?.day ?? seed.defaultDay;
+            const finalHour = dayOverrides[seed.id]?.hour ?? seed.defaultHour;
+            return {
+              id: seed.id,
+              title: seed.title,
+              category: seed.category,
+              dayOfMonth: finalDay,
+              hourSlot: finalHour,
+              timeRangeLabel: formatHourSlotRange(finalHour, seed.category),
+              dateIso: `${currentMonthMeta.key}-${String(finalDay).padStart(2, '0')}`,
+              companyName: seed.companyName,
+              ownerName: seed.ownerName,
+              rwqId: seed.rwqId,
+              priority: seed.priority,
+              meetingLinkLabel: seed.meetingLinkLabel,
+              participantsCount: seed.participantsCount,
+              completed: completedOverrides[seed.id] ?? seed.completed,
+              sourceCollection: 'curated',
+            };
+          })
+        : [];
 
     const mappedCustomEvents: UnifiedCalendarEvent[] = customEvents.map((ev) => {
       const finalDay = dayOverrides[ev.id]?.day ?? ev.dayOfMonth;
@@ -385,7 +388,7 @@ export const UnifiedCalendarModule: React.FC<UnifiedCalendarModuleProps> = ({
     });
 
     return [...list, ...curatedSeeds, ...mappedCustomEvents];
-  }, [completedOverrides, currentMonthMeta.key, customEvents, dayOverrides, deals, tasks]);
+  }, [completedOverrides, currentMonthMeta.key, currentOrgId, customEvents, dayOverrides, deals, tasks]);
 
   // Apply category, owner, and search filters
   const filteredEvents = useMemo(() => {

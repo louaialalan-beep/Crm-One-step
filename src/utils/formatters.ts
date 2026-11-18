@@ -5,6 +5,7 @@ import type {
   DealStage,
   FieldAccessLevel,
   Lead,
+  OrganizationCurrency,
 } from '../types/crm';
 
 export const LEAD_UNIQUE_ID_REGEX = /^RWQ-[0-9]{5}$/;
@@ -18,13 +19,92 @@ export const DEAL_STAGES_ORDER: DealStage[] = [
   'خسارة',
 ];
 
-export function formatCurrencySAR(amount: number, currency: 'SAR' | 'USD' | 'AED' = 'SAR'): string {
+const KNOWN_CURRENCY_SYMBOLS: Record<string, { symbol: string; position: 'prefix' | 'suffix' }> = {
+  SAR: { symbol: 'ر.س', position: 'suffix' },
+  USD: { symbol: '$', position: 'prefix' },
+  AED: { symbol: 'د.إ', position: 'suffix' },
+  EUR: { symbol: '€', position: 'prefix' },
+  GBP: { symbol: '£', position: 'prefix' },
+  KWD: { symbol: 'د.ك', position: 'suffix' },
+  BHD: { symbol: 'د.ب', position: 'suffix' },
+  OMR: { symbol: 'ر.ع', position: 'suffix' },
+  QAR: { symbol: 'ر.ق', position: 'suffix' },
+  EGP: { symbol: 'ج.م', position: 'suffix' },
+  TRY: { symbol: '₺', position: 'prefix' },
+  CHF: { symbol: 'CHF', position: 'suffix' },
+  CNY: { symbol: '¥', position: 'prefix' },
+};
+
+export function formatCurrencySAR(
+  amount: number,
+  currency: string = 'SAR',
+  customSymbol?: string,
+  symbolPosition?: 'prefix' | 'suffix',
+  decimals?: number
+): string {
   const safeAmount = Number.isFinite(amount) ? amount : 0;
+  const code = (currency || 'SAR').toUpperCase();
+  const hasFraction = Math.abs(safeAmount % 1) > 0.001;
+  const maxDigits = decimals !== undefined ? decimals : hasFraction ? 2 : 0;
   const formattedNumber = new Intl.NumberFormat('en-US', {
-    maximumFractionDigits: 0,
+    minimumFractionDigits: hasFraction ? Math.min(2, maxDigits) : 0,
+    maximumFractionDigits: maxDigits,
   }).format(safeAmount);
-  const symbol = currency === 'SAR' ? 'ر.س' : currency === 'AED' ? 'د.إ' : '$';
-  return currency === 'USD' ? `$${formattedNumber}` : `${formattedNumber} ${symbol}`;
+
+  const known = KNOWN_CURRENCY_SYMBOLS[code];
+  const symbol = customSymbol || known?.symbol || code;
+  const pos = symbolPosition || known?.position || (symbol.length === 1 && !/[ء-ي]/.test(symbol) ? 'prefix' : 'suffix');
+
+  return pos === 'prefix' ? `${symbol}${formattedNumber}` : `${formattedNumber} ${symbol}`;
+}
+
+export function formatCurrencyByConfig(
+  amount: number,
+  currencyCode: string | undefined,
+  currencies: OrganizationCurrency[],
+  baseCurrency?: OrganizationCurrency
+): string {
+  const targetCode = (currencyCode || baseCurrency?.code || 'SAR').toUpperCase();
+  const match = currencies.find((c) => c.code.toUpperCase() === targetCode);
+  if (match) {
+    return formatCurrencySAR(
+      amount,
+      match.code,
+      match.symbol,
+      match.symbolPosition,
+      match.decimals
+    );
+  }
+  return formatCurrencySAR(amount, targetCode);
+}
+
+export function convertAmountBetweenCurrencies(
+  amount: number,
+  fromCode: string,
+  toCode: string,
+  currencies: OrganizationCurrency[],
+  explicitFromRateToBase?: number
+): number {
+  const safeAmount = Number.isFinite(amount) ? amount : 0;
+  const cleanFrom = (fromCode || 'SAR').toUpperCase();
+  const cleanTo = (toCode || 'SAR').toUpperCase();
+  if (cleanFrom === cleanTo) return Math.round(safeAmount * 100) / 100;
+
+  const fromCurr = currencies.find((c) => c.code.toUpperCase() === cleanFrom);
+  const toCurr = currencies.find((c) => c.code.toUpperCase() === cleanTo);
+
+  const fromRateToBase =
+    explicitFromRateToBase && explicitFromRateToBase > 0
+      ? explicitFromRateToBase
+      : fromCurr?.isPrimary
+        ? 1
+        : fromCurr?.rateToBase || 1;
+
+  const toRateToBase = toCurr?.isPrimary ? 1 : toCurr?.rateToBase || 1;
+
+  const amountInBase = safeAmount * fromRateToBase;
+  const converted = toRateToBase > 0 ? amountInBase / toRateToBase : amountInBase;
+  return Math.round(converted * 100) / 100;
 }
 
 export function formatCompactNumber(value: number): string {

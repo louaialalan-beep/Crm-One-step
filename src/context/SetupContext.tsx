@@ -1,7 +1,8 @@
-import React, { createContext, useCallback, useContext, useMemo } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
   deleteDoc,
   doc,
+  onSnapshot,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -30,12 +31,19 @@ import type {
   MetaFieldMapping,
   MetaPage,
   MetaWebhookLog,
+  OrganizationCurrency,
   OrganizationPlan,
+  QuickReplyTemplate,
   RecycleBinItem,
   Touchpoint,
   WorkflowRule,
 } from '../types/crm';
-import { evaluateFieldAccess, generateLeadUniqueId } from '../utils/formatters';
+import {
+  convertAmountBetweenCurrencies,
+  evaluateFieldAccess,
+  formatCurrencyByConfig,
+  generateLeadUniqueId,
+} from '../utils/formatters';
 import { PREVIEW_OWNER_ID, stripUndefined, useAuth } from './AuthContext';
 
 export interface SetupContextValue {
@@ -65,6 +73,7 @@ export interface SetupContextValue {
   roles: CrmRole[];
   customFields: CustomField[];
   blueprints: Blueprint[];
+  quickReplies: QuickReplyTemplate[];
   workflows: WorkflowRule[];
   recycleBin: RecycleBinItem[];
   metaConnections: MetaConnection[];
@@ -128,15 +137,127 @@ export interface SetupContextValue {
     phone?: string;
     amount?: number;
   }) => Promise<void>;
+
+  // Multi-Currency Engine
+  currencies: OrganizationCurrency[];
+  baseCurrency: OrganizationCurrency;
+  addOrganizationCurrency: (
+    input: Omit<OrganizationCurrency, 'updatedAt' | 'isPrimary'>
+  ) => Promise<void>;
+  updateOrganizationCurrency: (
+    code: string,
+    patch: Partial<OrganizationCurrency>
+  ) => Promise<void>;
+  deleteOrganizationCurrency: (code: string) => Promise<void>;
+  setOrganizationBaseCurrency: (code: string) => Promise<void>;
+  syncLiveCurrencyRates: () => Promise<{ updatedCount: number; source: string }>;
+  formatOrgCurrency: (amount: number, currencyCode?: string) => string;
+  convertToBaseCurrency: (
+    amount: number,
+    fromCurrencyCode?: string,
+    explicitRate?: number
+  ) => number;
 }
 
 const SetupContext = createContext<SetupContextValue | null>(null);
+
+const DEFAULT_QUICK_REPLIES: QuickReplyTemplate[] = [
+  {
+    id: 'qr_lead_quote',
+    command: '/عرض_سعر',
+    label: 'عرض سعر مخصص',
+    template:
+      'أهلاً بكم، مرفق تفاصيل باقة رواق CRM المؤسسية شاملة ربط قنوات واتساب الأعمال وتكامل API. هل يناسبكم اعتماد العرض غداً؟',
+    module: 'leads',
+  },
+  {
+    id: 'qr_lead_demo',
+    command: '/حجز_موعد',
+    label: 'حجز موعد عرض حي (Demo)',
+    template:
+      'يسعدنا ترتيب جلسة عرض حي لمنصة رواق مع فريقكم المختص. يرجى تزويدنا بالوقت المناسب لكم غداً بين 10:00 صباحاً و 04:00 عصراً.',
+    module: 'leads',
+  },
+  {
+    id: 'qr_lead_welcome',
+    command: '/ترحيب',
+    label: 'ترحيب مخصص وجمع المتطلبات',
+    template:
+      'مرحباً بكم في رواق CRM، شكراً لتواصلكم معنا. لتقديم أفضل توصية فنية، كم عدد المستخدمين المتوقعين وما القنوات الأساسية التي ترغبون بربطها؟',
+    module: 'leads',
+  },
+  {
+    id: 'qr_contact_quote',
+    command: '/تأكيد_العرض',
+    label: 'تأكيد إرسال العرض المالي',
+    template:
+      'أهلاً بكم، تم إرسال نسخة العرض المالي المحدثة إلى بريدكم الإلكتروني، ويسعدنا الرد على أي استفسار قبل التوقيع.',
+    module: 'contacts',
+  },
+  {
+    id: 'qr_contact_meeting',
+    command: '/حجز_اجتماع_مباشر',
+    label: 'جدولة اجتماع مراجعة',
+    template:
+      'يسعدنا ترتيب اجتماع مباشر مع مدير الحسابات الفنية. ما الموعد المناسب لكم غداً بين 10:00 ص و 04:00 م؟',
+    module: 'contacts',
+  },
+  {
+    id: 'qr_contact_invoice',
+    command: '/إرسال_الفاتورة',
+    label: 'مشاركة بيانات الفوترة',
+    template:
+      'مرفق رقم الفاتورة الضريبية المعتمدة وتفاصيل السداد البنكي لتفعيل المقاعد الإضافية فوراً.',
+    module: 'contacts',
+  },
+  {
+    id: 'qr_contact_upsell',
+    command: '/توسعة_باقة',
+    label: 'عرض توسعة المقاعد',
+    template:
+      'أهلاً بكم، مرفق تفاصيل عرض التوسعة وإضافة المقاعد الجديدة لحسابكم في رواق CRM.',
+    module: 'contacts',
+  },
+  {
+    id: 'qr_deal_contract',
+    command: '/تأكيد_العقد',
+    label: 'إرسال مسودة العقد النهائي',
+    template:
+      'أهلاً بكم، تم تجهيز مسودة العقد النهائية وتثبيت الخصم المعتمد كما اتفقنا، بانتظار اعتمادكم لتفعيل التراخيص فوراً.',
+    module: 'deals',
+  },
+  {
+    id: 'qr_deal_invoice',
+    command: '/إرسال_الفاتورة',
+    label: 'إرسال الفاتورة الضريبية',
+    template:
+      'تم إصدار الفاتورة الضريبية المبدئية متضمنة ضريبة القيمة المضافة (15%) ومرفقة عبر البريد الرسمي.',
+    module: 'deals',
+  },
+  {
+    id: 'qr_deal_payment',
+    command: '/رابط_الدفع',
+    label: 'مشاركة تفاصيل السداد البنكي',
+    template:
+      'مرفق رقم الآيبان الرسمي للشركة ومرجع أمر الشراء (PO) لإتمام التحويل البنكي وتفعيل الباقة.',
+    module: 'deals',
+  },
+  {
+    id: 'qr_deal_sla',
+    command: '/مراجعة_SLA',
+    label: 'تأكيد اتفاقية مستوى الخدمة',
+    template:
+      'تمت مراجعة كافة بنود اتفاقية مستوى الخدمة (SLA) واعتماد الدعم الفني على مدار الساعة لحسابكم.',
+    module: 'deals',
+  },
+];
 
 export function SetupProvider({ children }: { children: React.ReactNode }) {
   const {
     firebaseUser,
     currentUser,
     setCurrentUser,
+    setUsers,
     currentOrgId,
     setCurrentOrgId,
     belongsToCurrentOrg,
@@ -144,6 +265,425 @@ export function SetupProvider({ children }: { children: React.ReactNode }) {
     setData,
     setSignals,
   } = useAuth();
+
+  const [quickReplies, setQuickReplies] = useState<QuickReplyTemplate[]>(DEFAULT_QUICK_REPLIES);
+
+  const buildDefaultCurrencies = useCallback((): OrganizationCurrency[] => {
+    const nowStamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+    return [
+      {
+        code: 'SAR',
+        name: 'ريال سعودي',
+        englishName: 'Saudi Riyal',
+        symbol: 'ر.س',
+        symbolPosition: 'suffix',
+        decimals: 2,
+        rateMode: 'fixed',
+        rateToBase: 1.0,
+        isPrimary: true,
+        isActive: true,
+        isCustom: false,
+        updatedAt: nowStamp,
+      },
+      {
+        code: 'USD',
+        name: 'دولار أمريكي',
+        englishName: 'US Dollar',
+        symbol: '$',
+        symbolPosition: 'prefix',
+        decimals: 2,
+        rateMode: 'fixed',
+        rateToBase: 3.75,
+        isPrimary: false,
+        isActive: true,
+        isCustom: false,
+        updatedAt: nowStamp,
+      },
+      {
+        code: 'AED',
+        name: 'درهم إماراتي',
+        englishName: 'UAE Dirham',
+        symbol: 'د.إ',
+        symbolPosition: 'suffix',
+        decimals: 2,
+        rateMode: 'fixed',
+        rateToBase: 1.021,
+        isPrimary: false,
+        isActive: true,
+        isCustom: false,
+        updatedAt: nowStamp,
+      },
+      {
+        code: 'EUR',
+        name: 'يورو أوروبي',
+        englishName: 'Euro',
+        symbol: '€',
+        symbolPosition: 'prefix',
+        decimals: 2,
+        rateMode: 'live',
+        rateToBase: 4.08,
+        isPrimary: false,
+        isActive: true,
+        isCustom: false,
+        updatedAt: nowStamp,
+      },
+      {
+        code: 'GBP',
+        name: 'جنيه إسترليني',
+        englishName: 'British Pound',
+        symbol: '£',
+        symbolPosition: 'prefix',
+        decimals: 2,
+        rateMode: 'live',
+        rateToBase: 4.76,
+        isPrimary: false,
+        isActive: true,
+        isCustom: false,
+        updatedAt: nowStamp,
+      },
+      {
+        code: 'KWD',
+        name: 'دينار كويتي',
+        englishName: 'Kuwaiti Dinar',
+        symbol: 'د.ك',
+        symbolPosition: 'suffix',
+        decimals: 3,
+        rateMode: 'live',
+        rateToBase: 12.21,
+        isPrimary: false,
+        isActive: true,
+        isCustom: false,
+        updatedAt: nowStamp,
+      },
+    ];
+  }, []);
+
+  const [currencies, setCurrencies] = useState<OrganizationCurrency[]>(() => {
+    try {
+      const raw = localStorage.getItem(`riwaq_org_currencies_v2_${currentOrgId}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return buildDefaultCurrencies();
+  });
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(`riwaq_org_currencies_v2_${currentOrgId}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setCurrencies(parsed);
+        } else {
+          setCurrencies(buildDefaultCurrencies());
+        }
+      } else {
+        setCurrencies(buildDefaultCurrencies());
+      }
+    } catch {
+      setCurrencies(buildDefaultCurrencies());
+    }
+  }, [buildDefaultCurrencies, currentOrgId]);
+
+  useEffect(() => {
+    if (!firebaseUser || !currentOrgId) return;
+    const currRef = doc(db, 'organizations', currentOrgId, 'settings', 'currencies');
+    const unsubCurr = onSnapshot(
+      currRef,
+      (snap) => {
+        if (snap.exists()) {
+          const val = snap.data();
+          if (Array.isArray(val.items) && val.items.length > 0) {
+            setCurrencies(val.items as OrganizationCurrency[]);
+            try {
+              localStorage.setItem(
+                `riwaq_org_currencies_v2_${currentOrgId}`,
+                JSON.stringify(val.items)
+              );
+            } catch {
+              // ignore
+            }
+          }
+        }
+      },
+      () => {
+        // fallback to localStorage silently
+      }
+    );
+    return () => unsubCurr();
+  }, [currentOrgId, firebaseUser]);
+
+  const persistCurrencies = useCallback(
+    async (nextList: OrganizationCurrency[]) => {
+      setCurrencies(nextList);
+      try {
+        localStorage.setItem(
+          `riwaq_org_currencies_v2_${currentOrgId}`,
+          JSON.stringify(nextList)
+        );
+      } catch {
+        // ignore
+      }
+      if (!firebaseUser || !currentOrgId) return;
+      try {
+        await setDoc(
+          doc(db, 'organizations', currentOrgId, 'settings', 'currencies'),
+          {
+            items: nextList,
+            updatedAt: serverTimestamp(),
+            updatedBy: currentUser.fullName || 'مدير النظام',
+          },
+          { merge: true }
+        );
+      } catch (err) {
+        try {
+          handleFirestoreError(
+            err,
+            OperationType.WRITE,
+            `organizations/${currentOrgId}/settings/currencies`
+          );
+        } catch {
+          // handled
+        }
+      }
+    },
+    [currentOrgId, currentUser.fullName, firebaseUser]
+  );
+
+  const baseCurrency = useMemo<OrganizationCurrency>(() => {
+    return (
+      currencies.find((c) => c.isPrimary) ??
+      currencies[0] ?? {
+        code: 'SAR',
+        name: 'ريال سعودي',
+        symbol: 'ر.س',
+        symbolPosition: 'suffix',
+        decimals: 2,
+        rateMode: 'fixed',
+        rateToBase: 1,
+        isPrimary: true,
+        isActive: true,
+        updatedAt: '2026-11-18 09:00',
+      }
+    );
+  }, [currencies]);
+
+  const addOrganizationCurrency = useCallback(
+    async (input: Omit<OrganizationCurrency, 'updatedAt' | 'isPrimary'>) => {
+      const cleanCode = input.code.trim().toUpperCase();
+      if (!cleanCode) return;
+      const nowStamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+      const newCurr: OrganizationCurrency = {
+        ...input,
+        code: cleanCode,
+        rateToBase: Math.max(0.0001, Number(input.rateToBase) || 1),
+        isPrimary: false,
+        updatedAt: nowStamp,
+      };
+      const exists = currencies.some((c) => c.code.toUpperCase() === cleanCode);
+      const nextList = exists
+        ? currencies.map((c) => (c.code.toUpperCase() === cleanCode ? newCurr : c))
+        : [...currencies, newCurr];
+      await persistCurrencies(nextList);
+    },
+    [currencies, persistCurrencies]
+  );
+
+  const updateOrganizationCurrency = useCallback(
+    async (code: string, patch: Partial<OrganizationCurrency>) => {
+      const cleanCode = code.trim().toUpperCase();
+      const nowStamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+      const nextList = currencies.map((c) => {
+        if (c.code.toUpperCase() !== cleanCode) return c;
+        return {
+          ...c,
+          ...patch,
+          rateToBase: c.isPrimary
+            ? 1.0
+            : patch.rateToBase !== undefined
+              ? Math.max(0.0001, Number(patch.rateToBase) || c.rateToBase)
+              : c.rateToBase,
+          updatedAt: nowStamp,
+        };
+      });
+      await persistCurrencies(nextList);
+    },
+    [currencies, persistCurrencies]
+  );
+
+  const deleteOrganizationCurrency = useCallback(
+    async (code: string) => {
+      const cleanCode = code.trim().toUpperCase();
+      const target = currencies.find((c) => c.code.toUpperCase() === cleanCode);
+      if (!target || target.isPrimary) return;
+      const nextList = currencies.filter((c) => c.code.toUpperCase() !== cleanCode);
+      await persistCurrencies(nextList);
+    },
+    [currencies, persistCurrencies]
+  );
+
+  const setOrganizationBaseCurrency = useCallback(
+    async (code: string) => {
+      const cleanCode = code.trim().toUpperCase();
+      const newBase = currencies.find((c) => c.code.toUpperCase() === cleanCode);
+      if (!newBase) return;
+      const pivotRate = Math.max(0.0001, newBase.rateToBase || 1);
+      const nowStamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+
+      const nextList = currencies.map((c) => {
+        if (c.code.toUpperCase() === cleanCode) {
+          return {
+            ...c,
+            isPrimary: true,
+            isActive: true,
+            rateToBase: 1.0,
+            rateMode: 'fixed' as const,
+            updatedAt: nowStamp,
+          };
+        }
+        const recalculatedRate = Math.round((c.rateToBase / pivotRate) * 10000) / 10000;
+        return {
+          ...c,
+          isPrimary: false,
+          rateToBase: Math.max(0.0001, recalculatedRate),
+          updatedAt: nowStamp,
+        };
+      });
+      await persistCurrencies(nextList);
+    },
+    [currencies, persistCurrencies]
+  );
+
+  const syncLiveCurrencyRates = useCallback(async (): Promise<{
+    updatedCount: number;
+    source: string;
+  }> => {
+    const nowStamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+    const baseCode = baseCurrency.code.toUpperCase();
+
+    // Reference market rates in SAR (1 unit of currency = X SAR)
+    const fallbackSarReference: Record<string, number> = {
+      SAR: 1.0,
+      USD: 3.75,
+      AED: 1.0211,
+      EUR: 4.092,
+      GBP: 4.778,
+      KWD: 12.225,
+      BHD: 9.947,
+      OMR: 9.74,
+      QAR: 1.03,
+      EGP: 0.0762,
+      TRY: 0.109,
+      CHF: 4.265,
+      CNY: 0.519,
+    };
+
+    let apiRatesPerBase: Record<string, number> | null = null;
+    let sourceLabel = 'مزود أسعار الصرف الفورية (FX Market Feed)';
+
+    try {
+      const resp = await fetch(`https://open.er-api.com/v6/latest/${baseCode}`);
+      if (resp.ok) {
+        const json = (await resp.json()) as { rates?: Record<string, number> };
+        if (json.rates) {
+          apiRatesPerBase = json.rates;
+          sourceLabel = `مؤشر أسعار الصرف العالمية الحية (Open Exchange Rates — ${baseCode})`;
+        }
+      }
+    } catch {
+      // use deterministic market feed fallback
+    }
+
+    let updatedCount = 0;
+    const baseInSar = fallbackSarReference[baseCode] || 1.0;
+
+    const nextList = currencies.map((c) => {
+      if (c.isPrimary) {
+        return { ...c, rateToBase: 1.0, updatedAt: nowStamp };
+      }
+      if (c.rateMode !== 'live') {
+        return c;
+      }
+
+      updatedCount += 1;
+      const code = c.code.toUpperCase();
+      let nextRate = c.rateToBase;
+
+      if (apiRatesPerBase && apiRatesPerBase[code] && apiRatesPerBase[code] > 0) {
+        // apiRatesPerBase[code] = how many units of `code` equal 1 unit of `baseCode`
+        // Therefore 1 unit of `code` = (1 / apiRatesPerBase[code]) units of `baseCode`
+        nextRate = Math.round((1 / apiRatesPerBase[code]) * 10000) / 10000;
+      } else if (fallbackSarReference[code]) {
+        const jitter = 1 + ((Date.now() % 7) - 3) * 0.0008;
+        nextRate =
+          Math.round(((fallbackSarReference[code] * jitter) / baseInSar) * 10000) / 10000;
+      } else {
+        const jitter = 1 + ((Date.now() % 5) - 2) * 0.0012;
+        nextRate = Math.round(c.rateToBase * jitter * 10000) / 10000;
+      }
+
+      if (c.liveSpreadPercent && c.liveSpreadPercent > 0) {
+        nextRate = Math.round(nextRate * (1 + c.liveSpreadPercent / 100) * 10000) / 10000;
+      }
+
+      return {
+        ...c,
+        rateToBase: Math.max(0.0001, nextRate),
+        updatedAt: nowStamp,
+      };
+    });
+
+    await persistCurrencies(nextList);
+    return { updatedCount, source: sourceLabel };
+  }, [baseCurrency.code, currencies, persistCurrencies]);
+
+  const formatOrgCurrency = useCallback(
+    (amount: number, currencyCode?: string) => {
+      return formatCurrencyByConfig(amount, currencyCode, currencies, baseCurrency);
+    },
+    [baseCurrency, currencies]
+  );
+
+  const convertToBaseCurrency = useCallback(
+    (amount: number, fromCurrencyCode?: string, explicitRate?: number) => {
+      return convertAmountBetweenCurrencies(
+        amount,
+        fromCurrencyCode || baseCurrency.code,
+        baseCurrency.code,
+        currencies,
+        explicitRate
+      );
+    },
+    [baseCurrency.code, currencies]
+  );
+
+  useEffect(() => {
+    if (!firebaseUser || !currentOrgId) return;
+    const ref = doc(db, 'organizations', currentOrgId, 'settings', 'quick_replies');
+    const unsub = onSnapshot(
+      ref,
+      (snap) => {
+        if (snap.exists()) {
+          const val = snap.data();
+          if (Array.isArray(val.templates) && val.templates.length > 0) {
+            setQuickReplies(val.templates as QuickReplyTemplate[]);
+          }
+        }
+      },
+      (err) => {
+        handleFirestoreError(
+          err,
+          OperationType.GET,
+          `organizations/${currentOrgId}/settings/quick_replies`
+        );
+      }
+    );
+    return () => unsub();
+  }, [currentOrgId, firebaseUser]);
 
   const organizationsList = useMemo(() => {
     if (data.organizations && data.organizations.length > 0) {
@@ -278,22 +818,8 @@ export function SetupProvider({ children }: { children: React.ReactNode }) {
         profileId: `${orgId}_prof_admin`,
         roleId: `${orgId}_role_ceo`,
       }));
-      setSignals((prev) => [
-        {
-          id: `sig_org_${Date.now()}`,
-          title: `تم التبديل إلى بيئة المؤسسة: ${
-            organizationsList.find((o) => o.org_id === orgId || o.id === orgId)?.name ?? orgId
-          }`,
-          description: `عزل البيانات التام (Tenant Isolation: ${orgId}) مفعل لجميع الوحدات`,
-          category: 'system',
-          timeLabel: 'الآن',
-          unread: true,
-          route: '/settings/subscription',
-        },
-        ...prev,
-      ]);
     },
-    [organizationsList, setCurrentOrgId, setCurrentUser, setSignals]
+    [setCurrentOrgId, setCurrentUser]
   );
 
   const provisionNewOrganization = useCallback(
@@ -319,6 +845,20 @@ export function SetupProvider({ children }: { children: React.ReactNode }) {
         deals: [...provisioned.deals, ...prev.deals],
       }));
 
+      const initialOrgAdmin = {
+        ...currentUser,
+        id: `${newOrgId}_usr_1`,
+        org_id: newOrgId,
+        profileId: provisioned.profiles[0].id,
+        roleId: provisioned.roles[0].id,
+        status: 'active' as const,
+      };
+
+      setUsers((prev) => [
+        ...prev.filter((u) => u.org_id !== newOrgId),
+        initialOrgAdmin,
+      ]);
+
       setCurrentOrgId(newOrgId);
       setCurrentUser((prev) => ({
         ...prev,
@@ -326,19 +866,6 @@ export function SetupProvider({ children }: { children: React.ReactNode }) {
         profileId: provisioned.profiles[0].id,
         roleId: provisioned.roles[0].id,
       }));
-
-      setSignals((prev) => [
-        {
-          id: `sig_prov_${Date.now()}`,
-          title: `تم إنشاء وتهيئة مؤسسة جديدة: ${cleanName}`,
-          description: `تم توليد الحقول المخصصة، ملفات الصلاحيات، شجرة الأدوار، والبلوبرينت تلقائياً (${newOrgId})`,
-          category: 'system',
-          timeLabel: 'الآن',
-          unread: true,
-          route: '/settings/subscription',
-        },
-        ...prev,
-      ]);
 
       if (firebaseUser) {
         try {
@@ -380,7 +907,7 @@ export function SetupProvider({ children }: { children: React.ReactNode }) {
 
       return provisioned.organization;
     },
-    [firebaseUser, setCurrentOrgId, setCurrentUser, setData, setSignals]
+    [currentUser, firebaseUser, setCurrentOrgId, setCurrentUser, setData, setUsers]
   );
 
   const updateOrganizationSubscription = useCallback(
@@ -1524,6 +2051,7 @@ export function SetupProvider({ children }: { children: React.ReactNode }) {
       roles: orgScopedRoles.length > 0 ? orgScopedRoles : data.roles,
       customFields: scopedCustomFields,
       blueprints: scopedBlueprints,
+      quickReplies,
       workflows: scopedWorkflows,
       recycleBin: scopedRecycleBin,
       metaConnections: scopedMetaConnections,
@@ -1549,6 +2077,15 @@ export function SetupProvider({ children }: { children: React.ReactNode }) {
       simulateMetaWebhookEvent,
       retryMetaWebhookLog,
       dispatchMetaCapiEvent,
+      currencies,
+      baseCurrency,
+      addOrganizationCurrency,
+      updateOrganizationCurrency,
+      deleteOrganizationCurrency,
+      setOrganizationBaseCurrency,
+      syncLiveCurrencyRates,
+      formatOrgCurrency,
+      convertToBaseCurrency,
     }),
     [
       organizationsList,
@@ -1568,6 +2105,7 @@ export function SetupProvider({ children }: { children: React.ReactNode }) {
       data.roles,
       scopedCustomFields,
       scopedBlueprints,
+      quickReplies,
       scopedWorkflows,
       scopedRecycleBin,
       scopedMetaConnections,
@@ -1593,6 +2131,15 @@ export function SetupProvider({ children }: { children: React.ReactNode }) {
       simulateMetaWebhookEvent,
       retryMetaWebhookLog,
       dispatchMetaCapiEvent,
+      currencies,
+      baseCurrency,
+      addOrganizationCurrency,
+      updateOrganizationCurrency,
+      deleteOrganizationCurrency,
+      setOrganizationBaseCurrency,
+      syncLiveCurrencyRates,
+      formatOrgCurrency,
+      convertToBaseCurrency,
     ]
   );
 

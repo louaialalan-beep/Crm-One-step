@@ -21,6 +21,9 @@ import {
   STANDARD_REPORTS,
 } from '../../lib/reports/standard-reports-seed';
 import { executeReport } from '../../lib/reports/query-engine';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { db } from '../../firebase';
+import { useCrm } from '../../context/CrmContext';
 import { ReportsHome } from './ReportsHome';
 import { ReportWizard } from './ReportWizard';
 import { ReportViewer, PinnedDashboardWidgetConfig } from './ReportViewer';
@@ -1133,6 +1136,50 @@ function buildEnterpriseDataset(): Record<ModuleName, any[]> {
 
 export const ReportsModulePage: React.FC = () => {
   const navigate = useNavigate();
+  const {
+    firebaseUser,
+    isPreviewMode,
+    currentUser,
+    syncStatus,
+    currentOrgId,
+    currentOrganization,
+    leads: orgLeads,
+    contacts: orgContacts,
+    accounts: orgAccounts,
+    deals: orgDeals,
+    quotes: orgQuotes,
+    salesOrders: orgSalesOrders,
+    invoices: orgInvoices,
+    tasks: orgTasks,
+    touchpoints: orgTouchpoints,
+    messages: orgMessages,
+    stageHistory: orgStageHistory,
+    orderAttributions: orgOrderAttributions,
+    campaigns: orgCampaigns,
+  } = useCrm();
+  const prefUid = firebaseUser?.uid || currentUser?.uid;
+
+  useEffect(() => {
+    if (!prefUid || !firebaseUser || isPreviewMode || syncStatus === 'preview') return;
+    const pinnedRef = doc(db, 'users', prefUid, 'preferences', 'pinned_reports');
+    const unsub = onSnapshot(
+      pinnedRef,
+      (snap) => {
+        if (snap.exists()) {
+          const pinned = snap.data()?.pinnedReports;
+          if (Array.isArray(pinned)) {
+            try {
+              localStorage.setItem(STORAGE_KEYS.PINNED, JSON.stringify(pinned));
+            } catch {
+              // ignore
+            }
+          }
+        }
+      },
+      () => {}
+    );
+    return () => unsub();
+  }, [prefUid, firebaseUser, isPreviewMode, syncStatus]);
 
   const [reports, setReports] = useState<ReportDefinition[]>(() => {
     try {
@@ -1236,7 +1283,249 @@ export const ReportsModulePage: React.FC = () => {
     setTimeout(() => setToastBanner(null), 4000);
   };
 
-  const dataset = useMemo(() => buildEnterpriseDataset(), []);
+  const dataset = useMemo<EnterpriseDataset>(() => {
+    const liveLeads = orgLeads.map((l) => ({
+      id: l.id,
+      leadUniqueId: l.leadUniqueId,
+      fullName: l.fullName,
+      company: l.company,
+      source: l.source,
+      status: l.status,
+      leadScore: l.leadScore,
+      estimatedValueSAR: l.estimatedValue,
+      responseMinutes: 2.0,
+      ownerId: 'usr-1',
+      ownerName: l.ownerName,
+      createdAt: l.createdAt || new Date().toISOString().slice(0, 10),
+    }));
+
+    const liveContacts = orgContacts.map((c) => ({
+      id: c.id,
+      leadUniqueId: c.leadUniqueId || c.id,
+      fullName: c.fullName,
+      accountName: c.accountName,
+      channel: c.channel,
+      totalOrdersCount: c.repeatOrderCount || 1,
+      lifetimeValueSAR: c.lifetimeRevenue || 0,
+      primarySource: c.primarySource || 'مباشر',
+      lastOrderSource: c.lastTouchSource || c.primarySource || 'مباشر',
+      ownerId: 'usr-1',
+      ownerName: c.ownerName,
+    }));
+
+    const liveAccounts = orgAccounts.map((a) => ({
+      id: a.id,
+      name: a.name,
+      industry: a.industry,
+      city: a.city,
+      tier: a.tier,
+      annualRevenueSAR: a.annualRevenue,
+      openDealsCount: orgDeals.filter((d) => d.accountName === a.name).length,
+      ownerId: 'usr-1',
+      ownerName: a.ownerName,
+    }));
+
+    const liveDeals = orgDeals.map((d) => ({
+      id: d.id,
+      leadUniqueId: d.leadUniqueId || d.id,
+      title: d.title,
+      accountId: d.accountId,
+      accountName: d.accountName,
+      contactId: d.contactId,
+      stage:
+        d.stage === 'مكتملة'
+          ? 'مغلقة - فوز (Closed Won)'
+          : d.stage === 'خسارة'
+          ? 'مغلقة - خسارة (Closed Lost)'
+          : d.stage,
+      amountSAR: d.amount,
+      expectedRevenueSAR: Math.round((d.amount * (d.probability || 0)) / 100),
+      probability: d.probability,
+      lossReason: d.stage === 'خسارة' ? d.nextStep || 'سبب مسجل في البلوبرينت' : '—',
+      closeDate: d.closeDate,
+      cycleDays: 14,
+      ownerId: 'usr-1',
+      ownerName: d.ownerName,
+    }));
+
+    const liveQuotes = orgQuotes.map((q) => ({
+      id: q.id,
+      quoteNumber: q.quoteNumber,
+      leadUniqueId: q.leadUniqueId || q.dealId,
+      subject: q.subject,
+      accountName: q.accountName,
+      status: q.status,
+      totalAmountSAR: q.totalAmount,
+      validUntil: q.validUntil,
+      ownerId: 'usr-1',
+      ownerName: q.ownerName || 'طارق العتيبي',
+    }));
+
+    const liveSalesOrders = orgSalesOrders.map((so) => ({
+      id: so.id,
+      orderNumber: so.orderNumber,
+      quoteId: so.quoteId,
+      leadUniqueId: so.leadUniqueId || so.dealId || so.id,
+      accountName: so.accountName,
+      status: so.status,
+      totalAmountSAR: so.totalAmount,
+      deliveryDate: so.deliveryDate,
+      ownerId: 'usr-1',
+      ownerName: so.ownerName || 'طارق العتيبي',
+    }));
+
+    const liveInvoices = orgInvoices.map((inv) => ({
+      id: inv.id,
+      invoiceNumber: inv.invoiceNumber,
+      leadUniqueId: inv.leadUniqueId || inv.orderId || inv.id,
+      accountName: inv.accountName,
+      status: inv.status,
+      amountSAR: inv.subtotalAmount,
+      vatSAR: inv.vatAmount,
+      totalWithVatSAR: inv.totalWithVat,
+      daysOverdue: inv.status === 'متأخرة' ? 12 : 0,
+      dueDate: inv.dueDate,
+      ownerId: 'usr-1',
+      ownerName: inv.ownerName || 'طارق العتيبي',
+    }));
+
+    const liveTasks = orgTasks.map((t) => ({
+      id: t.id,
+      leadUniqueId: t.leadUniqueId || t.id,
+      title: t.title,
+      relatedTo: t.relatedTo,
+      priority: t.priority,
+      status: t.status,
+      dueDate: t.dueDate,
+      assignedToName: t.assignedToName,
+      ownerId: 'usr-1',
+      ownerName: t.assignedToName,
+    }));
+
+    const liveTouchpoints = orgTouchpoints.map((tp, idx) => ({
+      id: tp.id,
+      leadUniqueId: tp.leadUniqueId || tp.relatedEntityId,
+      touchOrder: idx + 1,
+      touchRole: idx === 0 ? 'First Touch (أول تفاعل)' : 'Follow-up Touch',
+      channel: tp.channel,
+      campaignName: tp.campaign || 'مباشر',
+      eventType: tp.eventType || tp.channel,
+      summary: tp.summary,
+      attributedRevenueSAR: 0,
+      occurredAt: tp.timestamp,
+      ownerId: 'usr-1',
+      ownerName: currentUser?.fullName || 'طارق العتيبي',
+    }));
+
+    const liveCampaigns = orgCampaigns
+      .filter((c) => !c.org_id || c.org_id === currentOrgId)
+      .map((c) => ({
+        id: c.id,
+        campaignName: c.name,
+        platform: c.channel,
+        spendSAR: c.spendSAR,
+        leadsGenerated: c.leadsGenerated,
+        wonDealsCount: c.dealsWon,
+        revenueSAR: c.revenueAttributed,
+        roas: c.roas,
+        cplSAR: c.leadsGenerated > 0 ? Math.round(c.spendSAR / c.leadsGenerated) : 0,
+        ownerId: 'usr-1',
+        ownerName: currentUser?.fullName || 'طارق العتيبي',
+      }));
+
+    const liveMessages = orgMessages.map((m) => ({
+      id: m.id,
+      leadUniqueId: m.leadUniqueId || m.id,
+      senderName: m.senderName,
+      channel: m.channel,
+      status: m.unread ? 'غير مقروءة' : 'تمت القراءة والرد (Replied)',
+      responseTimeMinutes: 1.5,
+      within24hWindow: true,
+      assignedAgent: currentUser?.fullName || 'طارق العتيبي',
+      ownerId: 'usr-1',
+      ownerName: currentUser?.fullName || 'طارق العتيبي',
+      sentAt: m.timestampLabel,
+    }));
+
+    const liveStageHistory = orgStageHistory.map((sh) => ({
+      id: sh.id,
+      dealId: sh.dealId,
+      leadUniqueId: sh.leadUniqueId || sh.dealId,
+      dealTitle: sh.dealTitle,
+      fromStage: sh.fromStage,
+      toStage: sh.toStage,
+      durationDays: sh.durationDays,
+      changedBy: sh.changedBy,
+      ownerId: 'usr-1',
+      ownerName: sh.changedBy,
+      changedAt: sh.changedAt,
+    }));
+
+    const liveOrderAttributions = orgOrderAttributions.map((oa) => ({
+      id: oa.id,
+      orderCode: oa.orderNumber,
+      orderSequence: oa.orderIndex,
+      leadUniqueId: oa.leadUniqueId,
+      customerName: oa.contactName,
+      accountName: oa.accountName,
+      acquisitionChannel: oa.touchChannel,
+      campaignName: oa.campaign,
+      touchpointType: oa.touchLabel,
+      orderAmountSAR: oa.amount,
+      vatAmountSAR: Math.round(oa.amount * 0.15),
+      orderDate: oa.orderedAt,
+      ownerId: 'usr-1',
+      ownerName: currentUser?.fullName || 'طارق العتيبي',
+    }));
+
+    if (currentOrgId !== 'org_riwaq_main') {
+      return {
+        leads: liveLeads,
+        contacts: liveContacts,
+        accounts: liveAccounts,
+        deals: liveDeals,
+        touchpoints: liveTouchpoints,
+        campaigns: liveCampaigns,
+        quotes: liveQuotes,
+        sales_orders: liveSalesOrders,
+        invoices: liveInvoices,
+        tasks: liveTasks,
+        calls: [],
+        whatsapp_messages: liveMessages,
+        stage_history: liveStageHistory,
+        order_attributions: liveOrderAttributions,
+      };
+    }
+
+    const base = buildEnterpriseDataset();
+    return {
+      ...base,
+      leads: liveLeads.length > 0 ? liveLeads : base.leads,
+      contacts: liveContacts.length > 0 ? liveContacts : base.contacts,
+      accounts: liveAccounts.length > 0 ? liveAccounts : base.accounts,
+      deals: liveDeals.length > 0 ? liveDeals : base.deals,
+      quotes: liveQuotes.length > 0 ? liveQuotes : base.quotes,
+      sales_orders: liveSalesOrders.length > 0 ? liveSalesOrders : base.sales_orders,
+      invoices: liveInvoices.length > 0 ? liveInvoices : base.invoices,
+      tasks: liveTasks.length > 0 ? liveTasks : base.tasks,
+    };
+  }, [
+    currentOrgId,
+    currentUser?.fullName,
+    orgAccounts,
+    orgCampaigns,
+    orgContacts,
+    orgDeals,
+    orgInvoices,
+    orgLeads,
+    orgMessages,
+    orgOrderAttributions,
+    orgQuotes,
+    orgSalesOrders,
+    orgStageHistory,
+    orgTasks,
+    orgTouchpoints,
+  ]);
 
   const activeReport = useMemo(
     () => reports.find((r) => r.id === activeReportId) || null,
@@ -1327,6 +1616,13 @@ export const ReportsModulePage: React.FC = () => {
         ...existing.filter((w) => w.reportId !== widget.reportId),
       ];
       localStorage.setItem(STORAGE_KEYS.PINNED, JSON.stringify(updated));
+      if (prefUid && firebaseUser && !isPreviewMode && syncStatus !== 'preview') {
+        setDoc(
+          doc(db, 'users', prefUid, 'preferences', 'pinned_reports'),
+          { pinnedReports: updated, updatedAt: new Date().toISOString() },
+          { merge: true }
+        ).catch(() => {});
+      }
     } catch {
       // ignore
     }
@@ -1430,8 +1726,10 @@ export const ReportsModulePage: React.FC = () => {
         <div className="flex items-center gap-2.5">
           <div className="hidden xl:flex items-center gap-1.5 text-[11px] font-bold text-[#64748B] bg-[#F8FAFC] px-2.5 py-1 rounded-md border border-[#E2E8F0]">
             <Database className="w-3.5 h-3.5 text-[#2563EB]" />
-            <span>بيانات العميل المرجعي:</span>
-            <span className="text-[#0F172A] font-mono">RWQ-10482 (10 طلبات متكررة)</span>
+            <span>نطاق البيانات النشط:</span>
+            <span className="text-[#0F172A] font-bold">
+              {currentOrganization.name} ({orgDeals.length} صفقة • {orgLeads.length} عميل محتمل)
+            </span>
           </div>
 
           <div className="flex items-center gap-2 bg-[#F8FAFC] border border-[#CBD5E1] rounded-lg px-2.5 py-1">

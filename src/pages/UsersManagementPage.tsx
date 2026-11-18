@@ -37,6 +37,8 @@ import {
   X,
 } from 'lucide-react';
 import { useCrm } from '../context/CrmContext';
+import { DEFAULT_ORG_ID } from '../data/seedData';
+import type { CrmUser, Deal } from '../types/crm';
 
 type DepartmentFilter = 'all' | 'sales' | 'support' | 'managers' | 'inactive';
 type StatusSubFilter = 'all' | 'active' | 'break' | 'suspended';
@@ -50,6 +52,7 @@ interface TerritoryItem {
 
 interface EmployeeRecord {
   id: string;
+  org_id?: string;
   empCode: string;
   fullName: string;
   initials: string;
@@ -386,16 +389,179 @@ const AVAILABLE_TERRITORIES = [
   'قطاع الخليج العربي والأسواق الإقليمية (قراءة فقط)',
 ];
 
+function buildEmployeeFromCrmUser(
+  user: CrmUser,
+  orgId: string,
+  orgName: string,
+  orgDeals: Deal[],
+  index: number
+): EmployeeRecord {
+  const parts = (user.fullName || 'مدير النظام').trim().split(/\s+/);
+  const initials =
+    parts.length >= 2
+      ? `${parts[0][0]}.${parts[parts.length - 1][0]}`
+      : (user.fullName || 'م').slice(0, 2);
+
+  const userDeals = orgDeals.filter(
+    (d) => d.ownerName === user.fullName || d.ownerId === user.uid
+  );
+  const totalDealsVal = userDeals.reduce((sum, d) => sum + (d.amount || 0), 0);
+  const isAdmin =
+    user.profileId.includes('admin') ||
+    user.roleId.includes('ceo') ||
+    user.roleId.includes('exec');
+
+  return {
+    id: user.id || `${orgId}_emp_${index + 1}`,
+    org_id: orgId,
+    empCode: `EMP-${1001 + index}`,
+    fullName: user.fullName || 'مدير النظام',
+    initials,
+    email: user.email || 'admin@riwaq.sa',
+    phone: '+966 50 111 2233',
+    jobTitle: user.jobTitle || (isAdmin ? 'مدير النظام التنفيذي' : 'أخصائي مبيعات'),
+    departmentLine: `${user.department || 'الإدارة التنفيذية'} — ${orgName}`,
+    departmentCategory: isAdmin ? 'managers' : 'sales',
+    shiftStatus: user.status === 'inactive' ? 'suspended' : 'active',
+    shiftBadgeShort: user.status === 'inactive' ? 'معلق' : 'دوام',
+    shiftBadgeFull:
+      user.status === 'inactive'
+        ? 'حساب مجمد أمنياً'
+        : 'في الدوام الآن (وردية الرياض)',
+    avatarBg: 'bg-[#004AC6]',
+    avatarText: 'text-white',
+    dotColor: user.status === 'inactive' ? 'bg-[#EF4444]' : 'bg-[#10B981]',
+    profileTag: isAdmin ? 'مدير النظام العام' : 'مبيعات متقدمة',
+    roleTag: isAdmin ? 'الرئيس التنفيذي (CEO)' : 'مندوب مبيعات',
+    metricSummary: `${userDeals.length} صفقة نشطة • ${totalDealsVal.toLocaleString('en-US')} ر.س`,
+    profileValue: isAdmin
+      ? 'مدير النظام العام (Super Admin)'
+      : 'مبيعات متقدمة (Standard Sales)',
+    roleValue: isAdmin ? 'مدير المبيعات التنفيذي' : 'مدير حسابات إقليمي',
+    roleHierarchyPath: `${orgName} > الإدارة العامة`,
+    reportingToValue: `${user.fullName} (الإدارة التنفيذية)`,
+    territories: [
+      {
+        id: `ter_${orgId}_1`,
+        label: 'منطقة الرياض الكبرى (قراءة وتعديل كامل)',
+        accessType: 'full',
+      },
+    ],
+    collaborationGroups: [
+      {
+        id: `grp_${orgId}_1`,
+        label: `فريق ${orgName} الأساسي`,
+        dotColor: 'bg-[#2563EB]',
+      },
+    ],
+    shiftHoursLabel:
+      'الوردية الصباحية المعتمدة: 9:00 ص - 5:00 م (توقيت الرياض GMT+3) | الأحد - الخميس',
+    meetingSlug: `riwaq.sa/meet/${(user.email || 'admin').split('@')[0]}`,
+    stopRoundRobinOutsideHours: true,
+    desktopSignals: true,
+    whatsappSignals: true,
+    lastLoginLabel: 'متصل الآن — جلسة نشطة',
+    auditLogs: [
+      {
+        id: `aud_${orgId}_1`,
+        action: `تفعيل حساب وصلاحيات المؤسسة (${orgName})`,
+        actor: user.fullName || 'مدير النظام',
+        timestamp: 'الآن',
+        ip: '198.51.100.10',
+        severity: 'info',
+      },
+    ],
+  };
+}
+
+function loadOrgEmployees(
+  orgId: string,
+  orgName: string,
+  orgUsers: CrmUser[],
+  currentUser: CrmUser,
+  orgDeals: Deal[]
+): EmployeeRecord[] {
+  try {
+    const raw = localStorage.getItem(`riwaq_org_employees_v1_${orgId}`);
+    if (raw) {
+      const parsed = JSON.parse(raw) as EmployeeRecord[];
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map((e) => ({ ...e, org_id: orgId }));
+      }
+    }
+  } catch {
+    // ignore storage errors
+  }
+
+  if (orgId === DEFAULT_ORG_ID) {
+    return INITIAL_EMPLOYEES.map((e) => ({ ...e, org_id: DEFAULT_ORG_ID }));
+  }
+
+  const scopedUsers = orgUsers.filter((u) => u.org_id === orgId);
+  const sourceUsers =
+    scopedUsers.length > 0
+      ? scopedUsers
+      : [{ ...currentUser, org_id: orgId }];
+
+  return sourceUsers.map((u, idx) =>
+    buildEmployeeFromCrmUser(u, orgId, orgName, orgDeals, idx)
+  );
+}
+
 export function UsersManagementPage() {
   const navigate = useNavigate();
-  const { profiles, roles, currentOrganization, updateOrganizationSubscription } = useCrm();
+  const {
+    profiles,
+    roles,
+    users,
+    setUsers,
+    currentUser,
+    deals,
+    currentOrgId,
+    currentOrganization,
+    updateOrganizationSubscription,
+  } = useCrm();
 
-  const [employees, setEmployees] = useState<EmployeeRecord[]>(INITIAL_EMPLOYEES);
-  const [selectedEmpId, setSelectedEmpId] = useState<string>('emp_sara');
+  const [employees, setEmployees] = useState<EmployeeRecord[]>(() =>
+    loadOrgEmployees(
+      currentOrgId,
+      currentOrganization.name,
+      users,
+      currentUser,
+      deals
+    )
+  );
+  const [selectedEmpId, setSelectedEmpId] = useState<string>('');
   const [departmentFilter, setDepartmentFilter] = useState<DepartmentFilter>('all');
   const [statusFilter, setStatusFilter] = useState<StatusSubFilter>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeSubTab, setActiveSubTab] = useState<DetailSubTab>('governance');
+
+  useEffect(() => {
+    const nextList = loadOrgEmployees(
+      currentOrgId,
+      currentOrganization.name,
+      users,
+      currentUser,
+      deals
+    );
+    setEmployees(nextList);
+    if (nextList.length > 0) {
+      setSelectedEmpId(nextList[0].id);
+    }
+  }, [currentOrgId, currentOrganization.name]);
+
+  const persistOrgEmployees = (nextList: EmployeeRecord[]) => {
+    setEmployees(nextList);
+    try {
+      localStorage.setItem(
+        `riwaq_org_employees_v1_${currentOrgId}`,
+        JSON.stringify(nextList)
+      );
+    } catch {
+      // ignore
+    }
+  };
 
   // Interactive modals & feedback states
   const [showInviteModal, setShowInviteModal] = useState<boolean>(false);
@@ -405,11 +571,18 @@ export function UsersManagementPage() {
   const [copiedSlug, setCopiedSlug] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const isAtSeatLimit =
-    currentOrganization.active_users_count >= currentOrganization.seats_limit;
+  const activeEmployeesCount = useMemo(
+    () =>
+      employees.filter(
+        (e) => e.shiftStatus !== 'suspended' && e.shiftStatus !== 'off'
+      ).length,
+    [employees]
+  );
+
+  const isAtSeatLimit = activeEmployeesCount >= currentOrganization.seats_limit;
   const availableSeatsCount = Math.max(
     0,
-    currentOrganization.seats_limit - currentOrganization.active_users_count
+    currentOrganization.seats_limit - activeEmployeesCount
   );
 
   // Invite form state
@@ -457,9 +630,10 @@ export function UsersManagementPage() {
   }, [employees, departmentFilter, statusFilter, searchQuery]);
 
   const updateSelectedEmployee = (patch: Partial<EmployeeRecord>) => {
-    setEmployees((prev) =>
-      prev.map((emp) => (emp.id === selectedEmployee.id ? { ...emp, ...patch } : emp))
+    const nextList = employees.map((emp) =>
+      emp.id === selectedEmployee.id ? { ...emp, ...patch } : emp
     );
+    persistOrgEmployees(nextList);
   };
 
   const handleSavePermissions = () => {
@@ -533,7 +707,7 @@ export function UsersManagementPage() {
     e.preventDefault();
     if (!inviteFullName.trim() || !inviteEmail.trim()) return;
 
-    if (currentOrganization.active_users_count >= currentOrganization.seats_limit) {
+    if (activeEmployeesCount >= currentOrganization.seats_limit) {
       setShowInviteModal(false);
       setShowSeatLimitModal(true);
       return;
@@ -543,15 +717,17 @@ export function UsersManagementPage() {
     const initials =
       parts.length >= 2 ? `${parts[0][0]}.${parts[1][0]}` : `${inviteFullName.trim().slice(0, 2)}`;
 
+    const newEmpId = `emp_${Date.now()}`;
     const newEmp: EmployeeRecord = {
-      id: `emp_${Date.now()}`,
+      id: newEmpId,
+      org_id: currentOrgId,
       empCode: `EMP-${Math.floor(8955 + Math.random() * 900)}`,
       fullName: inviteFullName.trim(),
       initials,
       email: inviteEmail.trim(),
       phone: invitePhone.trim() || '+966 50 000 0000',
       jobTitle: inviteJobTitle.trim(),
-      departmentLine: 'إدارة مبيعات قطاع الشركات Enterprise',
+      departmentLine: `إدارة مبيعات قطاع الشركات — ${currentOrganization.name}`,
       departmentCategory: 'sales',
       shiftStatus: 'active',
       shiftBadgeShort: 'دوام',
@@ -564,7 +740,7 @@ export function UsersManagementPage() {
       metricSummary: 'مدعو حديثاً • 0 صفقة نشطة',
       profileValue: inviteProfile,
       roleValue: inviteRole,
-      roleHierarchyPath: 'القطاع التجاري > فرع المنطقة الوسطى > كبار العملاء',
+      roleHierarchyPath: `${currentOrganization.name} > فرع المنطقة الوسطى > كبار العملاء`,
       reportingToValue: inviteManager,
       territories: [
         {
@@ -574,7 +750,7 @@ export function UsersManagementPage() {
         },
       ],
       collaborationGroups: [
-        { id: 'grp_new_1', label: 'فريق مبيعات B2B المؤسسي (أساسي)', dotColor: 'bg-[#2563EB]' },
+        { id: 'grp_new_1', label: `فريق ${currentOrganization.name} (أساسي)`, dotColor: 'bg-[#2563EB]' },
       ],
       shiftHoursLabel: 'الوردية الصباحية المعتمدة: 9:00 ص - 5:00 م (توقيت الرياض GMT+3) | الأحد - الخميس',
       meetingSlug: `riwaq.sa/meet/${inviteEmail.split('@')[0] || 'member'}`,
@@ -586,7 +762,7 @@ export function UsersManagementPage() {
         {
           id: `aud_new_${Date.now()}`,
           action: 'إنشاء حساب موظف جديد وإرسال رابط التفعيل المشفر',
-          actor: 'طارق العتيبي (مدير مبيعات أول)',
+          actor: currentUser.fullName || 'مدير النظام',
           timestamp: 'الآن',
           ip: '198.51.100.24',
           severity: 'security',
@@ -594,10 +770,29 @@ export function UsersManagementPage() {
       ],
     };
 
-    setEmployees((prev) => [newEmp, ...prev]);
+    const nextList = [newEmp, ...employees];
+    persistOrgEmployees(nextList);
     setSelectedEmpId(newEmp.id);
+    setUsers((prev) => [
+      ...prev,
+      {
+        id: newEmpId,
+        uid: newEmpId,
+        org_id: currentOrgId,
+        fullName: newEmp.fullName,
+        email: newEmp.email,
+        jobTitle: newEmp.jobTitle,
+        profileId: profiles[0]?.id || 'prof_b2b_rep',
+        roleId: roles[0]?.id || 'role_account_rep',
+        department: 'مبيعات المؤسسات',
+        status: 'active',
+      },
+    ]);
+    const nextActiveCount = nextList.filter(
+      (emp) => emp.shiftStatus !== 'suspended' && emp.shiftStatus !== 'off'
+    ).length;
     void updateOrganizationSubscription({
-      active_users_count: currentOrganization.active_users_count + 1,
+      active_users_count: nextActiveCount,
     });
     setShowInviteModal(false);
     setInviteFullName('');
@@ -680,7 +875,7 @@ export function UsersManagementPage() {
                 }`}
               >
                 <span>
-                  {currentOrganization.active_users_count} موظف نشط •{' '}
+                  {activeEmployeesCount} موظف نشط •{' '}
                   {isAtSeatLimit
                     ? '0 تراخيص متاحة (الحد الأقصى)'
                     : `${availableSeatsCount} تراخيص متاحة`}
@@ -720,11 +915,23 @@ export function UsersManagementPage() {
         {/* Department Filter Pills Row */}
         <div className="mt-4 flex flex-wrap items-center gap-2">
           {[
-            { id: 'all' as const, label: 'الكل (24)' },
-            { id: 'sales' as const, label: 'المبيعات (12)' },
-            { id: 'support' as const, label: 'خدمة العملاء (6)' },
-            { id: 'managers' as const, label: 'المدراء (4)' },
-            { id: 'inactive' as const, label: 'غير نشط (2)' },
+            { id: 'all' as const, label: `الكل (${employees.length})` },
+            {
+              id: 'sales' as const,
+              label: `المبيعات (${employees.filter((e) => e.departmentCategory === 'sales').length})`,
+            },
+            {
+              id: 'support' as const,
+              label: `خدمة العملاء (${employees.filter((e) => e.departmentCategory === 'support').length})`,
+            },
+            {
+              id: 'managers' as const,
+              label: `المدراء (${employees.filter((e) => e.departmentCategory === 'managers').length})`,
+            },
+            {
+              id: 'inactive' as const,
+              label: `غير نشط (${employees.filter((e) => e.departmentCategory === 'inactive' || e.shiftStatus === 'suspended' || e.shiftStatus === 'off').length})`,
+            },
           ].map((tab) => {
             const active = departmentFilter === tab.id;
             return (
@@ -765,10 +972,19 @@ export function UsersManagementPage() {
 
               <div className="mt-3 grid grid-cols-4 gap-1.5">
                 {[
-                  { id: 'all' as const, label: 'الكل (24)' },
-                  { id: 'active' as const, label: 'نشط (18)' },
-                  { id: 'break' as const, label: 'استراحة ...' },
-                  { id: 'suspended' as const, label: 'معلق (2)' },
+                  { id: 'all' as const, label: `الكل (${employees.length})` },
+                  {
+                    id: 'active' as const,
+                    label: `نشط (${employees.filter((e) => e.shiftStatus === 'active').length})`,
+                  },
+                  {
+                    id: 'break' as const,
+                    label: `استراحة (${employees.filter((e) => e.shiftStatus === 'break').length})`,
+                  },
+                  {
+                    id: 'suspended' as const,
+                    label: `معلق (${employees.filter((e) => e.shiftStatus === 'suspended' || e.shiftStatus === 'off').length})`,
+                  },
                 ].map((st) => {
                   const active = statusFilter === st.id;
                   return (
@@ -1608,7 +1824,20 @@ export function UsersManagementPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      setEmployees(INITIAL_EMPLOYEES);
+                      try {
+                        localStorage.removeItem(`riwaq_org_employees_v1_${currentOrgId}`);
+                      } catch {
+                        // ignore
+                      }
+                      setEmployees(
+                        loadOrgEmployees(
+                          currentOrgId,
+                          currentOrganization.name,
+                          users,
+                          currentUser,
+                          deals
+                        )
+                      );
                       triggerToast('تمت استعادة الإعدادات الافتراضية للموظف');
                     }}
                     className="rounded-lg border border-[#CBD5E1] bg-white px-4 py-2 text-xs font-bold text-[#334155] transition hover:bg-[#F1F5F9]"

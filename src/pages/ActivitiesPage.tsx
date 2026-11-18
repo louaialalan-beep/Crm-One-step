@@ -77,8 +77,8 @@ const INITIAL_CURATED_ACTIVITIES: ActivityRecord[] = [
     companyName: 'مجموعة الخزامى القابضة',
     ownerName: 'طارق العتيبي',
     stageLabel: 'المرحلة: التفاوض النهائي',
-    timeLabel: '12 مايو',
-    overdueLabel: 'متأخر منذ يومين (12 مايو)',
+    timeLabel: '14 نوفمبر',
+    overdueLabel: 'متأخر منذ يومين (14 نوفمبر)',
     primaryActionType: 'call_icon',
   },
   {
@@ -92,12 +92,12 @@ const INITIAL_CURATED_ACTIVITIES: ActivityRecord[] = [
     rwqId: 'RWQ-09941',
     companyName: 'شركة النماء للخدمات الرقمية',
     ownerName: 'سارة القحطاني',
-    timeLabel: '13 مايو',
-    overdueLabel: 'متأخر منذ أمس (13 مايو)',
+    timeLabel: '15 نوفمبر',
+    overdueLabel: 'متأخر منذ أمس (15 نوفمبر)',
     primaryActionType: 'mail_icon',
   },
 
-  // Today (أنشطة ومواعيد اليوم - الأربعاء 14 مايو)
+  // Today (أنشطة ومواعيد اليوم - 16 نوفمبر)
   {
     id: 'act_today_1',
     title: 'عرض توضيحي فني لمنظومة الأمان والربط السحابي (Demo)',
@@ -157,7 +157,7 @@ const INITIAL_CURATED_ACTIVITIES: ActivityRecord[] = [
     rwqId: 'RWQ-09312',
     companyName: 'المقر الرئيسي',
     ownerName: 'طارق العتيبي',
-    timeLabel: 'غداً، الخميس 15 مايو • 10:00 ص - 12:00 م • المقر الرئيسي',
+    timeLabel: 'غداً، 17 نوفمبر • 10:00 ص - 12:00 م • المقر الرئيسي',
     deliveryModeLabel: 'حضوري',
     primaryActionType: 'zoom',
   },
@@ -172,7 +172,7 @@ const INITIAL_CURATED_ACTIVITIES: ActivityRecord[] = [
     rwqId: 'RWQ-08219',
     companyName: 'Google Meet',
     ownerName: 'طارق العتيبي',
-    timeLabel: 'الأحد، 18 مايو • 01:00 م • عبر Google Meet',
+    timeLabel: 'الأربعاء، 18 نوفمبر • 01:00 م • عبر Google Meet',
     deliveryModeLabel: 'افتراضي',
     primaryActionType: 'zoom',
   },
@@ -236,9 +236,12 @@ function inferKindFromTitle(title: string): 'task' | 'meeting' | 'call' {
   return 'task';
 }
 
-export const ActivitiesPage: React.FC = () => {
+export const ActivitiesPage: React.FC<{ defaultTab?: 'tasks' | 'activities' }> = ({
+  defaultTab = 'activities',
+}) => {
   const navigate = useNavigate();
   const {
+    currentOrgId,
     firebaseUser,
     tasks,
     deals,
@@ -249,10 +252,31 @@ export const ActivitiesPage: React.FC = () => {
     openInboxForLead,
   } = useCrm();
 
-  const [curatedActivities, setCuratedActivities] = useState<ActivityRecord[]>(
-    INITIAL_CURATED_ACTIVITIES
+  const [curatedByOrg, setCuratedByOrg] = useState<Record<string, ActivityRecord[]>>({
+    org_riwaq_main: INITIAL_CURATED_ACTIVITIES,
+  });
+
+  const curatedActivities = useMemo(
+    () => curatedByOrg[currentOrgId] ?? [],
+    [curatedByOrg, currentOrgId]
   );
-  const [activeKind, setActiveKind] = useState<ActivityKind>('all');
+
+  const updateCuratedForCurrentOrg = (
+    updater: (prev: ActivityRecord[]) => ActivityRecord[]
+  ) => {
+    setCuratedByOrg((prev) => ({
+      ...prev,
+      [currentOrgId]: updater(prev[currentOrgId] ?? []),
+    }));
+  };
+
+  const [activeKind, setActiveKind] = useState<ActivityKind>(
+    defaultTab === 'tasks' ? 'task' : 'all'
+  );
+
+  useEffect(() => {
+    setActiveKind(defaultTab === 'tasks' ? 'task' : 'all');
+  }, [defaultTab]);
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const [quickScope, setQuickScope] = useState<QuickScopeKey>('all_sections');
   const [ownerFilter, setOwnerFilter] = useState<string>('mine');
@@ -389,9 +413,9 @@ export const ActivitiesPage: React.FC = () => {
   const todayStats = useMemo(() => {
     const allToday = allActivities.filter((a) => a.section === 'today');
     const doneInList = allToday.filter((a) => a.completed).length;
-    const completedCount = 3 + doneInList;
-    const totalCount = Math.max(8, 5 + allToday.length);
-    const pct = Math.min(100, Math.round((completedCount / totalCount) * 100));
+    const completedCount = doneInList;
+    const totalCount = allToday.length;
+    const pct = totalCount > 0 ? Math.min(100, Math.round((completedCount / totalCount) * 100)) : 0;
     return { completedCount, totalCount, pct };
   }, [allActivities]);
 
@@ -406,7 +430,7 @@ export const ActivitiesPage: React.FC = () => {
       return;
     }
 
-    setCuratedActivities((prev) =>
+    updateCuratedForCurrentOrg((prev) =>
       prev.map((item) =>
         item.id === act.id ? { ...item, completed: !item.completed } : item
       )
@@ -420,7 +444,7 @@ export const ActivitiesPage: React.FC = () => {
 
   const handleSnoozeAllOverdue = async () => {
     // Move curated overdue items to today
-    setCuratedActivities((prev) =>
+    updateCuratedForCurrentOrg((prev) =>
       prev.map((item) =>
         item.section === 'overdue'
           ? {
@@ -505,6 +529,7 @@ export const ActivitiesPage: React.FC = () => {
       if (firebaseUser) {
         try {
           await setDoc(doc(db, 'tasks', taskId), {
+            org_id: currentOrgId,
             ownerId: firebaseUser.uid,
             title: cleanTitle,
             priority: newPriority,
@@ -540,7 +565,7 @@ export const ActivitiesPage: React.FC = () => {
               ? 'sip_call'
               : 'chat',
         };
-        setCuratedActivities((prev) => [added, ...prev]);
+        updateCuratedForCurrentOrg((prev) => [added, ...prev]);
       }
 
       setCreateModalOpen(false);
@@ -598,7 +623,7 @@ export const ActivitiesPage: React.FC = () => {
                 >
                   <span>الكل</span>
                   <span className="rounded-full bg-[#2563EB] px-2 py-0.5 text-[10px] font-extrabold text-[#FFFFFF] tabular-nums">
-                    28
+                    {allActivities.length}
                   </span>
                 </button>
 
@@ -615,7 +640,7 @@ export const ActivitiesPage: React.FC = () => {
                 >
                   <span>المهام</span>
                   <span className="rounded-full bg-[#E2E8F0] px-1.5 py-0.5 text-[10px] font-bold text-[#475569] tabular-nums">
-                    15
+                    {allActivities.filter((a) => a.kind === 'task').length}
                   </span>
                 </button>
 
@@ -632,7 +657,7 @@ export const ActivitiesPage: React.FC = () => {
                 >
                   <span>الاجتماعات</span>
                   <span className="rounded-full bg-[#E2E8F0] px-1.5 py-0.5 text-[10px] font-bold text-[#475569] tabular-nums">
-                    7
+                    {allActivities.filter((a) => a.kind === 'meeting').length}
                   </span>
                 </button>
 
@@ -649,7 +674,7 @@ export const ActivitiesPage: React.FC = () => {
                 >
                   <span>المكالمات</span>
                   <span className="rounded-full bg-[#E2E8F0] px-1.5 py-0.5 text-[10px] font-bold text-[#475569] tabular-nums">
-                    6
+                    {allActivities.filter((a) => a.kind === 'call').length}
                   </span>
                 </button>
               </div>
@@ -758,7 +783,7 @@ export const ActivitiesPage: React.FC = () => {
                 <span className="h-2 w-2 rounded-full bg-[#FFFFFF]" />
                 <span>اليوم</span>
                 <span className="rounded-full bg-[#FFFFFF]/20 px-1.5 py-0.2 text-[10px] font-extrabold tabular-nums">
-                  8
+                  {allActivities.filter((a) => a.section === 'today').length}
                 </span>
               </button>
 
@@ -784,7 +809,7 @@ export const ActivitiesPage: React.FC = () => {
                       : 'bg-[#E11D48] text-[#FFFFFF]'
                   }`}
                 >
-                  {overdueList.length > 0 ? 5 : 0}
+                  {overdueList.length}
                 </span>
               </button>
 
@@ -1098,52 +1123,62 @@ export const ActivitiesPage: React.FC = () => {
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#2563EB] text-[#FFFFFF] shrink-0">
                   <Calendar className="h-5 w-5" />
                 </div>
-                <div>
-                  <h2 className="text-[15px] font-extrabold text-[#0F172A]">
-                    أنشطة ومواعيد اليوم (الأربعاء {selectedCalendarDay} مايو)
-                  </h2>
-                  <p className="text-[11px] text-[#64748B] tabular-nums">
-                    تم إنجاز {todayStats.completedCount} من أصل {todayStats.totalCount} مهام مبرمجة
-                  </p>
+                  <div>
+                    <h2 className="text-[15px] font-extrabold text-[#0F172A]">
+                      أنشطةومواعيد اليوم ({selectedCalendarDay} نوفمبر)
+                    </h2>
+                    <p className="text-[11px] text-[#64748B] tabular-nums">
+                      تم إنجاز {todayStats.completedCount} من أصل {todayStats.totalCount} مهام مبرمجة
+                    </p>
+                  </div>
+                </div>
+
+                {/* Circular Completion % Progress Badge */}
+                <div className="inline-flex items-center gap-2.5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-3.5 py-1.5">
+                  <div className="text-right">
+                    <p className="text-[10px] font-semibold text-[#64748B]">
+                      نسبة الإنجاز
+                    </p>
+                    <p className="text-[13px] font-extrabold text-[#2563EB] tabular-nums leading-none mt-0.5">
+                      {todayStats.pct}%
+                    </p>
+                  </div>
+                  <svg className="h-8 w-8 -rotate-90 transform" viewBox="0 0 32 32">
+                    <circle
+                      cx="16"
+                      cy="16"
+                      r={ringR}
+                      fill="transparent"
+                      stroke="#E2E8F0"
+                      strokeWidth="3"
+                    />
+                    <circle
+                      cx="16"
+                      cy="16"
+                      r={ringR}
+                      fill="transparent"
+                      stroke="#2563EB"
+                      strokeWidth="3"
+                      strokeDasharray={ringC}
+                      strokeDashoffset={ringOffset}
+                      strokeLinecap="round"
+                    />
+                  </svg>
                 </div>
               </div>
 
-              {/* Circular Completion % Progress Badge */}
-              <div className="inline-flex items-center gap-2.5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-3.5 py-1.5">
-                <div className="text-right">
-                  <p className="text-[10px] font-semibold text-[#64748B]">
-                    نسبة الإنجاز
+              {todayList.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-[#CBD5E1] bg-[#F8FAFC] p-8 text-center space-y-2">
+                  <p className="text-[13px] font-extrabold text-[#0F172A]">
+                    لا توجد مهام أو أنشطة مجدولة لليوم في هذه المؤسسة
                   </p>
-                  <p className="text-[13px] font-extrabold text-[#2563EB] tabular-nums leading-none mt-0.5">
-                    {todayStats.pct}%
+                  <p className="text-[11px] text-[#64748B]">
+                    يمكنك إضافة مهمة أو اجتماع أو مكالمة متابعة جديدة بالضغط على زر &quot;+ نشاط جديد&quot; أعلاه.
                   </p>
                 </div>
-                <svg className="h-8 w-8 -rotate-90 transform" viewBox="0 0 32 32">
-                  <circle
-                    cx="16"
-                    cy="16"
-                    r={ringR}
-                    fill="transparent"
-                    stroke="#E2E8F0"
-                    strokeWidth="3"
-                  />
-                  <circle
-                    cx="16"
-                    cy="16"
-                    r={ringR}
-                    fill="transparent"
-                    stroke="#2563EB"
-                    strokeWidth="3"
-                    strokeDasharray={ringC}
-                    strokeDashoffset={ringOffset}
-                    strokeLinecap="round"
-                  />
-                </svg>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              {todayList.map((act) => (
+              ) : (
+              <div className="space-y-3">
+                {todayList.map((act) => (
                 <article
                   key={act.id}
                   className={`rounded-xl border p-4 flex flex-wrap items-center justify-between gap-4 transition-all ${
@@ -1323,6 +1358,7 @@ export const ActivitiesPage: React.FC = () => {
                 </article>
               ))}
             </div>
+            )}
           </section>
 
           {/* SECTION 3: Upcoming Section ("الأنشطة المجدولة لاحقاً (غداً وما بعده)") */}
@@ -1335,10 +1371,15 @@ export const ActivitiesPage: React.FC = () => {
                 </h2>
               </div>
               <span className="text-[11px] font-semibold text-[#64748B]">
-                15 نشاط مستقبلي
+                {upcomingList.length} نشاط مستقبلي
               </span>
             </div>
 
+            {upcomingList.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-[#CBD5E1] bg-[#F8FAFC] p-5 text-center text-[11px] text-[#64748B]">
+                لا توجد أنشطة مستقبلية مجدولة حالياً لهذه المؤسسة.
+              </div>
+            ) : (
             <div className="divide-y divide-[#F1F5F9]">
               {upcomingList.map((act, idx) => (
                 <div
@@ -1376,6 +1417,7 @@ export const ActivitiesPage: React.FC = () => {
                 </div>
               ))}
             </div>
+            )}
           </section>
         </div>
 
@@ -1387,7 +1429,7 @@ export const ActivitiesPage: React.FC = () => {
               <div className="flex items-center gap-2">
                 <Calendar className="h-4 w-4 text-[#2563EB]" />
                 <h2 className="text-[14px] font-extrabold text-[#0F172A]">
-                  مايو 2025
+                  نوفمبر 2026
                 </h2>
               </div>
               <div className="flex items-center gap-1">

@@ -44,7 +44,13 @@ import { useCrm } from '../context/CrmContext';
 type TriggerMode = 'create_or_edit' | 'create_only' | 'scheduled' | 'on_delete';
 type ModuleTargetKey = 'deals' | 'leads' | 'contacts' | 'accounts';
 type ActionExecutionTab = 'immediate' | 'scheduled';
-type ActionKind = 'whatsapp_email' | 'field_update' | 'create_task' | 'webhook' | 'custom_function';
+type ActionKind =
+  | 'whatsapp_email'
+  | 'field_update'
+  | 'create_task'
+  | 'create_record'
+  | 'webhook'
+  | 'custom_function';
 
 interface CriteriaRow {
   id: string;
@@ -519,6 +525,13 @@ export function WorkflowRulesPage() {
         l1: 'عنوان المهمة:',
         l2: 'المكلف وتاريخ الاستحقاق:',
         accent: 'rose',
+      },
+      create_record: {
+        badge: 'إنشاء سجل مرتبط',
+        tone: 'emerald',
+        l1: 'نوع السجل المرتبط:',
+        l2: 'البيانات الموروثة تلقائياً:',
+        accent: 'blue',
       },
       webhook: {
         badge: 'POST Payload',
@@ -1223,26 +1236,26 @@ export function WorkflowRulesPage() {
                     </div>
                   )}
 
-                  {/* Condition Row Container */}
+                  {/* Condition Row Container — Single Line No-Wrap Alignment */}
                   <div
-                    className={`flex flex-col items-stretch justify-between gap-3 rounded-xl border p-3 lg:flex-row lg:items-center ${
+                    className={`flex flex-nowrap items-center justify-between gap-2.5 overflow-x-auto rounded-xl border p-3 ${
                       row.isNestedGroup
                         ? 'border-[#BFDBFE] bg-[#EFF6FF]/30'
                         : 'border-[#E2E8F0] bg-[#F8FAFC]'
                     }`}
                   >
                     {/* Right: Row Index + Field Selector */}
-                    <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+                    <div className="flex items-center gap-2 shrink-0 w-[30%] min-w-[210px]">
                       <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#CBD5E1] bg-white text-xs font-extrabold text-[#334155]">
                         {index + 1}
                       </span>
-                      <span className="text-xs font-semibold text-[#64748B]">الحقل:</span>
+                      <span className="text-xs font-semibold text-[#64748B] shrink-0">الحقل:</span>
                       <select
                         value={row.field}
                         onChange={(e) =>
                           handleUpdateCriteriaRow(row.id, { field: e.target.value })
                         }
-                        className="flex-1 rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-xs font-extrabold text-[#0F172A] focus:border-[#004AC6] focus:outline-none"
+                        className="w-full truncate rounded-lg border border-[#E2E8F0] bg-white px-2.5 py-2 text-xs font-extrabold text-[#0F172A] focus:border-[#004AC6] focus:outline-none"
                       >
                         {!moduleFields.includes(row.field) && (
                           <option value={row.field}>{row.field}</option>
@@ -1256,14 +1269,14 @@ export function WorkflowRulesPage() {
                     </div>
 
                     {/* Center: Operator Selector */}
-                    <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
-                      <span className="text-xs font-semibold text-[#64748B]">المعامل:</span>
+                    <div className="flex items-center gap-2 shrink-0 w-[26%] min-w-[180px]">
+                      <span className="text-xs font-semibold text-[#64748B] shrink-0">المعامل:</span>
                       <select
                         value={row.operator}
                         onChange={(e) =>
                           handleUpdateCriteriaRow(row.id, { operator: e.target.value })
                         }
-                        className="flex-1 rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-xs font-extrabold text-[#004AC6] focus:border-[#004AC6] focus:outline-none"
+                        className="w-full truncate rounded-lg border border-[#E2E8F0] bg-white px-2.5 py-2 text-xs font-extrabold text-[#004AC6] focus:border-[#004AC6] focus:outline-none"
                       >
                         {OPERATOR_OPTIONS.map((op) => (
                           <option key={op} value={op}>
@@ -1273,19 +1286,19 @@ export function WorkflowRulesPage() {
                       </select>
                     </div>
 
-                    {/* Left: Value Input + Match Badge + Delete */}
-                    <div className="flex flex-1 flex-wrap items-center gap-2">
-                      <span className="text-xs font-semibold text-[#64748B]">القيمة:</span>
+                    {/* Left: Value Input + Match Badge + Delete (Same Single Line) */}
+                    <div className="flex flex-1 flex-nowrap items-center gap-2 min-w-[260px]">
+                      <span className="text-xs font-semibold text-[#64748B] shrink-0">القيمة:</span>
                       <input
                         type="text"
                         value={row.value}
                         onChange={(e) =>
                           handleUpdateCriteriaRow(row.id, { value: e.target.value })
                         }
-                        className="min-w-[140px] flex-1 rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-xs font-extrabold text-[#0F172A] focus:border-[#004AC6] focus:outline-none"
+                        className="w-full min-w-[110px] flex-1 rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-xs font-extrabold text-[#0F172A] focus:border-[#004AC6] focus:outline-none"
                       />
 
-                      <span className="inline-flex items-center gap-1 rounded-md bg-[#10B981] px-2.5 py-1 text-[11px] font-extrabold text-white">
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-[#10B981] px-2.5 py-1.5 text-[11px] font-extrabold text-white">
                         <Check className="h-3 w-3" />
                         <span>مطابق</span>
                       </span>
@@ -1293,7 +1306,7 @@ export function WorkflowRulesPage() {
                       <button
                         type="button"
                         onClick={() => handleDeleteCriteriaRow(row.id)}
-                        className="rounded-lg p-1.5 text-[#64748B] transition hover:bg-[#FEE2E2] hover:text-[#E11D48]"
+                        className="shrink-0 rounded-lg border border-transparent p-2 text-[#64748B] transition hover:border-red-200 hover:bg-[#FEE2E2] hover:text-[#E11D48] cursor-pointer"
                         title="حذف الشرط"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -1437,6 +1450,7 @@ export function WorkflowRulesPage() {
                       {act.kind === 'whatsapp_email' && <MessageSquare className="h-5 w-5" />}
                       {act.kind === 'field_update' && <Link2 className="h-5 w-5" />}
                       {act.kind === 'create_task' && <CheckCircle2 className="h-5 w-5" />}
+                      {act.kind === 'create_record' && <FileText className="h-5 w-5" />}
                       {act.kind === 'webhook' && <Share2 className="h-5 w-5" />}
                       {act.kind === 'custom_function' && <Code2 className="h-5 w-5" />}
                     </div>
@@ -1658,6 +1672,7 @@ export function WorkflowRulesPage() {
                   >
                     <option value="whatsapp_email">إشعار WhatsApp Business / بريد إلكتروني</option>
                     <option value="field_update">تحديث حقل بالسجل تلقائياً (Field Update)</option>
+                    <option value="create_record">إنشاء سجل مرتبط (مهمة / فاتورة / صفقة)</option>
                     <option value="create_task">إنشاء وتكليف مهمة جديدة (Create Task)</option>
                     <option value="webhook">إطلاق Webhook برمجية (REST API)</option>
                     <option value="custom_function">تشغيل دالة مخصصة (Custom Function)</option>

@@ -13,10 +13,10 @@ interface CreateContactDealModalProps {
 }
 
 const DEFAULT_STAGE_PROB: Record<DealStage, number> = {
-  'تأهيل مبدئي': 25,
-  'تحديد الاحتياج': 45,
-  'عرض سعر': 65,
-  'تفاوض': 85,
+  'تأهيل مبدئي': 20,
+  'تحديد الاحتياج': 20,
+  'عرض سعر': 50,
+  'تفاوض': 80,
   'مكتملة': 100,
   'خسارة': 0,
 };
@@ -32,7 +32,7 @@ export const CreateContactDealModal: React.FC<CreateContactDealModalProps> = ({
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('85000');
   const [stage, setStage] = useState<DealStage>('عرض سعر');
-  const [probability, setProbability] = useState('65');
+  const [probability, setProbability] = useState('50');
   const [closeDate, setCloseDate] = useState('2026-12-15');
   const [ownerName, setOwnerName] = useState(CONTACT_OWNERS[0]);
   const [nextStep, setNextStep] = useState('');
@@ -49,7 +49,7 @@ export const CreateContactDealModal: React.FC<CreateContactDealModalProps> = ({
     );
     setAmount('85000');
     setStage('عرض سعر');
-    setProbability('65');
+    setProbability('50');
     setCloseDate('2026-12-15');
     setOwnerName(getContactOwnerName(contact));
     setNextStep('إرسال العرض المالي وجدولة اجتماع الاعتماد');

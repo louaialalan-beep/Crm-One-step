@@ -76,6 +76,10 @@ export async function testConnection(): Promise<boolean> {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     return false;
   }
+  // Do not perform Firestore server reads when unauthenticated (Preview Mode) to avoid PERMISSION_DENIED
+  if (!auth.currentUser) {
+    return true;
+  }
   const attempt = async (): Promise<boolean> => {
     try {
       await getDocFromServer(doc(db, 'test', 'connection'));

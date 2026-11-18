@@ -76,12 +76,6 @@ const SETUP_CATEGORIES: SetupCategoryCard[] = [
         badgeTone: 'indigo',
       },
       {
-        id: 'fiscal-year',
-        label: 'السنة المالية والفترات المحاسبية',
-        path: '/settings/fiscal-year',
-        keywords: ['السنة المالية', 'الفترات المحاسبية', 'fiscal'],
-      },
-      {
         id: 'currencies',
         label: 'إدارة العملات المتعددة',
         path: '/settings/currencies',
@@ -109,7 +103,7 @@ const SETUP_CATEGORIES: SetupCategoryCard[] = [
     id: 'security',
     titleAr: 'التحكم الأمني والصلاحيات',
     titleEn: 'SECURITY CONTROL',
-    countLabel: '5 إعدادات',
+    countLabel: '4 إعدادات',
     iconType: 'security',
     iconBoxStyle: 'bg-[#EDE9FE] text-[#4F46E5]',
     items: [
@@ -132,12 +126,6 @@ const SETUP_CATEGORIES: SetupCategoryCard[] = [
         label: 'قواعد مشاركة البيانات والأمان',
         path: '/settings/data-sharing',
         keywords: ['قواعد مشاركة البيانات', 'الأمان', 'sharing rules'],
-      },
-      {
-        id: 'territories',
-        label: 'إدارة المناطق والقطاعات',
-        path: '/settings/territories',
-        keywords: ['المناطق', 'القطاعات', 'territories'],
       },
       {
         id: 'audit-log',
@@ -291,7 +279,7 @@ const SETUP_CATEGORIES: SetupCategoryCard[] = [
     id: 'process',
     titleAr: 'إدارة العمليات والبلوبرينت',
     titleEn: 'PROCESS MANAGEMENT',
-    countLabel: '4 عمليات',
+    countLabel: '3 عمليات',
     iconType: 'process',
     iconBoxStyle: 'bg-[#DBEAFE] text-[#1D4ED8]',
     items: [
@@ -310,12 +298,6 @@ const SETUP_CATEGORIES: SetupCategoryCard[] = [
         keywords: ['مسارات الموافقات', 'الاعتمادات', 'approvals'],
       },
       {
-        id: 'review-processes',
-        label: 'عمليات مراجعة الامتثال والعقود',
-        path: '/settings/review-processes',
-        keywords: ['عمليات المراجعة', 'الامتثال والعقود', 'review'],
-      },
-      {
         id: 'transition-rules',
         label: 'شروط الانتقال والتحقق الإلزامي',
         path: '/settings/blueprints',
@@ -329,7 +311,7 @@ const SETUP_CATEGORIES: SetupCategoryCard[] = [
     id: 'data',
     titleAr: 'إدارة البيانات والتخزين',
     titleEn: 'DATA ADMINISTRATION',
-    countLabel: '5 إعدادات',
+    countLabel: '3 إعدادات',
     iconType: 'data',
     iconBoxStyle: 'bg-[#6EE7B7]/75 text-[#065F46]',
     items: [
@@ -346,24 +328,10 @@ const SETUP_CATEGORIES: SetupCategoryCard[] = [
         keywords: ['تنظيف التكرار', 'فحص ودمج التكرار', 'deduplication'],
       },
       {
-        id: 'backups',
-        label: 'النسخ الاحتياطي التلقائي للسجلات',
-        path: '/settings/backups',
-        keywords: ['النسخ الاحتياطي', 'backup', 'سحابي'],
-        badgeText: 'سحابي يومي',
-        badgeTone: 'emerald',
-      },
-      {
         id: 'recycle-bin',
         label: 'سلة المهملات واستعادة السجلات',
         path: '/settings/recycle-bin',
         keywords: ['سلة المهملات', 'استعادة السجلات', 'recycle bin'],
-      },
-      {
-        id: 'sandbox',
-        label: 'بيئات الاختبار ومزامنة التطوير',
-        path: '/settings/sandbox',
-        keywords: ['Sandbox', 'بيئات الاختبار', 'مزامنة التطوير'],
       },
     ],
   },
@@ -373,7 +341,7 @@ const SETUP_CATEGORIES: SetupCategoryCard[] = [
     id: 'developer',
     titleAr: 'مساحة المطورين والربط البرمجي',
     titleEn: 'DEVELOPER SPACE',
-    countLabel: '5 أدوات',
+    countLabel: '3 أدوات',
     iconType: 'developer',
     iconBoxStyle: 'bg-[#EEF2FF] text-[#4338CA]',
     items: [
@@ -397,20 +365,6 @@ const SETUP_CATEGORIES: SetupCategoryCard[] = [
         path: '/settings/functions',
         keywords: ['الدوال المخصصة', 'Functions', 'سيرفرلس'],
       },
-      {
-        id: 'erp',
-        label: 'الربط مع أنظمة ERP (Zatca, SAP, Odoo)',
-        path: '/settings/erp',
-        keywords: ['الربط مع ERP', 'Zatca', 'SAP', 'Odoo', 'الفوترة الإلكترونية'],
-      },
-      {
-        id: 'api-logs',
-        label: 'سجل استدعاءات API واستهلاك الحصص',
-        path: '/settings/api-logs',
-        keywords: ['سجل الاستدعاءات', 'استهلاك الحصص', 'API logs'],
-        badgeText: '14% مستهلك',
-        badgeTone: 'slate',
-      },
     ],
   },
 
@@ -419,7 +373,7 @@ const SETUP_CATEGORIES: SetupCategoryCard[] = [
     id: 'ai',
     titleAr: 'الذكاء الاصطناعي والمؤشرات',
     titleEn: 'AI ENGINE',
-    countLabel: '5 محركات',
+    countLabel: '1 محرك نشط',
     iconType: 'ai',
     iconBoxStyle: 'bg-[#FFE4E6] text-[#E11D48]',
     items: [
@@ -430,30 +384,6 @@ const SETUP_CATEGORIES: SetupCategoryCard[] = [
         keywords: ['التقييم الذكي للعملاء', 'الذكاء الاصطناعي', 'ai scoring'],
         badgeText: 'دقة 94%',
         badgeTone: 'emerald',
-      },
-      {
-        id: 'ai-forecasting',
-        label: 'التنبؤ باحتمالية الفوز بالصفقات',
-        path: '/settings/ai-forecasting',
-        keywords: ['التنبؤ بالإغلاق', 'احتمالية الفوز', 'forecasting'],
-      },
-      {
-        id: 'ai-best-time',
-        label: 'التوقيت الذكي المثالي للتواصل',
-        path: '/settings/ai-best-time',
-        keywords: ['أفضل وقت للتواصل', 'التوقيت الذكي', 'best time'],
-      },
-      {
-        id: 'ai-sentiment',
-        label: 'تلخيص المحادثات وتحليل المشاعر',
-        path: '/settings/ai-sentiment',
-        keywords: ['تلخيص المحادثات', 'تحليل المشاعر', 'sentiment'],
-      },
-      {
-        id: 'ai-anomaly',
-        label: 'محرك كشف الشذوذ والتحذير المسبق',
-        path: '/settings/ai-anomaly',
-        keywords: ['كشف الشذوذ', 'التحذير المسبق', 'anomaly'],
       },
     ],
   },

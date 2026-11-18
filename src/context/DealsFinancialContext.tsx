@@ -118,6 +118,24 @@ export interface DealsFinancialContextValue {
       assignedToName?: string;
     }
   ) => Promise<void>;
+  createQuote: (quote: Quote) => Promise<Quote>;
+  updateQuote: (quoteId: string, patch: Partial<Quote>) => Promise<void>;
+  createSalesOrder: (order: SalesOrder) => Promise<SalesOrder>;
+  updateSalesOrder: (orderId: string, patch: Partial<SalesOrder>) => Promise<void>;
+  createInvoice: (invoice: Invoice) => Promise<Invoice>;
+  updateInvoice: (invoiceId: string, patch: Partial<Invoice>) => Promise<void>;
+  recordInvoicePayment: (
+    invoiceId: string,
+    payment: {
+      date: string;
+      amount: number;
+      method: 'تحويل بنكي' | 'مدى' | 'بطاقة ائتمانية' | 'نقدي';
+      referenceNumber: string;
+      notes?: string;
+    }
+  ) => Promise<void>;
+  convertQuoteToSalesOrder: (quoteId: string, newSalesOrder: SalesOrder) => Promise<SalesOrder>;
+  convertSalesOrderToInvoice: (orderId: string, newInvoice: Invoice) => Promise<Invoice>;
 }
 
 const DealsFinancialContext = createContext<DealsFinancialContextValue | null>(null);
@@ -125,6 +143,7 @@ const DealsFinancialContext = createContext<DealsFinancialContextValue | null>(n
 export function DealsFinancialProvider({ children }: { children: React.ReactNode }) {
   const {
     firebaseUser,
+    isPreviewMode,
     currentUser,
     currentOrgId,
     belongsToCurrentOrg,
@@ -157,32 +176,7 @@ export function DealsFinancialProvider({ children }: { children: React.ReactNode
     },
   ]);
 
-  const [orderAttributions] = useState<OrderAttributionEntry[]>([
-    {
-      id: 'oa_init_1',
-      leadUniqueId: 'RWQ-10482',
-      customerName: 'م. بدر المنصور — شركة قمة التقنية',
-      orderIndex: 1,
-      orderSequenceLabel: 'الطلب 1 (استحواذ أولي)',
-      campaignName: 'حملة التحول الرقمي لكبار العملاء Q4',
-      channel: 'إعلانات ميتا (Meta Lead Ads)',
-      orderAmountSAR: 65000,
-      roasMultiplier: 6.8,
-      orderedAt: '2026-06-14',
-    },
-    {
-      id: 'oa_init_10',
-      leadUniqueId: 'RWQ-10482',
-      customerName: 'م. بدر المنصور — شركة قمة التقنية',
-      orderIndex: 10,
-      orderSequenceLabel: 'الطلب +10 (شريك استراتيجي VIP)',
-      campaignName: 'حملة إعادة استهداف العملاء VIP عبر واتساب',
-      channel: 'واتساب للأعمال (WhatsApp Broadcast)',
-      orderAmountSAR: 274200,
-      roasMultiplier: 16.4,
-      orderedAt: '2026-11-16',
-    },
-  ]);
+  const [orderAttributions] = useState<OrderAttributionEntry[]>([]);
 
   const createQuickDeal = useCallback(
     async (payload: QuickDealPayload) => {
@@ -693,6 +687,271 @@ export function DealsFinancialProvider({ children }: { children: React.ReactNode
     [currentOrgId, currentUser.fullName, data.deals, firebaseUser, setData]
   );
 
+  const createQuote = useCallback(
+    async (quote: Quote): Promise<Quote> => {
+      const normalizedQuote: Quote = {
+        ...quote,
+        org_id: quote.org_id || currentOrgId,
+      };
+      setData((prev) => ({
+        ...prev,
+        quotes: [normalizedQuote, ...prev.quotes.filter((q) => q.id !== normalizedQuote.id)],
+      }));
+
+      if (firebaseUser && !isPreviewMode) {
+        try {
+          await setDoc(doc(db, 'quotes', normalizedQuote.id), {
+            ...stripUndefined(normalizedQuote),
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        } catch (err) {
+          handleFirestoreError(err, OperationType.CREATE, `quotes/${normalizedQuote.id}`);
+        }
+      }
+      return normalizedQuote;
+    },
+    [currentOrgId, firebaseUser, isPreviewMode, setData]
+  );
+
+  const createSalesOrder = useCallback(
+    async (order: SalesOrder): Promise<SalesOrder> => {
+      const normalizedOrder: SalesOrder = {
+        ...order,
+        org_id: order.org_id || currentOrgId,
+      };
+      setData((prev) => ({
+        ...prev,
+        sales_orders: [
+          normalizedOrder,
+          ...prev.sales_orders.filter((s) => s.id !== normalizedOrder.id),
+        ],
+      }));
+
+      if (firebaseUser && !isPreviewMode) {
+        try {
+          await setDoc(doc(db, 'sales_orders', normalizedOrder.id), {
+            ...stripUndefined(normalizedOrder),
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        } catch (err) {
+          handleFirestoreError(err, OperationType.CREATE, `sales_orders/${normalizedOrder.id}`);
+        }
+      }
+      return normalizedOrder;
+    },
+    [currentOrgId, firebaseUser, isPreviewMode, setData]
+  );
+
+  const createInvoice = useCallback(
+    async (invoice: Invoice): Promise<Invoice> => {
+      const normalizedInvoice: Invoice = {
+        ...invoice,
+        org_id: invoice.org_id || currentOrgId,
+      };
+      setData((prev) => ({
+        ...prev,
+        invoices: [
+          normalizedInvoice,
+          ...prev.invoices.filter((i) => i.id !== normalizedInvoice.id),
+        ],
+      }));
+
+      if (firebaseUser && !isPreviewMode) {
+        try {
+          await setDoc(doc(db, 'invoices', normalizedInvoice.id), {
+            ...stripUndefined(normalizedInvoice),
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        } catch (err) {
+          handleFirestoreError(err, OperationType.CREATE, `invoices/${normalizedInvoice.id}`);
+        }
+      }
+      return normalizedInvoice;
+    },
+    [currentOrgId, firebaseUser, isPreviewMode, setData]
+  );
+
+  const convertQuoteToSalesOrder = useCallback(
+    async (quoteId: string, newSalesOrder: SalesOrder): Promise<SalesOrder> => {
+      const normalizedOrder: SalesOrder = {
+        ...newSalesOrder,
+        org_id: newSalesOrder.org_id || currentOrgId,
+      };
+      setData((prev) => ({
+        ...prev,
+        quotes: prev.quotes.map((q) =>
+          q.id === quoteId ? { ...q, status: 'مكتملة' } : q
+        ),
+        sales_orders: [
+          normalizedOrder,
+          ...prev.sales_orders.filter((s) => s.id !== normalizedOrder.id),
+        ],
+      }));
+
+      if (firebaseUser && !isPreviewMode) {
+        try {
+          await setDoc(doc(db, 'sales_orders', normalizedOrder.id), {
+            ...stripUndefined(normalizedOrder),
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+          await setDoc(
+            doc(db, 'quotes', quoteId),
+            { status: 'مكتملة', updatedAt: serverTimestamp() },
+            { merge: true }
+          );
+        } catch (err) {
+          handleFirestoreError(err, OperationType.WRITE, `sales_orders/${normalizedOrder.id}`);
+        }
+      }
+      return normalizedOrder;
+    },
+    [currentOrgId, firebaseUser, isPreviewMode, setData]
+  );
+
+  const convertSalesOrderToInvoice = useCallback(
+    async (orderId: string, newInvoice: Invoice): Promise<Invoice> => {
+      const normalizedInvoice: Invoice = {
+        ...newInvoice,
+        org_id: newInvoice.org_id || currentOrgId,
+      };
+      setData((prev) => ({
+        ...prev,
+        sales_orders: prev.sales_orders.map((s) =>
+          s.id === orderId ? { ...s, status: 'مكتملة' } : s
+        ),
+        invoices: [
+          normalizedInvoice,
+          ...prev.invoices.filter((i) => i.id !== normalizedInvoice.id),
+        ],
+      }));
+
+      if (firebaseUser && !isPreviewMode) {
+        try {
+          await setDoc(doc(db, 'invoices', normalizedInvoice.id), {
+            ...stripUndefined(normalizedInvoice),
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+          await setDoc(
+            doc(db, 'sales_orders', orderId),
+            { status: 'مكتملة', updatedAt: serverTimestamp() },
+            { merge: true }
+          );
+        } catch (err) {
+          handleFirestoreError(err, OperationType.WRITE, `invoices/${normalizedInvoice.id}`);
+        }
+      }
+      return normalizedInvoice;
+    },
+    [currentOrgId, firebaseUser, isPreviewMode, setData]
+  );
+
+  const updateQuote = useCallback(
+    async (quoteId: string, patch: Partial<Quote>): Promise<void> => {
+      setData((prev) => ({
+        ...prev,
+        quotes: prev.quotes.map((q) => (q.id === quoteId ? { ...q, ...patch } : q)),
+      }));
+      if (firebaseUser && !isPreviewMode) {
+        try {
+          await setDoc(
+            doc(db, 'quotes', quoteId),
+            { ...stripUndefined(patch), updatedAt: serverTimestamp() },
+            { merge: true }
+          );
+        } catch (err) {
+          handleFirestoreError(err, OperationType.UPDATE, `quotes/${quoteId}`);
+        }
+      }
+    },
+    [firebaseUser, isPreviewMode, setData]
+  );
+
+  const updateSalesOrder = useCallback(
+    async (orderId: string, patch: Partial<SalesOrder>): Promise<void> => {
+      setData((prev) => ({
+        ...prev,
+        sales_orders: prev.sales_orders.map((s) => (s.id === orderId ? { ...s, ...patch } : s)),
+      }));
+      if (firebaseUser && !isPreviewMode) {
+        try {
+          await setDoc(
+            doc(db, 'sales_orders', orderId),
+            { ...stripUndefined(patch), updatedAt: serverTimestamp() },
+            { merge: true }
+          );
+        } catch (err) {
+          handleFirestoreError(err, OperationType.UPDATE, `sales_orders/${orderId}`);
+        }
+      }
+    },
+    [firebaseUser, isPreviewMode, setData]
+  );
+
+  const updateInvoice = useCallback(
+    async (invoiceId: string, patch: Partial<Invoice>): Promise<void> => {
+      setData((prev) => ({
+        ...prev,
+        invoices: prev.invoices.map((i) => (i.id === invoiceId ? { ...i, ...patch } : i)),
+      }));
+      if (firebaseUser && !isPreviewMode) {
+        try {
+          await setDoc(
+            doc(db, 'invoices', invoiceId),
+            { ...stripUndefined(patch), updatedAt: serverTimestamp() },
+            { merge: true }
+          );
+        } catch (err) {
+          handleFirestoreError(err, OperationType.UPDATE, `invoices/${invoiceId}`);
+        }
+      }
+    },
+    [firebaseUser, isPreviewMode, setData]
+  );
+
+  const recordInvoicePayment = useCallback(
+    async (
+      invoiceId: string,
+      payment: {
+        date: string;
+        amount: number;
+        method: 'تحويل بنكي' | 'مدى' | 'بطاقة ائتمانية' | 'نقدي';
+        referenceNumber: string;
+        notes?: string;
+      }
+    ): Promise<void> => {
+      const target = data.invoices.find((i) => i.id === invoiceId);
+      if (!target) return;
+      const newPayment = {
+        id: `pay_${Date.now()}`,
+        ...payment,
+      };
+      const existingPayments = target.payments ?? [];
+      const updatedPayments = [...existingPayments, newPayment];
+      const nextPaidAmount = Math.min(
+        target.totalAmount,
+        Math.round(((Number(target.paidAmount) || 0) + Number(payment.amount)) * 100) / 100
+      );
+      const nextStatus: Invoice['status'] =
+        nextPaidAmount >= target.totalAmount
+          ? 'مكتملة'
+          : nextPaidAmount > 0
+          ? 'مدفوعة جزئياً'
+          : target.status;
+
+      await updateInvoice(invoiceId, {
+        paidAmount: nextPaidAmount,
+        payments: updatedPayments,
+        status: nextStatus,
+      });
+    },
+    [data.invoices, updateInvoice]
+  );
+
   const scopedDeals = useMemo(
     () =>
       data.deals.filter(
@@ -716,14 +975,40 @@ export function DealsFinancialProvider({ children }: { children: React.ReactNode
     [belongsToCurrentOrg, data.invoices]
   );
 
+  const scopedStageHistory = useMemo(
+    () => stageHistory.filter((s) => belongsToCurrentOrg(s.org_id)),
+    [belongsToCurrentOrg, stageHistory]
+  );
+
+  const scopedOrderAttributions = useMemo<OrderAttributionEntry[]>(() => {
+    const explicit = orderAttributions.filter((o) => belongsToCurrentOrg(o.org_id));
+    if (explicit.length > 0) return explicit;
+    return scopedSalesOrders.map((so, idx) => ({
+      id: `oa_${so.id}`,
+      org_id: so.org_id || currentOrgId,
+      leadUniqueId: so.leadUniqueId || so.orderNumber,
+      customerName: so.contactName
+        ? `${so.contactName} — ${so.accountName}`
+        : so.accountName,
+      orderIndex: idx + 1,
+      orderSequenceLabel:
+        idx === 0 ? 'الطلب 1 (استحواذ أولي)' : `الطلب #${idx + 1} (توسع وتجديد)`,
+      campaignName: 'مسار مبيعات المؤسسة النشطة',
+      channel: 'تحويل مباشر من الصفقات وعروض الأسعار',
+      orderAmountSAR: so.totalAmount,
+      roasMultiplier: 8.5,
+      orderedAt: so.issueDate || so.deliveryDate || '2026-11-18',
+    }));
+  }, [belongsToCurrentOrg, currentOrgId, orderAttributions, scopedSalesOrders]);
+
   const value = useMemo<DealsFinancialContextValue>(
     () => ({
       deals: scopedDeals,
       quotes: scopedQuotes,
       salesOrders: scopedSalesOrders,
       invoices: scopedInvoices,
-      stageHistory,
-      orderAttributions,
+      stageHistory: scopedStageHistory,
+      orderAttributions: scopedOrderAttributions,
       createQuickDeal,
       createDealForContact,
       createDeal,
@@ -732,14 +1017,23 @@ export function DealsFinancialProvider({ children }: { children: React.ReactNode
       softDeleteDeals,
       addDealTouchpoint,
       addDealTask,
+      createQuote,
+      updateQuote,
+      createSalesOrder,
+      updateSalesOrder,
+      createInvoice,
+      updateInvoice,
+      recordInvoicePayment,
+      convertQuoteToSalesOrder,
+      convertSalesOrderToInvoice,
     }),
     [
       scopedDeals,
       scopedQuotes,
       scopedSalesOrders,
       scopedInvoices,
-      stageHistory,
-      orderAttributions,
+      scopedStageHistory,
+      scopedOrderAttributions,
       createQuickDeal,
       createDealForContact,
       createDeal,
@@ -748,6 +1042,15 @@ export function DealsFinancialProvider({ children }: { children: React.ReactNode
       softDeleteDeals,
       addDealTouchpoint,
       addDealTask,
+      createQuote,
+      updateQuote,
+      createSalesOrder,
+      updateSalesOrder,
+      createInvoice,
+      updateInvoice,
+      recordInvoicePayment,
+      convertQuoteToSalesOrder,
+      convertSalesOrderToInvoice,
     ]
   );
 

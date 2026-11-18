@@ -331,10 +331,32 @@ export function getBlueprintTransitionRequirements(
 
   const targetCol = getDealColumnForStage(targetStage);
   const bpName = activeDealsBp?.name ?? 'مخطط إغلاق صفقات المؤسسات الكبرى';
+  const dynamicRule = activeDealsBp?.stageRequirements?.[targetStage];
+
+  if (dynamicRule) {
+    return {
+      requiresModal: true,
+      blueprintName: bpName,
+      targetStage,
+      targetTitle: targetCol.title,
+      requireFinalAmount: dynamicRule.requireFinalAmount ?? true,
+      requireDiscountPercent: dynamicRule.requireDiscountPercent ?? true,
+      requireContractPdf: dynamicRule.requireContractPdf ?? false,
+      requireLossReason: dynamicRule.requireLossReason ?? (targetStage === 'خسارة'),
+      requireNextStep: dynamicRule.requireNextStep ?? false,
+      checklistItems:
+        dynamicRule.checklistItems && dynamicRule.checklistItems.length > 0
+          ? dynamicRule.checklistItems
+          : [
+              'تم تأكيد واعتماد شروط الدفع وجدولة الدفعات الرسمية',
+              'تم مطابقة الفاتورة الضريبية وإصدار أمر الشراء (PO) من العميل',
+            ],
+    };
+  }
 
   if (targetStage === 'مكتملة') {
     return {
-      requiresModal: true,
+      requiresModal: Boolean(activeDealsBp ?? true),
       blueprintName: bpName,
       targetStage,
       targetTitle: targetCol.title,
@@ -343,16 +365,21 @@ export function getBlueprintTransitionRequirements(
       requireContractPdf: true,
       requireLossReason: false,
       requireNextStep: false,
-      checklistItems: [
-        'تم تأكيد واعتماد شروط الدفع وجدولة الدفعات الرسمية',
-        'تم مطابقة الفاتورة الضريبية وإصدار أمر الشراء (PO) من العميل',
-      ],
+      checklistItems: activeDealsBp?.description
+        ? [
+            activeDealsBp.description,
+            'تم مطابقة الفاتورة الضريبية وإصدار أمر الشراء (PO) من العميل',
+          ]
+        : [
+            'تم تأكيد واعتماد شروط الدفع وجدولة الدفعات الرسمية',
+            'تم مطابقة الفاتورة الضريبية وإصدار أمر الشراء (PO) من العميل',
+          ],
     };
   }
 
   if (targetStage === 'تفاوض' || targetStage === 'عرض سعر') {
     return {
-      requiresModal: true,
+      requiresModal: Boolean(activeDealsBp ?? true),
       blueprintName: bpName,
       targetStage,
       targetTitle: targetCol.title,
@@ -361,28 +388,30 @@ export function getBlueprintTransitionRequirements(
       requireContractPdf: true,
       requireLossReason: false,
       requireNextStep: true,
-      checklistItems: [
-        'تم تأكيد واعتماد شروط الدفع وجدولة الدفعات الرسمية',
-        'تم مطابقة الفاتورة الضريبية وإصدار أمر الشراء (PO) من العميل',
-      ],
+      checklistItems: activeDealsBp?.description
+        ? [
+            activeDealsBp.description,
+            'تم مطابقة الفاتورة الضريبية وإصدار أمر الشراء (PO) من العميل',
+          ]
+        : [
+            'تم تأكيد واعتماد شروط الدفع وجدولة الدفعات الرسمية',
+            'تم مطابقة الفاتورة الضريبية وإصدار أمر الشراء (PO) من العميل',
+          ],
     };
   }
 
   if (targetStage === 'خسارة') {
     return {
-      requiresModal: true,
+      requiresModal: Boolean(activeDealsBp ?? true),
       blueprintName: bpName,
       targetStage,
       targetTitle: targetCol.title,
-      requireFinalAmount: true,
-      requireDiscountPercent: true,
-      requireContractPdf: true,
+      requireFinalAmount: false,
+      requireDiscountPercent: false,
+      requireContractPdf: false,
       requireLossReason: true,
       requireNextStep: false,
-      checklistItems: [
-        'تم تأكيد واعتماد شروط الدفع وجدولة الدفعات الرسمية',
-        'تم مطابقة الفاتورة الضريبية وإصدار أمر الشراء (PO) من العميل',
-      ],
+      checklistItems: [],
     };
   }
 
@@ -414,9 +443,11 @@ export function computeDealPipelineMetrics(deals: Deal[]): DealPipelineMetrics {
   let activeDealsCount = 0;
 
   for (const deal of deals) {
+    const col = getDealColumnForStage(deal.stage);
+    const stageProbability = col.defaultProbability;
     if (deal.stage !== 'خسارة') {
       totalPipelineValue += deal.amount;
-      weightedPipelineValue += (deal.amount * deal.probability) / 100;
+      weightedPipelineValue += (deal.amount * stageProbability) / 100;
     }
     if (deal.stage !== 'مكتملة' && deal.stage !== 'خسارة') {
       activeDealsCount += 1;
@@ -463,10 +494,11 @@ export function aggregateDealsForChart(
   >();
 
   for (const deal of deals) {
+    const col = getDealColumnForStage(deal.stage);
+    const stageProbability = col.defaultProbability;
     let key = '';
     let label = '';
     if (groupBy === 'stage') {
-      const col = getDealColumnForStage(deal.stage);
       key = col.id;
       label = col.title;
     } else if (groupBy === 'ownerName') {
@@ -488,7 +520,7 @@ export function aggregateDealsForChart(
     };
     entry.dealIds.push(deal.id);
     entry.totalAmount += deal.amount;
-    entry.weightedAmount += Math.round((deal.amount * deal.probability) / 100);
+    entry.weightedAmount += Math.round((deal.amount * stageProbability) / 100);
     map.set(key, entry);
   }
 

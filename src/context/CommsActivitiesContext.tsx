@@ -219,8 +219,15 @@ export function CommsActivitiesProvider({ children }: { children: React.ReactNod
   );
 
   const markAllSignalsRead = useCallback(() => {
-    setSignals((prev) => prev.map((s) => ({ ...s, unread: false })));
-  }, [setSignals]);
+    setSignals((prev) =>
+      prev.map((s) => (belongsToCurrentOrg(s.org_id) ? { ...s, unread: false } : s))
+    );
+  }, [belongsToCurrentOrg, setSignals]);
+
+  const scopedSignals = useMemo(
+    () => signals.filter((s) => belongsToCurrentOrg(s.org_id)),
+    [belongsToCurrentOrg, signals]
+  );
 
   const scopedMessages = useMemo(
     () =>
@@ -242,7 +249,7 @@ export function CommsActivitiesProvider({ children }: { children: React.ReactNod
     () => ({
       tasks: scopedTasks,
       messages: scopedMessages,
-      signals,
+      signals: scopedSignals,
       inboxOpen,
       inboxFilterLeadId,
       inboxFilterContactId,
@@ -259,7 +266,7 @@ export function CommsActivitiesProvider({ children }: { children: React.ReactNod
     [
       scopedTasks,
       scopedMessages,
-      signals,
+      scopedSignals,
       inboxOpen,
       inboxFilterLeadId,
       inboxFilterContactId,

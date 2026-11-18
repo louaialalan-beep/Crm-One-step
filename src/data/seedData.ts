@@ -1916,65 +1916,9 @@ export function buildProvisionedOrgSeed(
     },
   ];
 
-  const accounts: Account[] = [
-    {
-      id: `${orgId}_acc_1`,
-      ownerId,
-      org_id: orgId,
-      name: `الحساب التأسيسي — ${orgName}`,
-      industry: 'الأعمال والخدمات المؤسسية',
-      city: 'الرياض',
-      tier: 'استراتيجي',
-      annualRevenue: 12000000,
-      employeesCount: 85,
-      website: 'riwaq.sa',
-      accountManager: 'مدير النظام',
-    },
-  ];
-
-  const leads: Lead[] = [
-    {
-      id: `${orgId}_lead_1`,
-      ownerId,
-      org_id: orgId,
-      unique_id: 'RWQ-90001',
-      fullName: `عميل ترحيبي أول — ${orgName}`,
-      company: orgName,
-      jobTitle: 'المدير العام',
-      email: 'welcome@riwaq.sa',
-      phone: '+966 50 111 2233',
-      source: 'تهيئة المؤسسة التلقائية',
-      channel: 'whatsapp',
-      status: 'جديد',
-      aiScore: 88,
-      estimatedValue: 150000,
-      assignedToName: 'سلمان عبد العزيز القحطاني',
-      city: 'الرياض، السعودية',
-      tags: ['تهيئة_تلقائية'],
-      lastActivityLabel: 'الآن',
-      lastMessageSnippet: `تم تجهيز بيئة عمل معزولة بالكامل لمؤسسة «${orgName}».`,
-      awaitingReplyHours: 0,
-      converted: false,
-    },
-  ];
-
-  const deals: Deal[] = [
-    {
-      id: `${orgId}_deal_1`,
-      ownerId,
-      org_id: orgId,
-      title: `صفقة التدشين الأولى — ${orgName}`,
-      accountId: `${orgId}_acc_1`,
-      accountName: `الحساب التأسيسي — ${orgName}`,
-      amount: 150000,
-      currency: 'SAR',
-      stage: 'تأهيل مبدئي',
-      probability: 60,
-      closeDate: '2026-12-30',
-      ownerName: 'سلمان عبد العزيز القحطاني',
-      nextStep: 'جدولة اجتماع انطلاق المشروع',
-    },
-  ];
+  const accounts: Account[] = [];
+  const leads: Lead[] = [];
+  const deals: Deal[] = [];
 
   return {
     organization,
@@ -1992,6 +1936,7 @@ export function buildProvisionedOrgSeed(
 export const INITIAL_SIGNALS: SignalNotification[] = [
   {
     id: 'sig_1',
+    org_id: DEFAULT_ORG_ID,
     title: 'تقدم صفقة المدار التقني إلى مرحلة التفاوض',
     description: 'قيمة الصفقة 640,000 ر.س · احتمالية الإغلاق ارتفعت إلى 80%',
     category: 'deal',
@@ -2001,6 +1946,7 @@ export const INITIAL_SIGNALS: SignalNotification[] = [
   },
   {
     id: 'sig_2',
+    org_id: DEFAULT_ORG_ID,
     title: 'عميل محتمل جديد عالي التقييم (RWQ-10424)',
     description: 'هند عبد الرحمن الماجد — مؤشر الذكاء 95/100 من مؤتمر ليب التقني',
     category: 'lead',
@@ -2010,6 +1956,7 @@ export const INITIAL_SIGNALS: SignalNotification[] = [
   },
   {
     id: 'sig_3',
+    org_id: DEFAULT_ORG_ID,
     title: 'فاتورة متأخرة عن السداد (INV-2026-1092)',
     description: 'مجموعة النخيل اللوجستية — الرصيد المتبقي 100,000 ر.س',
     category: 'task',
@@ -2019,6 +1966,7 @@ export const INITIAL_SIGNALS: SignalNotification[] = [
   },
   {
     id: 'sig_4',
+    org_id: DEFAULT_ORG_ID,
     title: 'تنفيذ قاعدة الأتمتة: إشعار العملاء ذوي التقييم المرتفع',
     description: 'تم إسناد مهمة متابعة تلقائية لمدير الحساب',
     category: 'system',

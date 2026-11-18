@@ -44,13 +44,7 @@ interface CrudRowConfig {
   subtitle: string;
   iconType: 'leads' | 'contacts' | 'accounts' | 'deals' | 'tasks' | 'reports' | 'settings';
   highlightRow?: boolean;
-  viewScope:
-    | 'كل سجلات الفرع'
-    | 'وصول كامل'
-    | 'الفريق والفرع'
-    | 'تقارير الفريق'
-    | 'قراءة فقط'
-    | 'ممنوع';
+  viewScope: 'own' | 'team' | 'all' | 'none';
   createMode: 'allowed' | 'denied' | 'custom_only';
   editAllowed: boolean;
   deleteMode: 'allowed' | 'denied' | 'disabled_badge' | 'locked_badge';
@@ -98,14 +92,14 @@ interface RichProfileConfig {
   adminPolicies: AdminAutomationPolicy;
 }
 
-const VIEW_SCOPE_CYCLE: CrudRowConfig['viewScope'][] = [
-  'كل سجلات الفرع',
-  'وصول كامل',
-  'الفريق والفرع',
-  'تقارير الفريق',
-  'قراءة فقط',
-  'ممنوع',
-];
+const VIEW_SCOPE_CYCLE: CrudRowConfig['viewScope'][] = ['all', 'team', 'own', 'none'];
+
+const VIEW_SCOPE_LABELS: Record<CrudRowConfig['viewScope'], string> = {
+  all: 'وصول كامل (كل السجلات)',
+  team: 'الفريق والفرع',
+  own: 'سجلاتي فقط (قراءة مقيدة)',
+  none: 'ممنوع',
+};
 
 function createStandardSalesCrudRows(): CrudRowConfig[] {
   return [
@@ -115,7 +109,7 @@ function createStandardSalesCrudRows(): CrudRowConfig[] {
       title: 'العملاء المحتملين (Leads)',
       subtitle: 'إدارة وتأهيل الوارد',
       iconType: 'leads',
-      viewScope: 'كل سجلات الفرع',
+      viewScope: 'all',
       createMode: 'allowed',
       editAllowed: true,
       deleteMode: 'disabled_badge',
@@ -128,7 +122,7 @@ function createStandardSalesCrudRows(): CrudRowConfig[] {
       title: 'جهات الاتصال (Contacts)',
       subtitle: 'أفراد وممثلو الشركات',
       iconType: 'contacts',
-      viewScope: 'وصول كامل',
+      viewScope: 'all',
       createMode: 'allowed',
       editAllowed: true,
       deleteMode: 'denied',
@@ -141,7 +135,7 @@ function createStandardSalesCrudRows(): CrudRowConfig[] {
       title: 'الشركات والحسابات (Accounts)',
       subtitle: 'الملفات الرسمية للكيانات',
       iconType: 'accounts',
-      viewScope: 'وصول كامل',
+      viewScope: 'all',
       createMode: 'allowed',
       editAllowed: true,
       deleteMode: 'denied',
@@ -155,7 +149,7 @@ function createStandardSalesCrudRows(): CrudRowConfig[] {
       subtitle: 'مسارات بايبلاين B2B',
       iconType: 'deals',
       highlightRow: true,
-      viewScope: 'الفريق والفرع',
+      viewScope: 'team',
       createMode: 'allowed',
       editAllowed: true,
       deleteMode: 'locked_badge',
@@ -168,7 +162,7 @@ function createStandardSalesCrudRows(): CrudRowConfig[] {
       title: 'المهام والأنشطة (Activities)',
       subtitle: 'الاتصالات والاجتماعات',
       iconType: 'tasks',
-      viewScope: 'وصول كامل',
+      viewScope: 'all',
       createMode: 'allowed',
       editAllowed: true,
       deleteMode: 'allowed',
@@ -180,7 +174,7 @@ function createStandardSalesCrudRows(): CrudRowConfig[] {
       title: 'التقارير ولوحات الأداء',
       subtitle: 'مؤشرات KPI والمبيعات',
       iconType: 'reports',
-      viewScope: 'تقارير الفريق',
+      viewScope: 'team',
       createMode: 'custom_only',
       editAllowed: true,
       deleteMode: 'denied',
@@ -192,7 +186,7 @@ function createStandardSalesCrudRows(): CrudRowConfig[] {
       title: 'إعدادات النظام والبلوبرينت',
       subtitle: 'تخصيص الحقول ومراحل العمل',
       iconType: 'settings',
-      viewScope: 'قراءة فقط',
+      viewScope: 'own',
       createMode: 'denied',
       editAllowed: false,
       deleteMode: 'denied',
@@ -304,7 +298,7 @@ const INITIAL_PROFILES_LIST: RichProfileConfig[] = [
     discountCeilingText: 'صلاحية مطلقة 100%',
     crudRows: createStandardSalesCrudRows().map((r) => ({
       ...r,
-      viewScope: 'وصول كامل',
+      viewScope: 'all',
       createMode: 'allowed',
       editAllowed: true,
       deleteMode: 'allowed',
@@ -366,7 +360,7 @@ const INITIAL_PROFILES_LIST: RichProfileConfig[] = [
         ? r
         : {
             ...r,
-            viewScope: 'قراءة فقط',
+            viewScope: 'own',
             createMode: 'denied',
             editAllowed: false,
             deleteMode: 'denied',
@@ -408,7 +402,7 @@ const INITIAL_PROFILES_LIST: RichProfileConfig[] = [
         ? r
         : {
             ...r,
-            viewScope: 'قراءة فقط',
+            viewScope: 'own',
             createMode: 'denied',
             editAllowed: false,
             deleteMode: 'denied',
@@ -447,10 +441,10 @@ const INITIAL_PROFILES_LIST: RichProfileConfig[] = [
     discountCeilingText: 'اعتماد مالي 20%',
     crudRows: createStandardSalesCrudRows().map((r) =>
       r.key === 'accounts' || r.key === 'reports'
-        ? { ...r, viewScope: 'وصول كامل', exportAllowed: true }
+        ? { ...r, viewScope: 'all', exportAllowed: true }
         : {
             ...r,
-            viewScope: 'قراءة فقط',
+            viewScope: 'own',
             createMode: 'denied',
             editAllowed: false,
             deleteMode: 'denied',
@@ -566,7 +560,7 @@ export const ProfilesPage: React.FC = () => {
     for (const row of prof.crudRows) {
       if (row.crmModule) {
         baseCrud[row.crmModule] = {
-          read: row.viewScope !== 'ممنوع',
+          read: row.viewScope !== 'none',
           create: row.createMode === 'allowed',
           update: row.editAllowed,
           delete: row.deleteMode === 'allowed',
@@ -727,7 +721,7 @@ export const ProfilesPage: React.FC = () => {
   const handleGrantAllView = () => {
     updateCurrentProfile((prev) => ({
       ...prev,
-      crudRows: prev.crudRows.map((r) => ({ ...r, viewScope: 'وصول كامل' })),
+      crudRows: prev.crudRows.map((r) => ({ ...r, viewScope: 'all' })),
     }), true);
     setToastMsg('تم منح صلاحية العرض الكامل لجميع الموديولات');
   };
@@ -1369,15 +1363,14 @@ export const ProfilesPage: React.FC = () => {
                             onClick={() => handleCycleViewScope(row.key)}
                             title="انقر لتغيير نطاق العرض"
                             className={`inline-block rounded-lg px-2.5 py-1 text-[10px] font-extrabold leading-tight transition-colors ${
-                              row.viewScope === 'الفريق والفرع'
+                              row.viewScope === 'team'
                                 ? 'bg-[#DBEAFE] text-[#1D4ED8] border border-[#93C5FD]'
-                                : row.viewScope === 'قراءة فقط' ||
-                                  row.viewScope === 'ممنوع'
+                                : row.viewScope === 'own' || row.viewScope === 'none'
                                 ? 'bg-[#F1F5F9] text-[#475569] border border-[#E2E8F0]'
                                 : 'bg-[#D1FAE5] text-[#047857] border border-[#6EE7B7]'
                             }`}
                           >
-                            {row.viewScope}
+                            {VIEW_SCOPE_LABELS[row.viewScope]}
                           </button>
                         </td>
 

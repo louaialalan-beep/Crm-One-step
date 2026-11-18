@@ -13,7 +13,7 @@ interface CreateDealModalProps {
 
 const STAGE_OPTIONS: Array<{ stage: DealStage; probability: number; label: string }> = [
   { stage: 'تأهيل مبدئي', probability: 20, label: 'التأهيل المبدئي (20%)' },
-  { stage: 'تحديد الاحتياج', probability: 40, label: 'تحديد الاحتياج (40%)' },
+  { stage: 'تحديد الاحتياج', probability: 20, label: 'تحديد الاحتياج (20%)' },
   { stage: 'عرض سعر', probability: 50, label: 'تم تقديم العرض (50%)' },
   { stage: 'تفاوض', probability: 80, label: 'التفاوض والعقود (80%)' },
 ];

@@ -59,6 +59,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     currentOrganization,
     switchOrganization,
     provisionNewOrganization,
+    isPreviewMode,
+    exitPreviewMode,
     signInWithGoogle,
     signOutUser,
   } = useCrm();
@@ -122,9 +124,9 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
   return (
     <>
-      <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-[#E2E8F0] bg-[#FFFFFF] px-4 lg:px-6">
+      <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-2 sm:gap-3 border-b border-[#E2E8F0] bg-[#FFFFFF] px-3 sm:px-4 lg:px-6 overflow-visible">
         {/* Right Side (RTL start): Mobile menu + Organization Switcher + Breadcrumb / Search trigger */}
-        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+        <div className="flex items-center gap-2 min-w-0 flex-1 overflow-visible">
           <button
             type="button"
             onClick={onOpenMobileSidebar}
@@ -141,18 +143,18 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               onClick={() => setOrgMenuOpen((prev) => !prev)}
               aria-expanded={orgMenuOpen}
               title="تبديل المؤسسة (عزل كامل للبيانات والصلاحيات)"
-              className="flex h-9 items-center gap-2 rounded-md border border-[#CBD5E1] bg-[#F8FAFC] px-2.5 text-[12px] font-bold text-[#0F172A] hover:border-[#94A3B8] hover:bg-[#FFFFFF] transition-colors"
+              className="flex h-9 items-center gap-1.5 rounded-md border border-[#CBD5E1] bg-[#F8FAFC] px-2.5 text-[12px] font-bold text-[#0F172A] hover:border-[#94A3B8] hover:bg-[#FFFFFF] transition-colors max-w-[175px] sm:max-w-[220px] xl:max-w-[260px]"
             >
-              <Building2 className="h-4 w-4 shrink-0 text-[#004AC6]" />
-              <span className="max-w-[180px] sm:max-w-[240px] truncate">
-                {currentOrganization.name} • {currentOrganization.org_id}
+              <Building2 className="h-3.5 w-3.5 shrink-0 text-[#004AC6]" />
+              <span className="truncate">
+                {currentOrganization.name}
               </span>
               <span
-                className={`hidden md:inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-extrabold ${planBadgeColor}`}
+                className={`hidden xl:inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-extrabold shrink-0 ${planBadgeColor}`}
               >
                 {currentOrganization.plan}
               </span>
-              <ChevronDown className="h-3.5 w-3.5 text-[#64748B]" />
+              <ChevronDown className="h-3.5 w-3.5 text-[#64748B] shrink-0" />
             </button>
 
             {orgMenuOpen && (
@@ -256,12 +258,12 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             )}
           </div>
 
-          <div className="hidden 2xl:flex items-center gap-2 text-[13px] whitespace-nowrap shrink-0">
+          <div className="hidden 2xl:flex items-center gap-1.5 text-[12px] whitespace-nowrap shrink-0">
             <span className="text-[#64748B]">{routeMeta.section}</span>
             <span className="text-[#CBD5E1]" aria-hidden="true">
               /
             </span>
-            <span className="font-semibold text-[#0F172A]">{routeMeta.title}</span>
+            <span className="font-semibold text-[#0F172A] max-w-[140px] truncate">{routeMeta.title}</span>
           </div>
 
           {/* Ctrl+K Command Palette Trigger */}
@@ -269,15 +271,15 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             type="button"
             onClick={onOpenCommandPalette}
             aria-label="فتح البحث الشامل ولوحة الأوامر"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[#CBD5E1] bg-[#F8FAFC] text-[#64748B] hover:border-[#94A3B8] hover:bg-[#FFFFFF] transition-colors sm:w-full sm:max-w-xs sm:shrink sm:justify-between sm:gap-2 sm:px-3 text-[13px]"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[#CBD5E1] bg-[#F8FAFC] text-[#64748B] hover:border-[#94A3B8] hover:bg-[#FFFFFF] transition-colors md:w-auto md:flex-1 md:max-w-[190px] lg:max-w-[230px] xl:max-w-[260px] md:justify-between md:gap-2 md:px-2.5 text-[12px] min-w-[36px]"
           >
-            <span className="flex items-center gap-2 min-w-0">
-              <Search className="h-4 w-4 shrink-0 text-[#64748B]" />
-              <span className="hidden sm:inline truncate">
-                ابحث في العملاء، الصفقات، الفواتير...
+            <span className="flex items-center gap-1.5 min-w-0">
+              <Search className="h-3.5 w-3.5 shrink-0 text-[#64748B]" />
+              <span className="hidden md:inline truncate">
+                ابحث في العملاء والصفقات...
               </span>
             </span>
-            <kbd className="hidden md:inline-flex items-center rounded border border-[#E2E8F0] bg-[#FFFFFF] px-1.5 py-0.5 text-[11px] font-semibold text-[#64748B] tabular-nums shrink-0">
+            <kbd className="hidden xl:inline-flex items-center rounded border border-[#E2E8F0] bg-[#FFFFFF] px-1.5 py-0.5 text-[10px] font-semibold text-[#64748B] tabular-nums shrink-0">
               Ctrl+K
             </kbd>
           </button>
@@ -290,49 +292,75 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             type="button"
             onClick={onOpenQuickDeal}
             aria-label="إضافة صفقة سريعة"
-            className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[#2563EB] px-2.5 sm:px-3.5 text-[13px] font-semibold text-[#FFFFFF] hover:bg-[#1D4ED8] active:bg-[#1E40AF] transition-colors whitespace-nowrap shrink-0"
+            className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[#2563EB] px-2.5 sm:px-3 text-[12px] font-bold text-[#FFFFFF] hover:bg-[#1D4ED8] active:bg-[#1E40AF] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
           >
-            <Plus className="h-4 w-4 shrink-0" />
+            <Plus className="h-3.5 w-3.5 shrink-0" />
             <span className="hidden sm:inline">صفقة سريعة</span>
             <span className="sm:hidden">صفقة</span>
           </button>
 
-          {/* Real-time Sync Status */}
-          <button
-            type="button"
-            onClick={() => {
-              if (!firebaseUser) {
-                void signInWithGoogle();
+          {/* Real-time Sync Status & Preview Mode Controls */}
+          {!firebaseUser && isPreviewMode ? (
+            <div className="hidden lg:inline-flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => void signInWithGoogle()}
+                title="الترقية لتسجيل الدخول بحساب Google ومزامنة السحابة"
+                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-[#BFDBFE] bg-[#EFF6FF] px-2.5 text-[11px] font-bold text-[#2563EB] hover:bg-[#DBEAFE] transition-colors whitespace-nowrap cursor-pointer"
+              >
+                <LogIn className="h-3.5 w-3.5 shrink-0" />
+                <span>الترقية لحساب Google</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  exitPreviewMode();
+                  navigate('/login', { replace: true });
+                }}
+                title="الخروج من الوضع التجريبي والعودة لشاشة الدخول"
+                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-[#E2E8F0] bg-[#FFFFFF] px-2.5 text-[11px] font-semibold text-[#475569] hover:border-[#FECDD3] hover:bg-[#FFF1F2] hover:text-[#F43F5E] transition-colors whitespace-nowrap cursor-pointer"
+              >
+                <LogOut className="h-3.5 w-3.5 shrink-0" />
+                <span className="hidden xl:inline">خروج من التجريبي</span>
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                if (!firebaseUser) {
+                  void signInWithGoogle();
+                }
+              }}
+              title={
+                firebaseUser
+                  ? 'متصل بقاعدة بيانات Firestore في الوقت الفعلي'
+                  : 'وضع المعاينة المحلية — اضغط لتسجيل الدخول ومزامنة السحابة'
               }
-            }}
-            title={
-              firebaseUser
-                ? 'متصل بقاعدة بيانات Firestore في الوقت الفعلي'
-                : 'وضع المعاينة المحلية — اضغط لتسجيل الدخول ومزامنة السحابة'
-            }
-            className={`hidden md:inline-flex h-9 items-center gap-1.5 rounded-md border px-2.5 text-[12px] font-medium whitespace-nowrap shrink-0 transition-colors ${
-              syncStatus === 'cloud'
-                ? 'border-[#A7F3D0] bg-[#ECFDF5] text-[#10B981]'
-                : syncStatus === 'offline'
-                  ? 'border-[#FECDD3] bg-[#FFF1F2] text-[#F43F5E]'
-                  : 'border-[#E2E8F0] bg-[#F8FAFC] text-[#475569] hover:bg-[#F1F5F9]'
-            }`}
-          >
-            {syncStatus === 'offline' ? (
-              <CloudOff className="h-3.5 w-3.5 shrink-0" />
-            ) : (
-              <Cloud className="h-3.5 w-3.5 shrink-0" />
-            )}
-            <span>
-              {syncStatus === 'cloud'
-                ? 'مزامنة فورية'
-                : syncStatus === 'syncing'
-                  ? 'جاري المزامنة'
+              className={`hidden md:inline-flex h-9 items-center gap-1.5 rounded-md border px-2.5 text-[12px] font-medium whitespace-nowrap shrink-0 transition-colors ${
+                syncStatus === 'cloud'
+                  ? 'border-[#A7F3D0] bg-[#ECFDF5] text-[#10B981]'
                   : syncStatus === 'offline'
-                    ? 'غير متصل'
-                    : 'معاينة محلية'}
-            </span>
-          </button>
+                    ? 'border-[#FECDD3] bg-[#FFF1F2] text-[#F43F5E]'
+                    : 'border-[#E2E8F0] bg-[#F8FAFC] text-[#475569] hover:bg-[#F1F5F9]'
+              }`}
+            >
+              {syncStatus === 'offline' ? (
+                <CloudOff className="h-3.5 w-3.5 shrink-0" />
+              ) : (
+                <Cloud className="h-3.5 w-3.5 shrink-0" />
+              )}
+              <span>
+                {syncStatus === 'cloud'
+                  ? 'مزامنة فورية'
+                  : syncStatus === 'syncing'
+                    ? 'جاري المزامنة'
+                    : syncStatus === 'offline'
+                      ? 'غير متصل'
+                      : 'معاينة محلية'}
+              </span>
+            </button>
+          )}
 
           {/* Unified Omnichannel Inbox Drawer Trigger */}
           <button
@@ -385,7 +413,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                   {initials || 'ر'}
                 </span>
               )}
-              <span className="hidden sm:block max-w-[120px] truncate text-[12px] font-semibold text-[#0F172A]">
+              <span className="hidden sm:block max-w-[170px] lg:max-w-[230px] xl:max-w-[280px] truncate text-[12px] font-semibold text-[#0F172A]">
                 {currentUser.fullName}
               </span>
               <ChevronDown className="h-3.5 w-3.5 text-[#64748B]" />
@@ -495,17 +523,31 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                       <span>تسجيل الخروج</span>
                     </button>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEmployeeMenuOpen(false);
-                        void signInWithGoogle();
-                      }}
-                      className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-[12px] font-semibold text-[#2563EB] hover:bg-[#EFF6FF]"
-                    >
-                      <LogIn className="h-4 w-4" />
-                      <span>تسجيل الدخول بحساب Google</span>
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEmployeeMenuOpen(false);
+                          void signInWithGoogle();
+                        }}
+                        className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-[12px] font-semibold text-[#2563EB] hover:bg-[#EFF6FF]"
+                      >
+                        <LogIn className="h-4 w-4" />
+                        <span>الترقية وتسجيل الدخول بحساب Google</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEmployeeMenuOpen(false);
+                          exitPreviewMode();
+                          navigate('/login', { replace: true });
+                        }}
+                        className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-[12px] font-medium text-[#F43F5E] hover:bg-[#FFF1F2]"
+                      >
+                        <LogOut className="h-4 w-4" />
+                        <span>الخروج من الوضع التجريبي</span>
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -622,7 +664,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                     <code className="font-mono">api_name</code>) لكيانات العملاء والصفقات والشركات.
                   </li>
                   <li>
-                    تجهيز شجرة الأدوار التنظيمية (CEO ➔ مدير مبيعات ➔ ممثل مبيعات) ومسار البلوبرينت الافتراضي.
+                    تجهيز شجرة الأدوار التنظيمية (CEO ← مدير مبيعات ← ممثل مبيعات) ومسار البلوبرينت الافتراضي.
                   </li>
                 </ul>
               </div>

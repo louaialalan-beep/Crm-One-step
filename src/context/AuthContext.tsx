@@ -24,6 +24,34 @@ import type { CrmUser, SignalNotification } from '../types/crm';
 import type { ModuleName, UserSecurityContext } from '../types/reports';
 
 export const PREVIEW_OWNER_ID = 'preview-user';
+export const PREVIEW_SESSION_STORAGE_KEY = 'riwaq_crm_preview_session';
+
+function readStoredPreviewMode(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return (
+      window.sessionStorage.getItem(PREVIEW_SESSION_STORAGE_KEY) === 'true' ||
+      window.localStorage.getItem(PREVIEW_SESSION_STORAGE_KEY) === 'true'
+    );
+  } catch {
+    return false;
+  }
+}
+
+function writeStoredPreviewMode(active: boolean): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (active) {
+      window.sessionStorage.setItem(PREVIEW_SESSION_STORAGE_KEY, 'true');
+      window.localStorage.setItem(PREVIEW_SESSION_STORAGE_KEY, 'true');
+    } else {
+      window.sessionStorage.removeItem(PREVIEW_SESSION_STORAGE_KEY);
+      window.localStorage.removeItem(PREVIEW_SESSION_STORAGE_KEY);
+    }
+  } catch {
+    // ignore storage errors
+  }
+}
 
 export function stripUndefined<T extends object>(obj: T): Record<string, unknown> {
   const clean: Record<string, unknown> = {};
@@ -55,9 +83,14 @@ export interface AuthContextValue {
   firebaseUser: User | null;
   currentUser: CrmUser;
   setCurrentUser: React.Dispatch<React.SetStateAction<CrmUser>>;
+  users: CrmUser[];
+  setUsers: React.Dispatch<React.SetStateAction<CrmUser[]>>;
   syncStatus: 'cloud' | 'preview' | 'syncing' | 'offline';
   setSyncStatus: React.Dispatch<React.SetStateAction<'cloud' | 'preview' | 'syncing' | 'offline'>>;
   authError: string | null;
+  isPreviewMode: boolean;
+  enterPreviewMode: () => void;
+  exitPreviewMode: () => void;
   signInWithGoogle: () => Promise<void>;
   signOutUser: () => Promise<void>;
   currentOrgId: string;
@@ -72,6 +105,69 @@ export interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+const DEFAULT_ORG_TEAM_USERS: CrmUser[] = [
+  {
+    id: 'user_preview',
+    uid: PREVIEW_OWNER_ID,
+    org_id: DEFAULT_ORG_ID,
+    fullName: 'سلمان عبد العزيز القحطاني',
+    email: 's.alqahtani@riwaq-crm.sa',
+    jobTitle: 'مدير المبيعات التنفيذي',
+    profileId: 'prof_admin',
+    roleId: 'role_exec_director',
+    department: 'مبيعات المؤسسات',
+    status: 'active',
+  },
+  {
+    id: 'user_noura',
+    uid: 'usr_noura_subaie',
+    org_id: DEFAULT_ORG_ID,
+    fullName: 'نورة السبيعي',
+    email: 'n.alsubaie@riwaq-crm.sa',
+    jobTitle: 'قائد مبيعات كبار العملاء',
+    profileId: 'prof_sales_director',
+    roleId: 'role_regional_mgr',
+    department: 'مبيعات المؤسسات',
+    status: 'active',
+  },
+  {
+    id: 'user_tariq',
+    uid: 'usr_tariq_dossary',
+    org_id: DEFAULT_ORG_ID,
+    fullName: 'طارق الدوسري',
+    email: 't.aldossary@riwaq-crm.sa',
+    jobTitle: 'أخصائي مبيعات حلول سحابية',
+    profileId: 'prof_b2b_rep',
+    roleId: 'role_senior_exec',
+    department: 'مبيعات المؤسسات',
+    status: 'active',
+  },
+  {
+    id: 'user_sarah',
+    uid: 'usr_sarah_muhaidib',
+    org_id: DEFAULT_ORG_ID,
+    fullName: 'سارة المهيدب',
+    email: 's.almuhaidib@riwaq-crm.sa',
+    jobTitle: 'مسؤولة تطوير الأعمال الرقمية',
+    profileId: 'prof_b2b_rep',
+    roleId: 'role_account_rep',
+    department: 'تطوير الأعمال',
+    status: 'active',
+  },
+  {
+    id: 'user_fahad',
+    uid: 'usr_fahad_maliki',
+    org_id: DEFAULT_ORG_ID,
+    fullName: 'فهد المالكي',
+    email: 'f.almaliki@riwaq-crm.sa',
+    jobTitle: 'مندوب مبيعات أول',
+    profileId: 'prof_b2b_rep',
+    roleId: 'role_account_rep',
+    department: 'مبيعات المناطق',
+    status: 'active',
+  },
+];
 
 const ALL_REPORT_MODULES: ModuleName[] = [
   'leads',
@@ -92,21 +188,24 @@ const ALL_REPORT_MODULES: ModuleName[] = [
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const initialSeed = useMemo(() => buildSeedDataset(PREVIEW_OWNER_ID, DEFAULT_ORG_ID), []);
-  const [authReady, setAuthReady] = useState(false);
+  const [isPreviewMode, setIsPreviewMode] = useState<boolean>(readStoredPreviewMode);
+  const [authReady, setAuthReady] = useState<boolean>(() => readStoredPreviewMode());
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [syncStatus, setSyncStatus] = useState<'cloud' | 'preview' | 'syncing' | 'offline'>('preview');
   const [authError, setAuthError] = useState<string | null>(null);
 
   const [currentOrgId, setCurrentOrgId] = useState<string>(DEFAULT_ORG_ID);
   const [currentUser, setCurrentUser] = useState<CrmUser>(createInitialPreviewUser);
+  const [users, setUsers] = useState<CrmUser[]>(DEFAULT_ORG_TEAM_USERS);
   const [data, setData] = useState<SeedDataset>(initialSeed);
   const [signals, setSignals] = useState<SignalNotification[]>(INITIAL_SIGNALS);
 
   useEffect(() => {
+    if (!firebaseUser || isPreviewMode) return;
     void testConnection().then((ok) => {
       if (!ok) setSyncStatus('offline');
     });
-  }, []);
+  }, [firebaseUser, isPreviewMode]);
 
   const seedFirestoreIfEmpty = useCallback(async (uid: string) => {
     const leadsRef = collection(db, 'leads');
@@ -158,6 +257,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
+    for (const teamUser of DEFAULT_ORG_TEAM_USERS) {
+      if (teamUser.uid !== PREVIEW_OWNER_ID) {
+        batch.set(
+          doc(db, 'users', teamUser.uid),
+          {
+            ...stripUndefined({
+              uid: teamUser.uid,
+              org_id: DEFAULT_ORG_ID,
+              fullName: teamUser.fullName,
+              email: teamUser.email,
+              jobTitle: teamUser.jobTitle,
+              profileId: teamUser.profileId,
+              roleId: teamUser.roleId,
+              department: teamUser.department,
+              status: teamUser.status,
+            }),
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
+    }
+
     try {
       await batch.commit();
     } catch (err) {
@@ -172,6 +295,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!snap.exists()) {
         const newUserPayload = {
           uid: user.uid,
+          org_id: DEFAULT_ORG_ID,
           fullName: user.displayName || 'موظف رواق',
           email: user.email || 'user@riwaq-crm.sa',
           jobTitle: 'مدير المبيعات التنفيذي',
@@ -198,10 +322,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!user) {
         setSyncStatus('preview');
         setCurrentUser(createInitialPreviewUser());
-        setData(buildSeedDataset(PREVIEW_OWNER_ID));
+        setUsers(DEFAULT_ORG_TEAM_USERS);
+        setData(buildSeedDataset(PREVIEW_OWNER_ID, DEFAULT_ORG_ID));
         return;
       }
 
+      writeStoredPreviewMode(false);
+      setIsPreviewMode(false);
       setSyncStatus('syncing');
       try {
         await ensureUserDoc(user);
@@ -216,7 +343,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [ensureUserDoc, seedFirestoreIfEmpty]);
 
   useEffect(() => {
-    if (!authReady || !firebaseUser) {
+    if (!authReady || !firebaseUser || isPreviewMode) {
       return;
     }
 
@@ -233,6 +360,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setCurrentUser({
               id: snap.id,
               uid: String(val.uid ?? uid),
+              org_id: val.org_id ? String(val.org_id) : DEFAULT_ORG_ID,
               fullName: String(val.fullName ?? firebaseUser.displayName ?? 'موظف رواق'),
               email: String(val.email ?? firebaseUser.email ?? ''),
               jobTitle: val.jobTitle ? String(val.jobTitle) : 'مدير المبيعات التنفيذي',
@@ -246,6 +374,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         },
         (error) => {
           handleFirestoreError(error, OperationType.GET, `users/${uid}`);
+        }
+      )
+    );
+
+    const orgUsersQuery = query(
+      collection(db, 'users'),
+      where('org_id', '==', currentOrgId || DEFAULT_ORG_ID)
+    );
+    unsubscribers.push(
+      onSnapshot(
+        orgUsersQuery,
+        (snap) => {
+          if (!snap.empty) {
+            const loadedUsers = snap.docs.map((d) => {
+              const val = d.data();
+              return {
+                id: d.id,
+                uid: String(val.uid ?? d.id),
+                org_id: val.org_id ? String(val.org_id) : DEFAULT_ORG_ID,
+                fullName: String(val.fullName ?? 'موظف رواق'),
+                email: String(val.email ?? ''),
+                jobTitle: val.jobTitle ? String(val.jobTitle) : 'أخصائي مبيعات',
+                profileId: String(val.profileId ?? 'prof_b2b_rep'),
+                roleId: String(val.roleId ?? 'role_account_rep'),
+                department: val.department ? String(val.department) : 'مبيعات المؤسسات',
+                avatarUrl: val.avatarUrl ? String(val.avatarUrl) : '',
+                status: (val.status === 'inactive' ? 'inactive' : 'active') as 'active' | 'inactive',
+              };
+            });
+            setUsers((prev) => {
+              const otherOrgUsers = prev.filter(
+                (u) => u.org_id && u.org_id !== (currentOrgId || DEFAULT_ORG_ID)
+              );
+              const merged = new Map<string, CrmUser>();
+              if (!currentOrgId || currentOrgId === DEFAULT_ORG_ID) {
+                for (const u of DEFAULT_ORG_TEAM_USERS) merged.set(u.fullName, u);
+              }
+              for (const u of loadedUsers) merged.set(u.fullName, u);
+              return [...otherOrgUsers, ...Array.from(merged.values())];
+            });
+          }
+        },
+        (error) => {
+          handleFirestoreError(error, OperationType.LIST, 'users');
         }
       )
     );
@@ -301,12 +473,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       unsubscribers.forEach((fn) => fn());
     };
-  }, [authReady, firebaseUser]);
+  }, [authReady, currentOrgId, firebaseUser, isPreviewMode]);
+
+  const enterPreviewMode = useCallback(() => {
+    writeStoredPreviewMode(true);
+    setAuthError(null);
+    setIsPreviewMode(true);
+    setSyncStatus('preview');
+    setCurrentOrgId(DEFAULT_ORG_ID);
+    setCurrentUser(createInitialPreviewUser());
+    setUsers(DEFAULT_ORG_TEAM_USERS);
+    setData(buildSeedDataset(PREVIEW_OWNER_ID, DEFAULT_ORG_ID));
+    setSignals(INITIAL_SIGNALS);
+    setAuthReady(true);
+  }, []);
+
+  const exitPreviewMode = useCallback(() => {
+    writeStoredPreviewMode(false);
+    setAuthError(null);
+    setIsPreviewMode(false);
+  }, []);
 
   const signInWithGoogle = useCallback(async () => {
     setAuthError(null);
     try {
       await signInWithPopup(auth, googleProvider);
+      writeStoredPreviewMode(false);
+      setIsPreviewMode(false);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'تعذر تسجيل الدخول عبر Google';
       setAuthError(msg);
@@ -315,6 +508,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOutUser = useCallback(async () => {
     setAuthError(null);
+    writeStoredPreviewMode(false);
+    setIsPreviewMode(false);
     await signOut(auth);
   }, []);
 
@@ -360,7 +555,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (activeProfile?.fieldSecurity) {
       for (const [modKey, fieldsMap] of Object.entries(activeProfile.fieldSecurity)) {
         if (modKey in hiddenFieldsByModule && fieldsMap) {
-          hiddenFieldsByModule[modKey as ModuleName] = Object.entries(fieldsMap)
+           hiddenFieldsByModule[modKey as ModuleName] = Object.entries(fieldsMap)
             .filter(([, access]) => access === 'hidden')
             .map(([fieldKey]) => fieldKey);
         }
@@ -376,15 +571,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [currentUser.profileId, currentUser.roleId, currentUser.uid, data.profiles, data.roles]);
 
+  const scopedUsers = useMemo<CrmUser[]>(() => {
+    const filtered = users.filter((u) => belongsToCurrentOrg(u.org_id));
+    if (filtered.length > 0) return filtered;
+    return [
+      {
+        ...currentUser,
+        org_id: currentOrgId,
+      },
+    ];
+  }, [belongsToCurrentOrg, currentOrgId, currentUser, users]);
+
+  const scopedSignals = useMemo<SignalNotification[]>(() => {
+    return signals.filter((s) => belongsToCurrentOrg(s.org_id));
+  }, [belongsToCurrentOrg, signals]);
+
+  const setScopedSignals = useCallback<
+    React.Dispatch<React.SetStateAction<SignalNotification[]>>
+  >(
+    (updater) => {
+      setSignals((prev) => {
+        const next = typeof updater === 'function' ? updater(prev) : updater;
+        return next.map((item) =>
+          item.org_id ? item : { ...item, org_id: currentOrgId }
+        );
+      });
+    },
+    [currentOrgId]
+  );
+
   const value = useMemo<AuthContextValue>(
     () => ({
       authReady,
       firebaseUser,
       currentUser,
       setCurrentUser,
+      users: scopedUsers,
+      setUsers,
       syncStatus,
       setSyncStatus,
       authError,
+      isPreviewMode,
+      enterPreviewMode,
+      exitPreviewMode,
       signInWithGoogle,
       signOutUser,
       currentOrgId,
@@ -393,22 +622,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       userSecurityContext,
       data,
       setData,
-      signals,
-      setSignals,
+      signals: scopedSignals,
+      setSignals: setScopedSignals,
     }),
     [
       authReady,
       firebaseUser,
       currentUser,
+      scopedUsers,
       syncStatus,
       authError,
+      isPreviewMode,
+      enterPreviewMode,
+      exitPreviewMode,
       signInWithGoogle,
       signOutUser,
       currentOrgId,
       belongsToCurrentOrg,
       userSecurityContext,
       data,
-      signals,
+      scopedSignals,
+      setScopedSignals,
     ]
   );
 

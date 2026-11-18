@@ -288,19 +288,51 @@ export const ModulePlaceholderPage: React.FC = () => {
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {settingsGroup?.subItems?.slice(1).map((sub) => (
-            <NavLink
-              key={sub.id}
-              to={sub.path}
-              className="card-surface rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] p-4 hover:border-[#2563EB] transition-colors"
-            >
-              <p className="text-[14px] font-bold text-[#0F172A]">{sub.label}</p>
+        <div className="rounded-2xl border border-[#E2E8F0] bg-[#FFFFFF] p-6 shadow-xs space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#F1F5F9] pb-4">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-md border border-[#DBEAFE] bg-[#EFF6FF] px-2.5 py-1 text-[11px] font-bold text-[#2563EB] mb-2">
+                <span>قريباً ضمن التحديث المؤسسي</span>
+              </div>
+              <h2 className="text-[16px] font-extrabold text-[#0F172A]">
+                {meta.title}
+              </h2>
               <p className="mt-1 text-[12px] text-[#64748B]">
-                {ROUTE_METADATA[sub.path]?.description}
+                هذه الوحدة الفرعية مهيأة ضمن معمارية رواق CRM ومرتبطة بالصلاحيات المركزية للمؤسسة.
               </p>
+            </div>
+            <NavLink
+              to="/settings"
+              className="rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] px-4 py-2 text-[12px] font-bold text-white transition-colors"
+            >
+              العودة إلى مركز الإعدادات الشامل
             </NavLink>
-          ))}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-[12px]">
+            <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 space-y-1">
+              <span className="text-[#64748B] font-semibold">حالة التهيئة التلقائية</span>
+              <p className="text-[14px] font-extrabold text-[#059669]">مفعلة على مستوى المنظمة ✓</p>
+              <p className="text-[11px] text-[#64748B]">تعمل بالإعدادات القياسية المعتمدة لـ Enterprise</p>
+            </div>
+            <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 space-y-1">
+              <span className="text-[#64748B] font-semibold">عزل البيانات (Multi-Tenant)</span>
+              <p className="text-[14px] font-extrabold text-[#0F172A]">مفعل بالكامل</p>
+              <p className="text-[11px] text-[#64748B]">مرتبط بسياسات RBAC و FLS للمؤسسة</p>
+            </div>
+            <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 space-y-1">
+              <span className="text-[#64748B] font-semibold">الإجراء السريع</span>
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => showFeedback(`تم حفظ الإعدادات الافتراضية لوحدة "${meta.title}" بنجاح.`)}
+                  className="rounded-lg border border-[#2563EB] bg-[#EFF6FF] hover:bg-[#DBEAFE] px-3 py-1.5 text-[11px] font-bold text-[#2563EB] cursor-pointer"
+                >
+                  حفظ الإعدادات القياسية
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -87,6 +87,9 @@ export const LeadDetailPage: React.FC = () => {
 
   const {
     leads,
+    users,
+    blueprints,
+    quickReplies,
     customFields,
     touchpoints,
     messages,
@@ -106,6 +109,29 @@ export const LeadDetailPage: React.FC = () => {
     () => leads.find((l) => l.id === id || l.unique_id === id) ?? null,
     [id, leads]
   );
+
+  const activeLeadOwners = useMemo(() => {
+    const activeNames = users.filter((u) => u.status === 'active').map((u) => u.fullName);
+    const list = activeNames.length > 0 ? activeNames : LEAD_OWNERS;
+    return lead?.assignedToName ? Array.from(new Set([lead.assignedToName, ...list])) : list;
+  }, [lead?.assignedToName, users]);
+
+  const activeBlueprintSteps = useMemo<LeadStatus[]>(() => {
+    const leadBp = blueprints.find(
+      (bp) => bp.active && (bp.module.includes('العملاء') || bp.module.toLowerCase().includes('lead'))
+    );
+    if (leadBp?.stageSteps && leadBp.stageSteps.length > 0) {
+      return leadBp.stageSteps as LeadStatus[];
+    }
+    return BLUEPRINT_STEPS;
+  }, [blueprints]);
+
+  const activeQuickReplies = useMemo(() => {
+    const filtered = (quickReplies ?? []).filter(
+      (qr) => !qr.module || qr.module === 'all' || qr.module === 'leads'
+    );
+    return filtered.length > 0 ? filtered : QUICK_REPLIES;
+  }, [quickReplies]);
 
   const canUpdateLead = activeProfile?.modulePermissions?.leads?.update ?? true;
   const canDeleteLead = activeProfile?.modulePermissions?.leads?.delete ?? true;
@@ -514,8 +540,8 @@ export const LeadDetailPage: React.FC = () => {
         {/* Blueprint Stage Bar */}
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2">
           <div className="flex flex-wrap items-center gap-2">
-            {BLUEPRINT_STEPS.map((step, idx) => {
-              const currentIdx = BLUEPRINT_STEPS.indexOf(lead.status);
+            {activeBlueprintSteps.map((step, idx) => {
+              const currentIdx = activeBlueprintSteps.indexOf(lead.status);
               const isCurrent = lead.status === step;
               const isDone = currentIdx > idx;
 
@@ -541,7 +567,7 @@ export const LeadDetailPage: React.FC = () => {
                     <span className="tabular-nums">{idx + 1}.</span>
                     <span>{step}</span>
                   </button>
-                  {idx < BLUEPRINT_STEPS.length - 1 && (
+                  {idx < activeBlueprintSteps.length - 1 && (
                     <span className="text-[#94A3B8] text-[12px]" aria-hidden="true">
                       ‹
                     </span>
@@ -715,7 +741,7 @@ export const LeadDetailPage: React.FC = () => {
                     onChange={(e) => handleFieldSave({ assignedToName: e.target.value })}
                     className="flex-1 bg-transparent text-[13px] font-semibold text-[#0F172A] focus:outline-none"
                   >
-                    {LEAD_OWNERS.map((owner) => (
+                    {activeLeadOwners.map((owner) => (
                       <option key={owner} value={owner}>
                         {owner}
                       </option>
@@ -1164,7 +1190,7 @@ export const LeadDetailPage: React.FC = () => {
             <div className="border-t border-[#E2E8F0] bg-[#FFFFFF] p-3 space-y-2">
               {showSlashPalette && (
                 <div className="flyout-surface rounded-md p-1.5 space-y-1">
-                  {QUICK_REPLIES.map((qr) => (
+                  {activeQuickReplies.map((qr) => (
                     <button
                       key={qr.command}
                       type="button"
@@ -1179,7 +1205,7 @@ export const LeadDetailPage: React.FC = () => {
               )}
 
               <div className="flex flex-wrap items-center gap-1.5">
-                {QUICK_REPLIES.map((qr) => (
+                {activeQuickReplies.map((qr) => (
                   <button
                     key={qr.command}
                     type="button"

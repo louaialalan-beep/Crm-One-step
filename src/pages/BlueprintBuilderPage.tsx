@@ -1,31 +1,27 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
-  Briefcase,
-  Calendar,
   Check,
   CheckCircle2,
-  ChevronDown,
+  CheckSquare,
   Clock,
-  CreditCard,
-  Download,
+  Copy,
   Eye,
   FileText,
   Filter,
   GitBranch,
-  Hash,
-  History,
+  GripVertical,
   Info,
+  Layers,
   LayoutGrid,
   Link2,
   Lock,
+  Maximize2,
   MessageSquare,
   Minus,
-  Monitor,
-  MoreVertical,
+  Move,
   Paperclip,
   Pencil,
   Play,
@@ -33,51 +29,42 @@ import {
   RefreshCw,
   RotateCcw,
   Save,
-  Scale,
   Search,
   Settings,
   ShieldCheck,
-  Sliders,
-  Table2,
+  Sparkles,
+  Trash2,
   UserCheck,
+  Webhook,
   X,
   Zap,
 } from 'lucide-react';
-import { doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { deleteDoc, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useCrm } from '../context/CrmContext';
+import { useSetup } from '../context/SetupContext';
 
-interface BlueprintStageNode {
+// ============================================================================
+// TYPES & INTERFACES
+// ============================================================================
+
+export type BlueprintStageCategory = 'normal' | 'active' | 'won' | 'lost';
+export type BlueprintTransitionTone = 'normal' | 'won' | 'lost' | 'loop';
+export type BlueprintAfterActionType = 'field_update' | 'whatsapp_email' | 'create_task' | 'webhook';
+
+export interface BlueprintStageNode {
   id: string;
-  numberLabel: string;
-  stepIndex: number;
   title: string;
   englishSubtitle: string;
-  canvasSubtitle: string;
-  dealsCountLabel: string;
   slaBadge: string;
-  category: 'normal' | 'active' | 'won' | 'lost';
-  ownersLabel?: string;
-  prereqDocsLabel?: string;
+  category: BlueprintStageCategory;
+  ownersLabel: string;
+  onCanvas: boolean;
+  x: number;
+  y: number;
 }
 
-interface BlueprintFieldRequirement {
-  id: string;
-  title: string;
-  subtitle: string;
-  badgeText: string;
-  badgeTone: 'danger' | 'info' | 'neutral';
-  enabled: boolean;
-}
-
-interface BlueprintAfterAction {
-  id: string;
-  label: string;
-  enabled: boolean;
-  systemTag?: string;
-}
-
-interface BlueprintBeforeCondition {
+export interface BlueprintBeforeCondition {
   id: string;
   fieldLabel: string;
   operatorLabel: string;
@@ -85,1831 +72,1973 @@ interface BlueprintBeforeCondition {
   enabled: boolean;
 }
 
-interface BlueprintTransitionConfig {
+export interface BlueprintMandatoryField {
   id: string;
-  code: string;
-  shortTitle: string;
-  englishName: string;
-  pillLabel: string;
-  fromStageId: string;
-  fromStageNumber: number;
-  fromStageName: string;
-  toStageId: string;
-  toStageBadge: string;
-  toStageName: string;
-  badgeTag?: string;
-  tone: 'normal' | 'won' | 'lost' | 'loop';
-  iconType: 'arrow' | 'monitor' | 'doc' | 'scale' | 'won' | 'lost' | 'loop';
-  roles: string[];
-  tableRoleChips: string[];
-  beforeSummaryChip: string;
-  beforeSummaryTone: 'emerald' | 'slate';
-  beforeCriteriaList: string[];
-  rolesSummaryText: string;
-  tableDuringChips: string[];
-  duringGridCards: { label: string; icon: 'pdf' | 'po' | 'payment' | 'date' }[];
-  duringCountBadge: string;
-  tableAfterChips: string[];
-  afterDetailRows: { label: string; tag: string }[];
-  afterCountBadge: string;
-  slaDurationLabel: string;
-  slaStatusLabel: string;
+  fieldName: string;
+  fieldType: string;
+  required: boolean;
+}
+
+export interface BlueprintChecklistItem {
+  id: string;
+  title: string;
+  required: boolean;
+}
+
+export interface BlueprintAfterAction {
+  id: string;
+  type: BlueprintAfterActionType;
+  label: string;
+  targetDetail: string;
+  systemTag: string;
   enabled: boolean;
-  requireDigitalSignature: boolean;
-  discountLimitPercent: number;
+}
+
+export interface BlueprintTransitionConfig {
+  id: string;
+  name: string;
+  englishName: string;
+  fromStageId: string;
+  toStageId: string;
+  tone: BlueprintTransitionTone;
+  slaDurationLabel: string;
+  enabled: boolean;
+  // BEFORE
+  roles: string[];
   beforeConditions: BlueprintBeforeCondition[];
-  duringFields: BlueprintFieldRequirement[];
+  // DURING
+  mandatoryFields: BlueprintMandatoryField[];
+  requireNotes: boolean;
+  requireAttachment: boolean;
+  requireDigitalSignature: boolean;
+  checklist: BlueprintChecklistItem[];
+  // AFTER
   afterActions: BlueprintAfterAction[];
 }
 
-const INITIAL_STAGES: BlueprintStageNode[] = [
-  {
-    id: 'stg_1',
-    numberLabel: '01',
-    stepIndex: 1,
-    title: 'عميل محتمل مؤهل (Qualified Lead)',
-    englishSubtitle: 'Lead Qualified · 12 صفقة حالية',
-    canvasSubtitle: 'الحد الأقصى للإقامة: 3 أيام عمل',
-    dealsCountLabel: '12 صفقة حالية',
-    slaBadge: 'بداية المسار',
-    category: 'normal',
-  },
-  {
-    id: 'stg_2',
-    numberLabel: '02',
-    stepIndex: 2,
-    title: 'تحليل الاحتياج والعرض الفني',
-    englishSubtitle: 'Needs Analysis · 8 صفقات',
-    canvasSubtitle: 'يتطلب حضور مهندس المبيعات واعتماد النطاق',
-    dealsCountLabel: '8 صفقات',
-    slaBadge: 'SLA: 5 أيام',
-    category: 'normal',
-  },
-  {
-    id: 'stg_3',
-    numberLabel: '03',
-    stepIndex: 3,
-    title: 'تقديم العرض المالي (Quote Sent)',
-    englishSubtitle: 'Quote Sent · 5 صفقات',
-    canvasSubtitle: 'تم التسليم رسمياً - بانتظار استجابة المشتريات',
-    dealsCountLabel: '5 صفقات',
-    slaBadge: 'تحت النظر',
-    category: 'normal',
-  },
-  {
-    id: 'stg_4',
-    numberLabel: '04',
-    stepIndex: 4,
-    title: '4. التفاوض ومراجعة العقود (Negotiation)',
-    englishSubtitle: 'Negotiation · 18 صفقة كبرى',
-    canvasSubtitle: 'تنبيه اختناق: بعد 5 أيام بدون حركة',
-    dealsCountLabel: '18 صفقة كبرى',
-    slaBadge: 'مرحلة حساسة وحرجة',
-    category: 'active',
-    ownersLabel: 'مدير المبيعات + الشؤون القانونية',
-    prereqDocsLabel: 'مسودة الاتفاقية + جدول الأسعار المعتمد',
-  },
-  {
-    id: 'stg_5',
-    numberLabel: '05',
-    stepIndex: 5,
-    title: '5. إغلاق فوز (Closed Won)',
-    englishSubtitle: 'محطة نهائية ناجحة',
-    canvasSubtitle: 'توليد الفاتورة والبدء في تجهيز المشروع',
-    dealsCountLabel: 'محطة نهائية ناجحة',
-    slaBadge: 'فوز',
-    category: 'won',
-  },
-  {
-    id: 'stg_6',
-    numberLabel: '06',
-    stepIndex: 6,
-    title: '6. إغلاق خسارة (Closed Lost)',
-    englishSubtitle: 'محطة إنهاء وتعثر',
-    canvasSubtitle: 'تحديد أسباب الفقد وتحليل المنافسين',
-    dealsCountLabel: 'محطة إنهاء وتعثر',
-    slaBadge: 'خسارة',
-    category: 'lost',
-  },
-];
-
-function createDefaultDuringFields(): BlueprintFieldRequirement[] {
-  return [
-    {
-      id: 'fld_contract_pdf',
-      title: 'العقد الموقع النهائي (PDF)',
-      subtitle: 'التحقق من وجود الختم والتوقيع الإلكتروني الحي',
-      badgeText: 'مرفق إلزامي',
-      badgeTone: 'danger',
-      enabled: true,
-    },
-    {
-      id: 'fld_po_number',
-      title: 'رقم أمر الشراء (PO Number)',
-      subtitle: 'صادر من نظام المشتريات للعميل',
-      badgeText: 'نص إلزامي',
-      badgeTone: 'info',
-      enabled: true,
-    },
-    {
-      id: 'fld_payment_terms',
-      title: 'طريقة الدفع وجدول الدفعات',
-      subtitle: 'خيارات: دفعة مقدمة 50% / نقدي / خطاب اعتماد',
-      badgeText: 'قائمة منسدلة',
-      badgeTone: 'info',
-      enabled: true,
-    },
-    {
-      id: 'fld_service_start_date',
-      title: 'تاريخ بدء سريان الخدمة',
-      subtitle: 'يحدد موعد تسليم المشروع وجدول الإطلاق',
-      badgeText: 'تاريخ ميلادي',
-      badgeTone: 'info',
-      enabled: true,
-    },
-    {
-      id: 'fld_discount_summary',
-      title: 'ملخص تفاوض الخصم النهائي',
-      subtitle: 'توثيق سبب أي خصم تجاوز نسبة 15%',
-      badgeText: 'ملاحظات نصية',
-      badgeTone: 'neutral',
-      enabled: true,
-    },
-  ];
+export interface BlueprintDefinition {
+  id: string;
+  orgId: string;
+  name: string;
+  description: string;
+  module: string;
+  linkedField: string;
+  criteria: string;
+  active: boolean;
+  updatedAt: string;
+  createdBy: string;
+  stages: BlueprintStageNode[];
+  transitions: BlueprintTransitionConfig[];
 }
 
-function createDefaultAfterActions(): BlueprintAfterAction[] {
-  return [
-    {
-      id: 'act_slack_whatsapp',
-      label: 'إشعار مباركة في واتساب وقناة مبيعات سلاك',
-      enabled: true,
-      systemTag: 'قالب معتمد',
-    },
-    {
-      id: 'act_account_tier',
-      label: 'تحويل الحساب تلقائياً إلى «عميل استراتيجي نشط»',
-      enabled: true,
-      systemTag: 'CRM Sync',
-    },
-    {
-      id: 'act_onboarding_task',
-      label: 'توليد مهمة عمل لفريق تجهيز وتسليم المشاريع',
-      enabled: true,
-      systemTag: 'قسم المشاريع',
-    },
-    {
-      id: 'act_erp_capi',
-      label: 'إرسال تفاصيل العقد لنظام الفوترة والمحاسبة ERP',
-      enabled: true,
-      systemTag: 'REST API',
-    },
-  ];
-}
+// ============================================================================
+// MODULE & FIELD PRESETS
+// ============================================================================
 
-function createDefaultBeforeConditions(): BlueprintBeforeCondition[] {
-  return [
-    {
-      id: 'cond_amount',
-      fieldLabel: 'قيمة الصفقة الإجمالية',
-      operatorLabel: 'أكبر من أو يساوي',
-      valueLabel: '50,000 ر.س',
-      enabled: true,
-    },
-    {
-      id: 'cond_quote_status',
-      fieldLabel: 'حالة عرض السعر المرتبط',
-      operatorLabel: 'يساوي',
-      valueLabel: 'معتمد من العميل',
-      enabled: true,
-    },
-    {
-      id: 'cond_tax_id',
-      fieldLabel: 'الرقم الضريبي للحساب (VAT)',
-      operatorLabel: 'غير فارغ',
-      valueLabel: 'موثق في السجل',
-      enabled: true,
-    },
-  ];
-}
-
-const INITIAL_TRANSITIONS: BlueprintTransitionConfig[] = [
+const MODULE_OPTIONS: {
+  module: string;
+  fields: string[];
+  defaultStates: Omit<BlueprintStageNode, 'onCanvas' | 'x' | 'y'>[];
+}[] = [
   {
-    id: 'tr_901',
-    code: 'TR-901',
-    shortTitle: 'بدء استكشاف الاحتياج',
-    englishName: 'Discovery Start',
-    pillLabel: 'انتقال: «إرسال العرض التوضيحي الفني»',
-    fromStageId: 'stg_1',
-    fromStageNumber: 1,
-    fromStageName: 'عميل محتمل مؤهل',
-    toStageId: 'stg_2',
-    toStageBadge: '2. تحليل الاحتياج',
-    toStageName: 'تحليل الاحتياج الفني',
-    tone: 'normal',
-    iconType: 'arrow',
-    roles: ['مسؤول تأهيل SDR', 'مسؤول حساب كبار العملاء (Senior KAM)'],
-    tableRoleChips: ['مسؤول تأهيل SDR'],
-    beforeSummaryChip: 'اكتمال فحص BANT',
-    beforeSummaryTone: 'emerald',
-    beforeCriteriaList: [
-      'اكتمال معايير التأهيل المبدئي (BANT) وتحديد الميزانية التقديرية',
-      'التحقق من بيانات التواصل الرسمية لصانع القرار في الشركة',
+    module: 'الصفقات والمبيعات',
+    fields: ['المرحلة (Stage)', 'حالة الاعتماد المالي', 'مسار التسليم والتنفيذ'],
+    defaultStates: [
+      { id: 'st_lead_qual', title: 'تأهيل أولي', englishSubtitle: 'INITIAL QUALIFICATION', slaBadge: '24 ساعة', category: 'normal', ownersLabel: 'مندوب المبيعات' },
+      { id: 'st_needs_analysis', title: 'تحليل الاحتياجات', englishSubtitle: 'NEEDS & DISCOVERY', slaBadge: '48 ساعة', category: 'normal', ownersLabel: 'مندوب مبيعات أول' },
+      { id: 'st_tech_demo', title: 'عرض تقني وتجريبي', englishSubtitle: 'TECHNICAL DEMO', slaBadge: '3 أيام', category: 'active', ownersLabel: 'مهندس ما قبل البيع' },
+      { id: 'st_quote_sent', title: 'إرسال عرض السعر', englishSubtitle: 'COMMERCIAL PROPOSAL', slaBadge: '48 ساعة', category: 'normal', ownersLabel: 'مدير الحسابات' },
+      { id: 'st_negotiation', title: 'مفاوضات ومراجعة العقود', englishSubtitle: 'LEGAL & NEGOTIATION', slaBadge: '5 أيام', category: 'normal', ownersLabel: 'مدير المبيعات + القانونية' },
+      { id: 'st_closed_won', title: 'إغلاق ناجح (Won)', englishSubtitle: 'CLOSED WON', slaBadge: 'مرحلة نهائية', category: 'won', ownersLabel: 'النظام المالي ERP' },
+      { id: 'st_closed_lost', title: 'إغلاق خاسر (Lost)', englishSubtitle: 'CLOSED LOST', slaBadge: 'أرشفة وتحليل', category: 'lost', ownersLabel: 'مدير المبيعات' },
     ],
-    rolesSummaryText: 'مسؤولي تأهيل المبيعات (SDR) ومدراء الحسابات',
-    tableDuringChips: ['ميزانية تقريبية', 'صانع القرار'],
-    duringGridCards: [
-      { label: 'الميزانية التقريبية المعتمدة', icon: 'payment' },
-      { label: 'اسم ومنصب صانع القرار', icon: 'po' },
-      { label: 'تاريخ الاجتماع الاستكشافي', icon: 'date' },
-      { label: 'ملخص الاحتياج الأولي PDF', icon: 'pdf' },
-    ],
-    duringCountBadge: '4 حقول إلزامية',
-    tableAfterChips: ['إشعار بريد', 'مهمة اتصال'],
-    afterDetailRows: [
-      { label: 'إرسال بريد ترحيبي وجدول أعمال الاجتماع الفني', tag: 'قالب معتمد' },
-      { label: 'إنشاء مهمة اتصال لمهندس الحلول (Pre-Sales)', tag: 'قسم المبيعات' },
-      { label: 'تحديث حالة العميل المحتمل في سجل النشاط', tag: 'CRM Sync' },
-    ],
-    afterCountBadge: '2 مهام تلقائية',
-    slaDurationLabel: '24 ساعة',
-    slaStatusLabel: 'سليم',
-    enabled: true,
-    requireDigitalSignature: false,
-    discountLimitPercent: 10,
-    beforeConditions: createDefaultBeforeConditions(),
-    duringFields: createDefaultDuringFields(),
-    afterActions: createDefaultAfterActions(),
   },
   {
-    id: 'tr_902',
-    code: 'TR-902',
-    shortTitle: 'تقديم العرض الفني التجريبي',
-    englishName: 'Technical Demo',
-    pillLabel: 'انتقال: «إصدار العرض المالي المعتمد»',
-    fromStageId: 'stg_2',
-    fromStageNumber: 2,
-    fromStageName: 'تحليل الاحتياج',
-    toStageId: 'stg_3',
-    toStageBadge: '3. تقديم العرض المالي',
-    toStageName: 'تقديم العرض المالي',
-    badgeTag: 'موافقة مالية',
-    tone: 'normal',
-    iconType: 'monitor',
-    roles: ['مهندس حلول SE', 'مدير الحساب KAM'],
-    tableRoleChips: ['مهندس حلول SE', 'مدير الحساب KAM'],
-    beforeSummaryChip: 'اعتماد نطاق العمل SOW',
-    beforeSummaryTone: 'emerald',
-    beforeCriteriaList: [
-      'اعتماد وثيقة نطاق العمل الفني (SOW) من مهندس الحلول',
-      'إتمام جلسة العرض التوضيحي (Demo) بحضور ممثل العميل التقني',
+    module: 'العملاء المحتملين',
+    fields: ['حالة العميل (Lead Status)', 'درجة التأهيل (Lead Rating)', 'مسار المتابعة'],
+    defaultStates: [
+      { id: 'ld_new', title: 'عميل محتمل جديد', englishSubtitle: 'NEW INBOUND LEAD', slaBadge: 'ساعتان', category: 'normal', ownersLabel: 'فريق الاستقبال SDR' },
+      { id: 'ld_contacted', title: 'تم التواصل الأولي', englishSubtitle: 'FIRST CONTACT MADE', slaBadge: '24 ساعة', category: 'active', ownersLabel: 'أخصائي تطوير الأعمال' },
+      { id: 'ld_qualified', title: 'مؤهل مبيعياً (SQL)', englishSubtitle: 'SALES QUALIFIED', slaBadge: '48 ساعة', category: 'normal', ownersLabel: 'تنفيذي المبيعات' },
+      { id: 'ld_nurturing', title: 'رعاية ومتابعة لاحقة', englishSubtitle: 'LEAD NURTURING', slaBadge: '7 أيام', category: 'normal', ownersLabel: 'التسويق الرقمي' },
+      { id: 'ld_converted', title: 'تم التحويل لصفقة', englishSubtitle: 'CONVERTED TO DEAL', slaBadge: 'مكتمل', category: 'won', ownersLabel: 'مدير المبيعات' },
+      { id: 'ld_disqualified', title: 'غير مؤهل / مستبعد', englishSubtitle: 'DISQUALIFIED', slaBadge: 'مغلق', category: 'lost', ownersLabel: 'فريق SDR' },
     ],
-    rolesSummaryText: 'مهندسي الحلول (SE) ومدراء حسابات كبار العملاء (KAM)',
-    tableDuringChips: ['مستند المتطلبات PDF', 'درجة جاهزية الربط'],
-    duringGridCards: [
-      { label: 'مستند المتطلبات الفنية PDF', icon: 'pdf' },
-      { label: 'درجة جاهزية الربط التقني API', icon: 'po' },
-      { label: 'جدول التوريد والترخيص المقترح', icon: 'payment' },
-      { label: 'تاريخ تسليم العرض المالي', icon: 'date' },
-    ],
-    duringCountBadge: '4 حقول إلزامية',
-    tableAfterChips: ['تنبيه مدير المبيعات', 'فتح مسودة عرض'],
-    afterDetailRows: [
-      { label: 'إشعار مدير المبيعات لاعتماد تسعير البنود', tag: 'قالب معتمد' },
-      { label: 'إنشاء مسودة عرض سعر آلياً في وحدة Quotes', tag: 'REST API' },
-      { label: 'تعيين مهمة متابعة العرض المالي خلال 48 ساعة', tag: 'قسم المبيعات' },
-    ],
-    afterCountBadge: '2 مهام ويب هوك',
-    slaDurationLabel: '3 أيام عمل',
-    slaStatusLabel: 'سليم',
-    enabled: true,
-    requireDigitalSignature: false,
-    discountLimitPercent: 15,
-    beforeConditions: createDefaultBeforeConditions(),
-    duringFields: createDefaultDuringFields(),
-    afterActions: createDefaultAfterActions(),
   },
   {
-    id: 'tr_903',
-    code: 'TR-903',
-    shortTitle: 'إصدار العرض المالي المعتمد',
-    englishName: 'Approved Quote Issued',
-    pillLabel: 'انتقال: «بدء التفاوض والمراجعة القانونية»',
-    fromStageId: 'stg_3',
-    fromStageNumber: 3,
-    fromStageName: 'تقديم العرض المالي',
-    toStageId: 'stg_4',
-    toStageBadge: '4. التفاوض ومراجعة العقود',
-    toStageName: 'التفاوض والعقود',
-    tone: 'normal',
-    iconType: 'doc',
-    roles: ['مسؤول كبار العملاء KAM', 'مدير المبيعات الإقليمي'],
-    tableRoleChips: ['مسؤول كبار العملاء KAM'],
-    beforeSummaryChip: 'موافقة المدير المالي > 100k',
-    beforeSummaryTone: 'emerald',
-    beforeCriteriaList: [
-      'موافقة المدير المالي على الصفقات التي تتجاوز قيمتها 100,000 ر.س',
-      'مطابقة نسبة الخصم الممنوحة مع سقف صلاحيات المندوب (<= 15%)',
+    module: 'عروض الأسعار',
+    fields: ['حالة العرض (Quote Status)', 'مرحلة اعتماد الخصم'],
+    defaultStates: [
+      { id: 'qt_draft', title: 'مسودة عرض سعر', englishSubtitle: 'DRAFT QUOTE', slaBadge: '4 ساعات', category: 'normal', ownersLabel: 'مندوب المبيعات' },
+      { id: 'qt_mgr_review', title: 'مراجعة مدير المبيعات', englishSubtitle: 'MANAGER APPROVAL', slaBadge: '12 ساعة', category: 'active', ownersLabel: 'مدير المبيعات' },
+      { id: 'qt_fin_review', title: 'اعتماد الإدارة المالية', englishSubtitle: 'FINANCE GOVERNANCE', slaBadge: '24 ساعة', category: 'normal', ownersLabel: 'المدير المالي CFO' },
+      { id: 'qt_sent_client', title: 'مرسل للعميل لاعتماده', englishSubtitle: 'SENT TO CUSTOMER', slaBadge: '3 أيام', category: 'normal', ownersLabel: 'مندوب المبيعات' },
+      { id: 'qt_accepted', title: 'معتمد ومحول لأمر بيع', englishSubtitle: 'ACCEPTED & CONVERTED', slaBadge: 'معتمد', category: 'won', ownersLabel: 'النظام المالي' },
+      { id: 'qt_rejected', title: 'مرفوض / منتهي الصلاحية', englishSubtitle: 'REJECTED OR EXPIRED', slaBadge: 'مغلق', category: 'lost', ownersLabel: 'مندوب المبيعات' },
     ],
-    rolesSummaryText: 'مسؤولي حسابات كبار العملاء (KAM) والمدير المالي',
-    tableDuringChips: ['إجمالي القيمة التعاقدية', 'نسبة الخصم', 'شروط السداد'],
-    duringGridCards: [
-      { label: 'نسخة العرض المالي المعتمدة PDF', icon: 'pdf' },
-      { label: 'إجمالي القيمة التعاقدية ونسبة الخصم', icon: 'po' },
-      { label: 'شروط السداد والدفعات المرحلية', icon: 'payment' },
-      { label: 'تاريخ انتهاء صلاحية العرض', icon: 'date' },
-    ],
-    duringCountBadge: '5 حقول إلزامية',
-    tableAfterChips: ['توليد رابط العرض', 'تتبع فتح العميل'],
-    afterDetailRows: [
-      { label: 'توليد رابط عرض سعر تفاعلي وإرساله للعميل', tag: 'REST API' },
-      { label: 'تفعيل تتبع فتح العميل للعرض وإشعار واتساب لحظي', tag: 'قالب معتمد' },
-      { label: 'جدولة تذكير متابعة التفاوض بعد 3 أيام عمل', tag: 'قسم المبيعات' },
-    ],
-    afterCountBadge: '3 مهام ويب هوك',
-    slaDurationLabel: '5 أيام',
-    slaStatusLabel: 'سليم',
-    enabled: true,
-    requireDigitalSignature: true,
-    discountLimitPercent: 15,
-    beforeConditions: createDefaultBeforeConditions(),
-    duringFields: createDefaultDuringFields(),
-    afterActions: createDefaultAfterActions(),
   },
   {
-    id: 'tr_903_legal',
-    code: 'TR-903B',
-    shortTitle: 'بدء المراجعة القانونية',
-    englishName: 'Legal Contract Review',
-    pillLabel: 'انتقال: «بدء المراجعة القانونية»',
-    fromStageId: 'stg_4',
-    fromStageNumber: 4,
-    fromStageName: 'التفاوض ومراجعة العقود',
-    toStageId: 'stg_4',
-    toStageBadge: '4. التفاوض ومراجعة العقود',
-    toStageName: 'التفاوض ومراجعة العقود',
-    tone: 'normal',
-    iconType: 'scale',
-    roles: ['المستشار القانوني', 'مدير المبيعات الإقليمي'],
-    tableRoleChips: ['المستشار القانوني'],
-    beforeSummaryChip: 'طلب تعديل البنود',
-    beforeSummaryTone: 'emerald',
-    beforeCriteriaList: [
-      'وجود طلب رسمي من العميل لتعديل بنود الاتفاقية القانونية',
-      'إرفاق مسودة العقد الأولية وملاحظات إدارة المشتريات لدى العميل',
+    module: 'أوامر البيع',
+    fields: ['حالة أمر البيع (Order Status)', 'حالة التوريد والتسليم'],
+    defaultStates: [
+      { id: 'so_created', title: 'أمر بيع قيد التدقيق', englishSubtitle: 'PENDING VERIFICATION', slaBadge: '6 ساعات', category: 'normal', ownersLabel: 'منسق المبيعات' },
+      { id: 'so_approved', title: 'معتمد للتنفيذ والتجهيز', englishSubtitle: 'APPROVED FOR FULFILLMENT', slaBadge: '24 ساعة', category: 'active', ownersLabel: 'مدير العمليات' },
+      { id: 'so_delivered', title: 'تم التسليم وإصدار الفاتورة', englishSubtitle: 'DELIVERED & INVOICED', slaBadge: 'مكتمل', category: 'won', ownersLabel: 'الحسابات' },
+      { id: 'so_cancelled', title: 'ملغى', englishSubtitle: 'CANCELLED', slaBadge: 'مغلق', category: 'lost', ownersLabel: 'مدير العمليات' },
     ],
-    rolesSummaryText: 'المستشار القانوني وفريق الشؤون القانونية والعقود',
-    tableDuringChips: ['مسودة العقد المحررة', 'ملاحظات الشؤون القانونية'],
-    duringGridCards: [
-      { label: 'مسودة العقد المحررة (Redline PDF)', icon: 'pdf' },
-      { label: 'ملاحظات الشؤون القانونية والبنود المعدلة', icon: 'po' },
-      { label: 'اعتماد شروط الضمان والالتزامات', icon: 'payment' },
-      { label: 'تاريخ اكتمال المراجعة القانونية', icon: 'date' },
-    ],
-    duringCountBadge: '4 حقول إلزامية',
-    tableAfterChips: ['قفل تعديل الأسعار'],
-    afterDetailRows: [
-      { label: 'قفل تعديل أسعار البنود والخصومات أثناء المراجعة القانونية', tag: 'حماية النظام' },
-      { label: 'إشعار فريق المبيعات فور اعتماد الصيغة القانونية النهائية', tag: 'قالب معتمد' },
-    ],
-    afterCountBadge: '2 مهام نظامية',
-    slaDurationLabel: '4 أيام',
-    slaStatusLabel: 'سليم',
-    enabled: true,
-    requireDigitalSignature: true,
-    discountLimitPercent: 15,
-    beforeConditions: createDefaultBeforeConditions(),
-    duringFields: createDefaultDuringFields(),
-    afterActions: createDefaultAfterActions(),
   },
   {
-    id: 'tr_904',
-    code: 'TR-904',
-    shortTitle: 'إتمام التعاقد والفوز',
-    englishName: 'Close Won',
-    pillLabel: 'إتمام التعاقد والفوز (Close Won)',
-    fromStageId: 'stg_4',
-    fromStageNumber: 5,
-    fromStageName: 'إتمام التعاقد والفوز',
-    toStageId: 'stg_5',
-    toStageBadge: '5. إتمام التعاقد والفوز',
-    toStageName: 'إغلاق فوز ✓',
-    tone: 'won',
-    iconType: 'won',
-    roles: [
-      'مدير المبيعات الإقليمي',
-      'مسؤول حساب كبار العملاء (Senior KAM)',
+    module: 'الفواتير',
+    fields: ['حالة الفاتورة (Invoice Status)', 'مسار التحصيل المالي'],
+    defaultStates: [
+      { id: 'inv_issued', title: 'فاتورة ضريبية صادرة', englishSubtitle: 'ISSUED TAX INVOICE', slaBadge: 'فوري', category: 'normal', ownersLabel: 'المحاسب المالي' },
+      { id: 'inv_collection', title: 'قيد المتابعة والتحصيل', englishSubtitle: 'COLLECTION FOLLOW-UP', slaBadge: '14 يوماً', category: 'active', ownersLabel: 'مسؤول التحصيل' },
+      { id: 'inv_paid', title: 'مسددة بالكامل', englishSubtitle: 'PAID IN FULL', slaBadge: 'محصلة', category: 'won', ownersLabel: 'أمين الخزينة' },
+      { id: 'inv_overdue', title: 'متأخرة السداد / مطالبات', englishSubtitle: 'OVERDUE ESCALATION', slaBadge: 'تصعيد', category: 'lost', ownersLabel: 'الشؤون القانونية' },
     ],
-    tableRoleChips: ['مدير المبيعات الإقليمي', 'مسؤول كبار العملاء KAM'],
-    beforeSummaryChip: 'موافقة العميل الرسمية + تفويض',
-    beforeSummaryTone: 'emerald',
-    beforeCriteriaList: [
-      'اكتمال توقيع مذكرة التفاهم الأولية أو خطاب النوايا LOI',
-      'تخطي فحص السجل الائتماني والموافقة القانونية الرسمية',
-    ],
-    rolesSummaryText: 'مدراء المبيعات الإقليميين وكبار مسؤولي KAM',
-    tableDuringChips: ['العقد الموقع PDF', 'طريقة الدفع', 'رقم PO', 'نفاذ/DocuSign'],
-    duringGridCards: [
-      { label: 'العقد النهائي PDF', icon: 'pdf' },
-      { label: 'رقم أمر الشراء PO', icon: 'po' },
-      { label: 'طريقة الدفع والجدول', icon: 'payment' },
-      { label: 'تاريخ بدء التشغيل', icon: 'date' },
-    ],
-    duringCountBadge: '6 حقول إلزامية',
-    tableAfterChips: ['واتساب تنفيذي', 'فاتورة ERP', 'مشروع تسليم'],
-    afterDetailRows: [
-      { label: 'مزامنة الفاتورة مع نظام ERP (SAP)', tag: 'REST API' },
-      { label: 'إشعار WhatsApp تنفيذي للعميل وفريق العمليات', tag: 'قالب معتمد' },
-      { label: 'إنشاء مشروع تدشين Onboarding تلقائي', tag: 'قسم المشاريع' },
-    ],
-    afterCountBadge: '4 مهام ويب هوك',
-    slaDurationLabel: 'بدون قيود زمنية',
-    slaStatusLabel: 'سليم ومحصّن',
-    enabled: true,
-    requireDigitalSignature: true,
-    discountLimitPercent: 15,
-    beforeConditions: createDefaultBeforeConditions(),
-    duringFields: createDefaultDuringFields(),
-    afterActions: createDefaultAfterActions(),
-  },
-  {
-    id: 'tr_905',
-    code: 'TR-905',
-    shortTitle: 'تعثر الصفقة وخسارة',
-    englishName: 'Mark as Lost',
-    pillLabel: 'تعثر الصفقة وخسارة (Mark as Lost)',
-    fromStageId: 'stg_4',
-    fromStageNumber: 4,
-    fromStageName: 'التفاوض ومراجعة العقود',
-    toStageId: 'stg_6',
-    toStageBadge: '6. إغلاق خسارة',
-    toStageName: 'إغلاق خسارة ✕',
-    badgeTag: 'سبب إلزامي',
-    tone: 'lost',
-    iconType: 'lost',
-    roles: ['مدير المبيعات الإقليمي', 'مسؤول حساب كبار العملاء (Senior KAM)'],
-    tableRoleChips: ['مدير المبيعات الإقليمي'],
-    beforeSummaryChip: 'رفض العرض المالي مرتين',
-    beforeSummaryTone: 'slate',
-    beforeCriteriaList: [
-      'تسجيل محاولتي تفاوض رسميتين على الأقل قبل إغلاق الصفقة كخسارة',
-      'مراجعة مدير المبيعات الإقليمي لأسباب الاعتراض السعري أو الفني',
-    ],
-    rolesSummaryText: 'مدراء المبيعات الإقليميين فقط',
-    tableDuringChips: ['سبب الخسارة الرئيسي', 'المنافس الفائز'],
-    duringGridCards: [
-      { label: 'سبب الخسارة الرئيسي الموثق', icon: 'po' },
-      { label: 'اسم المنافس الفائز بالصفقة', icon: 'payment' },
-      { label: 'تاريخ قرار الإلغاء / الخسارة', icon: 'date' },
-      { label: 'تقرير الدروس المستفادة PDF', icon: 'pdf' },
-    ],
-    duringCountBadge: '3 حقول إلزامية',
-    tableAfterChips: ['أرشفة السجل', 'إشعار الإدارة'],
-    afterDetailRows: [
-      { label: 'أرشفة السجل وإلغاء مسودات عروض الأسعار المفتوحة', tag: 'CRM Sync' },
-      { label: 'إشعار إدارة المبيعات وتحديث تقرير تحليل المنافسين', tag: 'قالب معتمد' },
-      { label: 'جدولة مهمة إعادة تواصل بعد 6 أشهر (Win-Back)', tag: 'قسم المبيعات' },
-    ],
-    afterCountBadge: '2 مهام نظامية',
-    slaDurationLabel: 'بدون مهلة',
-    slaStatusLabel: 'سليم',
-    enabled: true,
-    requireDigitalSignature: false,
-    discountLimitPercent: 0,
-    beforeConditions: createDefaultBeforeConditions(),
-    duringFields: createDefaultDuringFields(),
-    afterActions: createDefaultAfterActions(),
-  },
-  {
-    id: 'tr_906',
-    code: 'TR-906',
-    shortTitle: 'إعادة تقييم وتعديل التسعير',
-    englishName: 'Re-evaluate Pricing',
-    pillLabel: 'انتقال: «إعادة تقييم وتعديل التسعير»',
-    fromStageId: 'stg_4',
-    fromStageNumber: 4,
-    fromStageName: 'التفاوض ومراجعة العقود',
-    toStageId: 'stg_3',
-    toStageBadge: '3. تقديم العرض المالي',
-    toStageName: 'تقديم العرض المالي',
-    tone: 'loop',
-    iconType: 'loop',
-    roles: ['مدير المبيعات'],
-    tableRoleChips: ['مدير المبيعات'],
-    beforeSummaryChip: 'طلب تخفيض مالي إضافي',
-    beforeSummaryTone: 'slate',
-    beforeCriteriaList: [
-      'تقديم العميل طلب تخفيض مالي إضافي يتطلب تعديل بنود العرض',
-      'موافقة مدير المبيعات على إعادة فتح التسعير ومراجعة الهامش الربحي',
-    ],
-    rolesSummaryText: 'مدراء المبيعات ومسؤولي التسعير',
-    tableDuringChips: ['مبرر تعديل الهامش الربحي'],
-    duringGridCards: [
-      { label: 'مبرر تعديل الهامش الربحي', icon: 'po' },
-      { label: 'نسبة الخصم الإضافية المطلوبة', icon: 'payment' },
-      { label: 'مسودة العرض المالي المعدل PDF', icon: 'pdf' },
-      { label: 'تاريخ إعادة التقديم للعميل', icon: 'date' },
-    ],
-    duringCountBadge: '2 حقول إلزامية',
-    tableAfterChips: ['إلغاء مسودة العقد 1'],
-    afterDetailRows: [
-      { label: 'إلغاء مسودة العقد السابقة (الإصدار 1) وفتح مراجعة تسعير جديدة', tag: 'حماية النظام' },
-      { label: 'إشعار الفريق المالي بطلب مراجعة الهامش الربحي', tag: 'قالب معتمد' },
-    ],
-    afterCountBadge: '1 مهمة نظامية',
-    slaDurationLabel: '48 ساعة',
-    slaStatusLabel: 'سليم',
-    enabled: true,
-    requireDigitalSignature: false,
-    discountLimitPercent: 20,
-    beforeConditions: createDefaultBeforeConditions(),
-    duringFields: createDefaultDuringFields(),
-    afterActions: createDefaultAfterActions(),
   },
 ];
 
 const AVAILABLE_ROLES = [
-  'مدير المبيعات الإقليمي',
-  'مسؤول حساب كبار العملاء (Senior KAM)',
-  'مدير المبيعات التنفيذي',
-  'مشرف العقود والمالية',
-  'مهندس حلول ما قبل البيع',
-  'المستشار القانوني',
+  'مدير النظام (System Admin)',
+  'مدير المبيعات (Sales Director)',
+  'مندوب مبيعات أول (Senior AE)',
+  'مندوب المبيعات (Sales Rep)',
+  'المدير المالي (CFO)',
+  'المستشار القانوني (Legal Counsel)',
+  'مهندس ما قبل البيع (Pre-Sales)',
+  'أخصائي تطوير الأعمال (SDR)',
 ];
 
-export const BlueprintBuilderPage: React.FC = () => {
-  const { firebaseUser, blueprints, roles } = useCrm();
+// ============================================================================
+// INITIAL SEED BLUEPRINTS FOR DEFAULT ORG
+// ============================================================================
 
-  const activeBlueprintDoc = useMemo(
-    () =>
-      blueprints.find(
-        (b) => b.module === 'الصفقات والمبيعات' || b.name.includes('صفقات')
-      ) ?? blueprints[0],
-    [blueprints]
-  );
-
-  const [targetModule, setTargetModule] = useState<'الصفقات والمبيعات' | 'العملاء المحتملين'>(
-    'الصفقات والمبيعات'
-  );
-  const [blueprintActive, setBlueprintActive] = useState<boolean>(true);
-  const [viewMode, setViewMode] = useState<'visual' | 'table'>('visual');
-  const [zoomPercent, setZoomPercent] = useState<number>(100);
-  const [stageSearch, setStageSearch] = useState('');
-
-  // Table View Filters & Banner State
-  const [tableSearch, setTableSearch] = useState('');
-  const [tableStageFilter, setTableStageFilter] = useState<string>('all');
-  const [tablePathTypeFilter, setTablePathTypeFilter] = useState<string>('all');
-  const [showSaveBanner, setShowSaveBanner] = useState<boolean>(true);
-  const [sellerPreviewOpen, setSellerPreviewOpen] = useState<boolean>(false);
-  const [openRowMenuId, setOpenRowMenuId] = useState<string | null>(null);
-
-  const [stages, setStages] = useState<BlueprintStageNode[]>(INITIAL_STAGES);
-  const [selectedStageId, setSelectedStageId] = useState<string>('stg_4');
-  const [transitions, setTransitions] =
-    useState<BlueprintTransitionConfig[]>(INITIAL_TRANSITIONS);
-  const [selectedTransitionId, setSelectedTransitionId] = useState<string>('tr_904');
-  const [inspectorTab, setInspectorTab] = useState<'before' | 'during' | 'after'>('during');
-
-  // Modals / Inline creators
-  const [addingStageModal, setAddingStageModal] = useState(false);
-  const [newStageTitle, setNewStageTitle] = useState('');
-  const [newStageSla, setNewStageSla] = useState('SLA: 3 أيام');
-
-  const [addingTransitionModal, setAddingTransitionModal] = useState(false);
-  const [newTrTitle, setNewTrTitle] = useState('');
-  const [newTrToStage, setNewTrToStage] = useState('5. إتمام التعاقد والفوز');
-
-  const [addingFieldInline, setAddingFieldInline] = useState(false);
-  const [newFieldTitle, setNewFieldTitle] = useState('');
-  const [newFieldSubtitle, setNewFieldSubtitle] = useState('');
-
-  const [addingRoleMenu, setAddingRoleMenu] = useState(false);
-  const [simulationOpen, setSimulationOpen] = useState(false);
-  const [simStepIndex, setSimStepIndex] = useState(0);
-  const [simRoleMode, setSimRoleMode] = useState<'authorized' | 'unauthorized'>('authorized');
-  const [simDealIndex, setSimDealIndex] = useState(0);
-  const [simPdfVerified, setSimPdfVerified] = useState(true);
-  const [simPoNumber, setSimPoNumber] = useState('PO-99482-KSA');
-  const [simPaymentTerms, setSimPaymentTerms] = useState(
-    'دفعة مقدمة 50% / نقدي بشيك مصدق'
-  );
-  const [simServiceDate, setSimServiceDate] = useState('01/07/2025');
-  const [simDigitalSignVerified, setSimDigitalSignVerified] = useState(true);
-  const [simNotes, setSimNotes] = useState(
-    'تم اعتماد خصم 12% بموافقة الإدارة الإقليمية لتسريع التوقيع قبل نهاية الربع الثاني، وحجز رخص الاستضافة السنوية.'
-  );
-  const [simDryRunResult, setSimDryRunResult] = useState<'idle' | 'passed' | 'blocked'>('idle');
-  const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
-
-  // Transition Rules Editor Modal ("تعديل قواعد الانتقال")
-  const [transitionEditorOpen, setTransitionEditorOpen] = useState(false);
-  const [editorActiveTab, setEditorActiveTab] = useState<'a' | 'b' | 'c' | 'd'>('b');
-  const [editorButtonLabel, setEditorButtonLabel] = useState(
-    'إتمام التعاقد والفوز (Close Won)'
-  );
-  const [editorButtonStyle, setEditorButtonStyle] = useState<
-    'emerald' | 'blue' | 'rose'
-  >('emerald');
-  const [editorRoleDropdownOpen, setEditorRoleDropdownOpen] = useState(false);
-  const [editorCriteriaRows, setEditorCriteriaRows] = useState<
+function createSeedBlueprints(orgId: string): BlueprintDefinition[] {
+  return [
     {
-      id: string;
-      logic: 'AND' | 'OR';
-      field: string;
-      operator: string;
-      value: string;
-    }[]
-  >([
-    {
-      id: 'crit_1',
-      logic: 'AND',
-      field: 'Deal.LOI_Status (مذكرة التفاهم / خطاب النوايا)',
-      operator: '== (يساوي)',
-      value: 'موقع ومعتمد رسمياً',
-    },
-    {
-      id: 'crit_2',
-      logic: 'AND',
-      field: 'Account.Credit_Score (فحص السجل الائتماني)',
-      operator: '== (يساوي)',
-      value: 'مجتاز وموافق عليه قانونياً',
-    },
-  ]);
-  const [editorPoRegex, setEditorPoRegex] = useState('PO-#####');
-  const [editorNewFieldOpen, setEditorNewFieldOpen] = useState(false);
-  const [editorNewFieldName, setEditorNewFieldName] = useState('');
-  const [editorNewFieldType, setEditorNewFieldType] = useState('نص إلزامي');
-  const [editorAfterToggles, setEditorAfterToggles] = useState({
-    notifications: true,
-    onboardingTask: true,
-    metaCapiPurchase: true,
-    salesOrderGeneration: true,
-  });
-
-  const sectionARef = useRef<HTMLDivElement>(null);
-  const sectionBRef = useRef<HTMLDivElement>(null);
-  const sectionCRef = useRef<HTMLDivElement>(null);
-  const sectionDRef = useRef<HTMLDivElement>(null);
-
-  const [savingToFirestore, setSavingToFirestore] = useState(false);
-  const [lastSavedLabel, setLastSavedLabel] = useState('منذ يومين بواسطة طارق العتيبي');
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (activeBlueprintDoc) {
-      setBlueprintActive(activeBlueprintDoc.active);
-    }
-  }, [activeBlueprintDoc?.id]);
-
-  useEffect(() => {
-    if (!toastMsg) return;
-    const t = window.setTimeout(() => setToastMsg(null), 3500);
-    return () => window.clearTimeout(t);
-  }, [toastMsg]);
-
-  const selectedTransition = useMemo(
-    () =>
-      transitions.find((t) => t.id === selectedTransitionId) ??
-      transitions.find((t) => t.id === 'tr_904') ??
-      transitions[0],
-    [selectedTransitionId, transitions]
-  );
-
-  const filteredStages = useMemo(() => {
-    const q = stageSearch.trim().toLowerCase();
-    if (!q) return stages;
-    return stages.filter(
-      (s) =>
-        s.title.toLowerCase().includes(q) ||
-        s.englishSubtitle.toLowerCase().includes(q)
-    );
-  }, [stageSearch, stages]);
-
-  const filteredTableTransitions = useMemo(() => {
-    return transitions.filter((tr) => {
-      if (tableStageFilter !== 'all' && tr.fromStageId !== tableStageFilter) {
-        return false;
-      }
-      if (tablePathTypeFilter !== 'all') {
-        if (tablePathTypeFilter === 'won' && tr.tone !== 'won') return false;
-        if (tablePathTypeFilter === 'lost' && tr.tone !== 'lost') return false;
-        if (tablePathTypeFilter === 'progress' && tr.tone !== 'normal' && tr.tone !== 'loop')
-          return false;
-      }
-      const q = tableSearch.trim().toLowerCase();
-      if (!q) return true;
-      return (
-        tr.shortTitle.toLowerCase().includes(q) ||
-        tr.englishName.toLowerCase().includes(q) ||
-        tr.fromStageName.toLowerCase().includes(q) ||
-        tr.toStageBadge.toLowerCase().includes(q) ||
-        tr.beforeSummaryChip.toLowerCase().includes(q) ||
-        tr.tableRoleChips.some((r) => r.toLowerCase().includes(q)) ||
-        tr.tableDuringChips.some((d) => d.toLowerCase().includes(q)) ||
-        tr.tableAfterChips.some((a) => a.toLowerCase().includes(q))
-      );
-    });
-  }, [transitions, tableStageFilter, tablePathTypeFilter, tableSearch]);
-
-  const totalMandatoryFieldsCount = useMemo(() => {
-    const enabledInSelected = selectedTransition.duringFields.filter((f) => f.enabled).length;
-    return Math.max(1, 9 + enabledInSelected);
-  }, [selectedTransition]);
-
-  const rolePool = useMemo(() => {
-    const fromCrm = roles.map((r) => r.name);
-    return Array.from(new Set([...AVAILABLE_ROLES, ...fromCrm]));
-  }, [roles]);
-
-  // Persist Blueprint configuration to Firestore `blueprints` collection
-  const persistBlueprintToFirestore = async (
-    overrideActive?: boolean,
-    overrideStagesCount?: number,
-    customToast?: string
-  ) => {
-    setSavingToFirestore(true);
-    const nextActive = overrideActive ?? blueprintActive;
-    const nextStagesCount = Math.min(30, Math.max(1, overrideStagesCount ?? stages.length));
-    const bpName =
-      targetModule === 'الصفقات والمبيعات'
-        ? 'مسار مبيعات كبار العملاء (Enterprise Deals Blueprint)'
-        : 'مسار تأهيل العملاء المحتملين (Enterprise Leads Blueprint)';
-
-    const enabledDuringNames = selectedTransition.duringFields
-      .filter((f) => f.enabled)
-      .map((f) => f.title)
-      .join('، ');
-
-    const descriptionSummary = `انتقال [${selectedTransition.code}]: ${selectedTransition.shortTitle} | الحقول الإلزامية: ${enabledDuringNames}`.slice(
-      0,
-      290
-    );
-
-    try {
-      if (firebaseUser) {
-        if (activeBlueprintDoc) {
-          try {
-            await updateDoc(doc(db, 'blueprints', activeBlueprintDoc.id), {
-              name: bpName.slice(0, 120),
-              active: nextActive,
-              stagesCount: nextStagesCount,
-              description: descriptionSummary,
-              updatedAt: serverTimestamp(),
-            });
-          } catch (err) {
-            handleFirestoreError(
-              err,
-              OperationType.UPDATE,
-              `blueprints/${activeBlueprintDoc.id}`
-            );
-          }
-        } else {
-          const newDocId = `bp_${Date.now()}`;
-          try {
-            await setDoc(doc(db, 'blueprints', newDocId), {
-              ownerId: firebaseUser.uid,
-              name: bpName.slice(0, 120),
-              module: targetModule.slice(0, 60),
-              active: nextActive,
-              stagesCount: nextStagesCount,
-              description: descriptionSummary,
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-            });
-          } catch (err) {
-            handleFirestoreError(err, OperationType.CREATE, `blueprints/${newDocId}`);
-          }
-        }
-      }
-      setLastSavedLabel('الآن بواسطة طارق العتيبي');
-      setShowSaveBanner(true);
-      setToastMsg(
-        customToast ||
-          `تم حفظ وتطبيق قواعد الانتقال [${selectedTransition.shortTitle} (${selectedTransition.englishName})] في Firestore بنجاح`
-      );
-    } finally {
-      setSavingToFirestore(false);
-    }
-  };
-
-  const handleToggleBlueprintActive = async () => {
-    const next = !blueprintActive;
-    setBlueprintActive(next);
-    await persistBlueprintToFirestore(
-      next,
-      stages.length,
-      next
-        ? 'تم تفعيل البلوبرينت ليعمل تلقائياً على الصفقات'
-        : 'تم تحويل البلوبرينت إلى وضع المسودة (Draft)'
-    );
-  };
-
-  const handleToggleTransitionRowEnabled = async (trId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const target = transitions.find((t) => t.id === trId);
-    if (!target) return;
-    const nextEnabled = !target.enabled;
-    setTransitions((prev) =>
-      prev.map((t) => (t.id === trId ? { ...t, enabled: nextEnabled } : t))
-    );
-    await persistBlueprintToFirestore(
-      blueprintActive,
-      stages.length,
-      nextEnabled
-        ? `تم تفعيل انتقال «${target.shortTitle}» في مسار البلوبرينت`
-        : `تم إيقاف انتقال «${target.shortTitle}» مؤقتاً`
-    );
-  };
-
-  const updateSelectedTransition = (
-    updater: (prev: BlueprintTransitionConfig) => BlueprintTransitionConfig
-  ) => {
-    setTransitions((prev) =>
-      prev.map((tr) => (tr.id === selectedTransition.id ? updater(tr) : tr))
-    );
-  };
-
-  const handleToggleDuringField = (fieldId: string) => {
-    updateSelectedTransition((tr) => ({
-      ...tr,
-      duringFields: tr.duringFields.map((f) =>
-        f.id === fieldId ? { ...f, enabled: !f.enabled } : f
-      ),
-    }));
-  };
-
-  const handleToggleAfterAction = (actionId: string) => {
-    updateSelectedTransition((tr) => ({
-      ...tr,
-      afterActions: tr.afterActions.map((a) =>
-        a.id === actionId ? { ...a, enabled: !a.enabled } : a
-      ),
-    }));
-  };
-
-  const handleToggleBeforeCondition = (condId: string) => {
-    updateSelectedTransition((tr) => ({
-      ...tr,
-      beforeConditions: tr.beforeConditions.map((c) =>
-        c.id === condId ? { ...c, enabled: !c.enabled } : c
-      ),
-    }));
-  };
-
-  const handleRemoveRole = (roleToRemove: string) => {
-    updateSelectedTransition((tr) => ({
-      ...tr,
-      roles: tr.roles.filter((r) => r !== roleToRemove),
-    }));
-  };
-
-  const handleAddRole = (roleToAdd: string) => {
-    updateSelectedTransition((tr) => ({
-      ...tr,
-      roles: Array.from(new Set([...tr.roles, roleToAdd])),
-    }));
-    setAddingRoleMenu(false);
-  };
-
-  const handleAddCustomFieldSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newFieldTitle.trim()) return;
-    const newField: BlueprintFieldRequirement = {
-      id: `fld_custom_${Date.now()}`,
-      title: newFieldTitle.trim(),
-      subtitle: newFieldSubtitle.trim() || 'حقل تحقق إضافي ضمن نافذة الانتقال',
-      badgeText: 'حقل إلزامي',
-      badgeTone: 'info',
-      enabled: true,
-    };
-    updateSelectedTransition((tr) => ({
-      ...tr,
-      duringFields: [...tr.duringFields, newField],
-      tableDuringChips: [...tr.tableDuringChips, newField.title],
-    }));
-    setNewFieldTitle('');
-    setNewFieldSubtitle('');
-    setAddingFieldInline(false);
-    setToastMsg('تمت إضافة الحقل الإلزامي إلى نافذة الإتمام');
-  };
-
-  const handleCreateCustomStage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newStageTitle.trim()) return;
-    const nextIdx = stages.length + 1;
-    const newStage: BlueprintStageNode = {
-      id: `stg_${Date.now()}`,
-      numberLabel: String(nextIdx).padStart(2, '0'),
-      stepIndex: nextIdx,
-      title: `${nextIdx}. ${newStageTitle.trim()}`,
-      englishSubtitle: `Custom Stage · 0 صفقات`,
-      canvasSubtitle: 'مرحلة مخصصة مضافة ضمن مسار المؤسسات',
-      dealsCountLabel: '0 صفقات',
-      slaBadge: newStageSla.trim() || 'SLA: 3 أيام',
-      category: 'normal',
-    };
-    const nextStages = [...stages, newStage];
-    setStages(nextStages);
-    setNewStageTitle('');
-    setAddingStageModal(false);
-    await persistBlueprintToFirestore(
-      blueprintActive,
-      nextStages.length,
-      `تم إنشاء المرحلة الجديدة "${newStage.title}" وتحديث البلوبرينت`
-    );
-  };
-
-  const handleCreateCustomTransition = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTrTitle.trim()) return;
-    const code = `TR-90${transitions.length + 1}`;
-    const newTr: BlueprintTransitionConfig = {
-      id: `tr_${Date.now()}`,
-      code,
-      shortTitle: newTrTitle.trim(),
-      englishName: 'Custom Transition',
-      pillLabel: `انتقال: «${newTrTitle.trim()}»`,
-      fromStageId: 'stg_4',
-      fromStageNumber: 4,
-      fromStageName: 'التفاوض ومراجعة العقود',
-      toStageId: 'stg_5',
-      toStageBadge: newTrToStage,
-      toStageName: newTrToStage,
-      tone: 'normal',
-      iconType: 'arrow',
-      roles: ['مدير المبيعات الإقليمي'],
-      tableRoleChips: ['مدير المبيعات الإقليمي'],
-      beforeSummaryChip: 'موافقة مدير المبيعات',
-      beforeSummaryTone: 'emerald',
-      beforeCriteriaList: [
-        'استيفاء متطلبات المرحلة الحالية والتأكد من اكتمال بيانات العميل',
-        'موافقة مدير المبيعات المباشر على الانتقال',
+      id: 'bp_enterprise_deals',
+      orgId,
+      name: 'مسار صفقات الشركات الكبرى (B2B Enterprise)',
+      description: 'حوكمة مراحل البيع المؤسسي من التأهيل والعرض التقني وحتى التفاوض القانوني والإغلاق.',
+      module: 'الصفقات والمبيعات',
+      linkedField: 'المرحلة (Stage)',
+      criteria: 'قيمة الصفقة >= 50,000 ر.س أو نوع العميل = قطاع أعمال',
+      active: true,
+      updatedAt: 'منذ 15 دقيقة',
+      createdBy: 'سلطان القحطاني',
+      stages: [
+        {
+          id: 'st_lead_qual',
+          title: 'تأهيل أولي',
+          englishSubtitle: 'INITIAL QUALIFICATION',
+          slaBadge: '24 ساعة',
+          category: 'normal',
+          ownersLabel: 'مندوب المبيعات',
+          onCanvas: true,
+          x: 70,
+          y: 190,
+        },
+        {
+          id: 'st_needs_analysis',
+          title: 'تحليل الاحتياجات',
+          englishSubtitle: 'NEEDS & DISCOVERY',
+          slaBadge: '48 ساعة',
+          category: 'normal',
+          ownersLabel: 'مندوب مبيعات أول',
+          onCanvas: true,
+          x: 360,
+          y: 190,
+        },
+        {
+          id: 'st_tech_demo',
+          title: 'عرض تقني وتجريبي',
+          englishSubtitle: 'TECHNICAL DEMO',
+          slaBadge: '3 أيام',
+          category: 'active',
+          ownersLabel: 'مهندس ما قبل البيع',
+          onCanvas: true,
+          x: 650,
+          y: 190,
+        },
+        {
+          id: 'st_quote_sent',
+          title: 'إرسال عرض السعر',
+          englishSubtitle: 'COMMERCIAL PROPOSAL',
+          slaBadge: '48 ساعة',
+          category: 'normal',
+          ownersLabel: 'مدير الحسابات',
+          onCanvas: true,
+          x: 940,
+          y: 190,
+        },
+        {
+          id: 'st_negotiation',
+          title: 'مفاوضات ومراجعة العقود',
+          englishSubtitle: 'LEGAL & NEGOTIATION',
+          slaBadge: '5 أيام',
+          category: 'normal',
+          ownersLabel: 'مدير المبيعات + القانونية',
+          onCanvas: true,
+          x: 1230,
+          y: 190,
+        },
+        {
+          id: 'st_closed_won',
+          title: 'إغلاق ناجح (Won)',
+          englishSubtitle: 'CLOSED WON',
+          slaBadge: 'مرحلة نهائية',
+          category: 'won',
+          ownersLabel: 'النظام المالي ERP',
+          onCanvas: true,
+          x: 1530,
+          y: 100,
+        },
+        {
+          id: 'st_closed_lost',
+          title: 'إغلاق خاسر (Lost)',
+          englishSubtitle: 'CLOSED LOST',
+          slaBadge: 'أرشفة وتحليل',
+          category: 'lost',
+          ownersLabel: 'مدير المبيعات',
+          onCanvas: true,
+          x: 1530,
+          y: 295,
+        },
       ],
-      rolesSummaryText: 'مدراء المبيعات الإقليميين',
-      tableDuringChips: ['ملاحظات الانتقال', 'مستند داعم PDF'],
-      duringGridCards: [
-        { label: 'المستند الداعم PDF', icon: 'pdf' },
-        { label: 'ملاحظات الاعتماد', icon: 'po' },
-        { label: 'شروط الدفع المحدثة', icon: 'payment' },
-        { label: 'تاريخ التنفيذ الفعلي', icon: 'date' },
+      transitions: [
+        {
+          id: 'tr_qual_to_needs',
+          name: 'اعتماد التأهيل',
+          englishName: 'QUALIFY DEAL',
+          fromStageId: 'st_lead_qual',
+          toStageId: 'st_needs_analysis',
+          tone: 'normal',
+          slaDurationLabel: 'خلال 24 ساعة',
+          enabled: true,
+          roles: ['مندوب المبيعات (Sales Rep)', 'مندوب مبيعات أول (Senior AE)', 'مدير المبيعات (Sales Director)'],
+          beforeConditions: [
+            { id: 'c1', fieldLabel: 'الميزانية التقديرية', operatorLabel: 'أكبر من', valueLabel: '0 ر.س', enabled: true },
+            { id: 'c2', fieldLabel: 'صاحب القرار الرئيسي', operatorLabel: 'غير فارغ', valueLabel: 'محدد', enabled: true },
+          ],
+          mandatoryFields: [
+            { id: 'mf1', fieldName: 'الميزانية التقديرية للعميل (Budget)', fieldType: 'عملة (SAR)', required: true },
+            { id: 'mf2', fieldName: 'عدد المستخدمين المتوقع', fieldType: 'رقم', required: true },
+          ],
+          requireNotes: true,
+          requireAttachment: false,
+          requireDigitalSignature: false,
+          checklist: [
+            { id: 'chk1', title: 'التحقق من السجل التجاري والنشاط المؤسسي', required: true },
+            { id: 'chk2', title: 'تحديد صانع القرار الفعلي في الشركة', required: true },
+          ],
+          afterActions: [
+            { id: 'act1', type: 'create_task', label: 'إنشاء مهمة: جلسة تحليل الاحتياجات التفصيلية', targetDetail: 'تُسند لمندوب المبيعات خلال 24 ساعة', systemTag: 'Auto Task', enabled: true },
+          ],
+        },
+        {
+          id: 'tr_needs_to_demo',
+          name: 'جدولة العرض التقني',
+          englishName: 'SCHEDULE DEMO',
+          fromStageId: 'st_needs_analysis',
+          toStageId: 'st_tech_demo',
+          tone: 'normal',
+          slaDurationLabel: 'خلال 48 ساعة',
+          enabled: true,
+          roles: ['مندوب مبيعات أول (Senior AE)', 'مهندس ما قبل البيع (Pre-Sales)', 'مدير المبيعات (Sales Director)'],
+          beforeConditions: [
+            { id: 'c3', fieldLabel: 'نطاق المشروع الفني', operatorLabel: 'غير فارغ', valueLabel: 'موثق', enabled: true },
+          ],
+          mandatoryFields: [
+            { id: 'mf3', fieldName: 'تاريخ وموعد العرض التقني', fieldType: 'تاريخ ووقت', required: true },
+            { id: 'mf4', fieldName: 'قائمة الأنظمة المطلوبة للتكامل', fieldType: 'نص متعدد', required: true },
+          ],
+          requireNotes: false,
+          requireAttachment: false,
+          requireDigitalSignature: false,
+          checklist: [
+            { id: 'chk3', title: 'إرسال دعوة التقويم للفريق التقني للعميل', required: true },
+            { id: 'chk4', title: 'تجهيز بيئة العرض التجريبية (Sandbox)', required: true },
+          ],
+          afterActions: [
+            { id: 'act2', type: 'whatsapp_email', label: 'إرسال رسالة تأكيد موعد العرض عبر واتساب والبريد', targetDetail: 'قالب: تأكيد جلسة العرض التقني', systemTag: 'Omnichannel', enabled: true },
+          ],
+        },
+        {
+          id: 'tr_demo_to_quote',
+          name: 'إصدار عرض السعر',
+          englishName: 'ISSUE PROPOSAL',
+          fromStageId: 'st_tech_demo',
+          toStageId: 'st_quote_sent',
+          tone: 'normal',
+          slaDurationLabel: 'خلال 48 ساعة',
+          enabled: true,
+          roles: ['مندوب مبيعات أول (Senior AE)', 'مدير المبيعات (Sales Director)'],
+          beforeConditions: [
+            { id: 'c4', fieldLabel: 'نتيجة العرض التقني', operatorLabel: 'يساوي', valueLabel: 'ناجح ومعتمد فنياً', enabled: true },
+          ],
+          mandatoryFields: [
+            { id: 'mf5', fieldName: 'ملف عرض السعر المعتمد (PDF)', fieldType: 'مرفق', required: true },
+            { id: 'mf6', fieldName: 'قيمة العرض الإجمالية شاملة الضريبة', fieldType: 'عملة (SAR)', required: true },
+          ],
+          requireNotes: true,
+          requireAttachment: true,
+          requireDigitalSignature: false,
+          checklist: [
+            { id: 'chk5', title: 'مراجعة بنود التسعير والخصم المسموح به', required: true },
+            { id: 'chk6', title: 'التأكد من تضمين الرقم الضريبي (15%)', required: true },
+          ],
+          afterActions: [
+            { id: 'act3', type: 'field_update', label: 'تحديث احتمالية الإغلاق إلى 65%', targetDetail: 'حقل: احتمالية الفوز (Probability)', systemTag: 'Field Update', enabled: true },
+            { id: 'act4', type: 'whatsapp_email', label: 'إشعار العميل برابط عرض السعر الرسمي', targetDetail: 'قالب: عرض سعر رسمي - رواق', systemTag: 'WhatsApp API', enabled: true },
+          ],
+        },
+        {
+          id: 'tr_quote_to_negotiation',
+          name: 'بدء التفاوض التعاقدي',
+          englishName: 'START NEGOTIATION',
+          fromStageId: 'st_quote_sent',
+          toStageId: 'st_negotiation',
+          tone: 'normal',
+          slaDurationLabel: 'خلال 72 ساعة',
+          enabled: true,
+          roles: ['مدير المبيعات (Sales Director)', 'المستشار القانوني (Legal Counsel)', 'مندوب مبيعات أول (Senior AE)'],
+          beforeConditions: [
+            { id: 'c5', fieldLabel: 'رد العميل المبدئي على العرض', operatorLabel: 'يساوي', valueLabel: 'موافق مبدئياً للتفاوض', enabled: true },
+          ],
+          mandatoryFields: [
+            { id: 'mf7', fieldName: 'مسودة العقد القانوني', fieldType: 'مرفق PDF/Docx', required: true },
+            { id: 'mf8', fieldName: 'شروط الدفع المتفق عليها', fieldType: 'قائمة منسدلة', required: true },
+          ],
+          requireNotes: true,
+          requireAttachment: true,
+          requireDigitalSignature: false,
+          checklist: [
+            { id: 'chk7', title: 'مراجعة شروط اتفاقية مستوى الخدمة (SLA)', required: true },
+            { id: 'chk8', title: 'اعتماد نسبة الخصم النهائية من مدير المبيعات', required: true },
+          ],
+          afterActions: [
+            { id: 'act5', type: 'create_task', label: 'مهمة مراجعة قانونية لبنود العقد', targetDetail: 'تُسند للمستشار القانوني', systemTag: 'Legal SLA', enabled: true },
+          ],
+        },
+        {
+          id: 'tr_neg_loop_quote',
+          name: 'إعادة تسعير العرض',
+          englishName: 'REVISE QUOTE',
+          fromStageId: 'st_negotiation',
+          toStageId: 'st_quote_sent',
+          tone: 'loop',
+          slaDurationLabel: 'مسار رجوع (24 ساعة)',
+          enabled: true,
+          roles: ['مدير المبيعات (Sales Director)', 'المدير المالي (CFO)'],
+          beforeConditions: [
+            { id: 'c6', fieldLabel: 'طلب تعديل النطاق أو السعر', operatorLabel: 'يساوي', valueLabel: 'مطلوب مراجعة مالية', enabled: true },
+          ],
+          mandatoryFields: [
+            { id: 'mf9', fieldName: 'سبب إعادة التسعير والخصم الإضافي', fieldType: 'نص طويل', required: true },
+          ],
+          requireNotes: true,
+          requireAttachment: false,
+          requireDigitalSignature: false,
+          checklist: [
+            { id: 'chk9', title: 'توثيق ملاحظات العميل المالية بدقة', required: true },
+          ],
+          afterActions: [
+            { id: 'act6', type: 'field_update', label: 'تحديث حالة العرض إلى "قيد التعديل"', targetDetail: 'وحدة عروض الأسعار', systemTag: 'Field Update', enabled: true },
+          ],
+        },
+        {
+          id: 'tr_neg_to_won',
+          name: 'تعميد وإغلاق ناجح',
+          englishName: 'CLOSE WON',
+          fromStageId: 'st_negotiation',
+          toStageId: 'st_closed_won',
+          tone: 'won',
+          slaDurationLabel: 'اعتماد فوري',
+          enabled: true,
+          roles: ['مدير المبيعات (Sales Director)', 'المدير المالي (CFO)', 'مدير النظام (System Admin)'],
+          beforeConditions: [
+            { id: 'c7', fieldLabel: 'حالة العقد القانوني', operatorLabel: 'يساوي', valueLabel: 'موقع ومختوم', enabled: true },
+          ],
+          mandatoryFields: [
+            { id: 'mf10', fieldName: 'نسخة العقد الموقعة نهائياً (PDF)', fieldType: 'مرفق إلزامي', required: true },
+            { id: 'mf11', fieldName: 'رقم أمر الشراء (PO Number)', fieldType: 'نص', required: true },
+            { id: 'mf12', fieldName: 'تاريخ بدء التفعيل الفعلي', fieldType: 'تاريخ', required: true },
+          ],
+          requireNotes: true,
+          requireAttachment: true,
+          requireDigitalSignature: true,
+          checklist: [
+            { id: 'chk10', title: 'التحقق من مطابقة مبلغ التعميد مع الفاتورة الضريبية', required: true },
+            { id: 'chk11', title: 'تأكيد استلام الدفعة الأولى أو ضمان الدفع', required: true },
+          ],
+          afterActions: [
+            { id: 'act7', type: 'webhook', label: 'إنشاء فاتورة ضريبية تلقائية في نظام الحسابات ERP', targetDetail: 'POST /api/v1/erp/invoices', systemTag: 'ERP Webhook', enabled: true },
+            { id: 'act8', type: 'whatsapp_email', label: 'إرسال رسالة ترحيبية وتفعيل حساب العميل', targetDetail: 'قالب: ترحيب بالعملاء الجدد', systemTag: 'Onboarding', enabled: true },
+          ],
+        },
+        {
+          id: 'tr_neg_to_lost',
+          name: 'تسجيل خسارة الصفقة',
+          englishName: 'CLOSE LOST',
+          fromStageId: 'st_negotiation',
+          toStageId: 'st_closed_lost',
+          tone: 'lost',
+          slaDurationLabel: 'توثيق إلزامي',
+          enabled: true,
+          roles: ['مندوب مبيعات أول (Senior AE)', 'مدير المبيعات (Sales Director)'],
+          beforeConditions: [],
+          mandatoryFields: [
+            { id: 'mf13', fieldName: 'السبب الرئيسي لخسارة الصفقة', fieldType: 'قائمة أسباب الخسارة', required: true },
+            { id: 'mf14', fieldName: 'اسم المنافس الفائز (إن وجد)', fieldType: 'نص', required: false },
+          ],
+          requireNotes: true,
+          requireAttachment: false,
+          requireDigitalSignature: false,
+          checklist: [
+            { id: 'chk12', title: 'توثيق الدروس المستفادة وتاريخ إعادة التواصل المستقبلي', required: true },
+          ],
+          afterActions: [
+            { id: 'act9', type: 'create_task', label: 'جدولة تذكير لإعادة التواصل بعد 90 يوماً', targetDetail: 'حملة استعادة العملاء', systemTag: 'Win-back Task', enabled: true },
+          ],
+        },
       ],
-      duringCountBadge: '4 حقول إلزامية',
-      tableAfterChips: ['إشعار فريق المبيعات', 'تحديث السجل'],
-      afterDetailRows: [
-        { label: 'إرسال إشعار فوري لفريق المبيعات عبر واتساب', tag: 'قالب معتمد' },
-        { label: 'تحديث سجل النشاط والتاريخ الزمني للصفقة', tag: 'CRM Sync' },
-      ],
-      afterCountBadge: '2 مهام ويب هوك',
-      slaDurationLabel: '48 ساعة',
-      slaStatusLabel: 'سليم',
-      enabled: true,
-      requireDigitalSignature: true,
-      discountLimitPercent: 15,
-      beforeConditions: createDefaultBeforeConditions(),
-      duringFields: createDefaultDuringFields(),
-      afterActions: createDefaultAfterActions(),
-    };
-    setTransitions((prev) => [...prev, newTr]);
-    setSelectedTransitionId(newTr.id);
-    setNewTrTitle('');
-    setAddingTransitionModal(false);
-    await persistBlueprintToFirestore(
-      blueprintActive,
-      stages.length,
-      `تمت إضافة الانتقال الجديد (${code}: ${newTr.shortTitle}) وحفظه في Firestore`
-    );
-  };
-
-  const handleResetInspectorDefaults = () => {
-    setTransitions(INITIAL_TRANSITIONS);
-    setSelectedTransitionId('tr_904');
-    setToastMsg('تمت استعادة الإعدادات الافتراضية للانتقال');
-  };
-
-  const handleExportMatrix = () => {
-    setToastMsg('تم تصدير مصفوفة انتقالات البلوبرينت (BP-CORP-9402) بنجاح');
-  };
-
-  const SIM_SAMPLE_DEALS = [
-    {
-      title: 'باقة الحلول المؤسسية ERP — شركة أرامكس اللوجستية',
-      amountLabel: '350,000 ر.س',
-      pdfName: 'Contract_Final_Signed_Aramex.pdf (2.4 MB)',
-      po: 'PO-99482-KSA',
     },
     {
-      title: 'منظومة الربط السحابي والأمان — بنك الاستثمار العربي',
-      amountLabel: '480,000 ر.س',
-      pdfName: 'Contract_Final_Signed_AIB.pdf (3.1 MB)',
-      po: 'PO-77310-FIN',
+      id: 'bp_lead_qualification',
+      orgId,
+      name: 'مسار تأهيل العملاء المحتملين (SDR Lead Qualification)',
+      description: 'تنظيم عملية استلام العملاء المحتملين، الاتصال السريع خلال ساعتين، وتأهيلهم قبل تحويلهم لفريق المبيعات.',
+      module: 'العملاء المحتملين',
+      linkedField: 'حالة العميل (Lead Status)',
+      criteria: 'جميع العملاء المحتملين الواردين من الحملات والموقع',
+      active: true,
+      updatedAt: 'أمس',
+      createdBy: 'سارة العتيبي',
+      stages: [
+        { id: 'ld_new', title: 'عميل محتمل جديد', englishSubtitle: 'NEW INBOUND LEAD', slaBadge: 'ساعتان', category: 'normal', ownersLabel: 'فريق الاستقبال SDR', onCanvas: true, x: 90, y: 185 },
+        { id: 'ld_contacted', title: 'تم التواصل الأولي', englishSubtitle: 'FIRST CONTACT MADE', slaBadge: '24 ساعة', category: 'active', ownersLabel: 'أخصائي تطوير الأعمال', onCanvas: true, x: 420, y: 185 },
+        { id: 'ld_qualified', title: 'مؤهل مبيعياً (SQL)', englishSubtitle: 'SALES QUALIFIED', slaBadge: '48 ساعة', category: 'normal', ownersLabel: 'تنفيذي المبيعات', onCanvas: true, x: 750, y: 185 },
+        { id: 'ld_converted', title: 'تم التحويل لصفقة', englishSubtitle: 'CONVERTED TO DEAL', slaBadge: 'مكتمل', category: 'won', ownersLabel: 'مدير المبيعات', onCanvas: true, x: 1090, y: 105 },
+        { id: 'ld_disqualified', title: 'غير مؤهل / مستبعد', englishSubtitle: 'DISQUALIFIED', slaBadge: 'مغلق', category: 'lost', ownersLabel: 'فريق SDR', onCanvas: true, x: 1090, y: 280 },
+      ],
+      transitions: [
+        {
+          id: 'tr_ld_call',
+          name: 'تسجيل مكالمة أولى',
+          englishName: 'LOG FIRST CALL',
+          fromStageId: 'ld_new',
+          toStageId: 'ld_contacted',
+          tone: 'normal',
+          slaDurationLabel: 'خلال ساعتين',
+          enabled: true,
+          roles: ['أخصائي تطوير الأعمال (SDR)', 'مندوب المبيعات (Sales Rep)'],
+          beforeConditions: [
+            { id: 'lc1', fieldLabel: 'رقم الجوال أو البريد', operatorLabel: 'غير فارغ', valueLabel: 'متوفر', enabled: true },
+          ],
+          mandatoryFields: [
+            { id: 'lmf1', fieldName: 'نتيجة الاتصال الأول', fieldType: 'قائمة منسدلة', required: true },
+          ],
+          requireNotes: true,
+          requireAttachment: false,
+          requireDigitalSignature: false,
+          checklist: [
+            { id: 'lchk1', title: 'التأكد من صحة اسم الشركة والمنصب الوظيفي', required: true },
+          ],
+          afterActions: [
+            { id: 'lact1', type: 'whatsapp_email', label: 'إرسال الكتيب التعريفي للشركة عبر واتساب', targetDetail: 'قالب: تعريف بخدمات رواق', systemTag: 'WhatsApp', enabled: true },
+          ],
+        },
+        {
+          id: 'tr_ld_qualify',
+          name: 'اعتماد التأهيل (BANT)',
+          englishName: 'QUALIFY BANT',
+          fromStageId: 'ld_contacted',
+          toStageId: 'ld_qualified',
+          tone: 'normal',
+          slaDurationLabel: 'خلال 24 ساعة',
+          enabled: true,
+          roles: ['أخصائي تطوير الأعمال (SDR)', 'مدير المبيعات (Sales Director)'],
+          beforeConditions: [],
+          mandatoryFields: [
+            { id: 'lmf2', fieldName: 'حجم الشركة (عدد الموظفين)', fieldType: 'رقم', required: true },
+            { id: 'lmf3', fieldName: 'الخدمة المطلوبة', fieldType: 'قائمة', required: true },
+          ],
+          requireNotes: true,
+          requireAttachment: false,
+          requireDigitalSignature: false,
+          checklist: [
+            { id: 'lchk2', title: 'تأكيد وجود ميزانية واحتياج فعلي خلال الربع الحالي', required: true },
+          ],
+          afterActions: [
+            { id: 'lact2', type: 'field_update', label: 'رفع تقييم العميل إلى "ساخن (Hot)"', targetDetail: 'حقل: درجة الاهتمام', systemTag: 'Field Update', enabled: true },
+          ],
+        },
+        {
+          id: 'tr_ld_convert',
+          name: 'تحويل إلى صفقة وحساب',
+          englishName: 'CONVERT TO DEAL',
+          fromStageId: 'ld_qualified',
+          toStageId: 'ld_converted',
+          tone: 'won',
+          slaDurationLabel: 'فوري',
+          enabled: true,
+          roles: ['مندوب مبيعات أول (Senior AE)', 'مدير المبيعات (Sales Director)'],
+          beforeConditions: [],
+          mandatoryFields: [
+            { id: 'lmf4', fieldName: 'القيمة المتوقعة للصفقة الجديدة', fieldType: 'عملة (SAR)', required: true },
+          ],
+          requireNotes: false,
+          requireAttachment: false,
+          requireDigitalSignature: false,
+          checklist: [
+            { id: 'lchk3', title: 'تعيين مسؤول الحساب (Account Owner)', required: true },
+          ],
+          afterActions: [
+            { id: 'lact3', type: 'create_task', label: 'إنشاء مهمة ترحيب وجلسة استكشاف للمندوب', targetDetail: 'وحدة الصفقات', systemTag: 'Auto Deal Task', enabled: true },
+          ],
+        },
+        {
+          id: 'tr_ld_disqualify',
+          name: 'استبعاد العميل المحتمل',
+          englishName: 'DISQUALIFY LEAD',
+          fromStageId: 'ld_contacted',
+          toStageId: 'ld_disqualified',
+          tone: 'lost',
+          slaDurationLabel: 'توثيق السبب',
+          enabled: true,
+          roles: ['أخصائي تطوير الأعمال (SDR)', 'مدير المبيعات (Sales Director)'],
+          beforeConditions: [],
+          mandatoryFields: [
+            { id: 'lmf5', fieldName: 'سبب الاستبعاد', fieldType: 'قائمة', required: true },
+          ],
+          requireNotes: true,
+          requireAttachment: false,
+          requireDigitalSignature: false,
+          checklist: [],
+          afterActions: [],
+        },
+      ],
     },
     {
-      title: 'تراخيص التحول الرقمي — مجموعة الخزامى القابضة',
-      amountLabel: '220,000 ر.س',
-      pdfName: 'Contract_Final_Signed_Khuzama.pdf (1.9 MB)',
-      po: 'PO-55104-RYD',
+      id: 'bp_quote_approval',
+      orgId,
+      name: 'مسار اعتماد عروض الأسعار والخصومات (Quote Approval)',
+      description: 'ضبط صلاحيات الخصم ومراجعة الإدارة المالية قبل إرسال عروض الأسعار للعملاء أو تحويلها لأوامر بيع.',
+      module: 'عروض الأسعار',
+      linkedField: 'حالة العرض (Quote Status)',
+      criteria: 'نسبة الخصم > 10% أو إجمالي العرض > 25,000 ر.س',
+      active: true,
+      updatedAt: 'منذ 3 أيام',
+      createdBy: 'سلطان القحطاني',
+      stages: [
+        { id: 'qt_draft', title: 'مسودة عرض سعر', englishSubtitle: 'DRAFT QUOTE', slaBadge: '4 ساعات', category: 'normal', ownersLabel: 'مندوب المبيعات', onCanvas: true, x: 80, y: 185 },
+        { id: 'qt_mgr_review', title: 'مراجعة مدير المبيعات', englishSubtitle: 'MANAGER APPROVAL', slaBadge: '12 ساعة', category: 'active', ownersLabel: 'مدير المبيعات', onCanvas: true, x: 390, y: 185 },
+        { id: 'qt_fin_review', title: 'اعتماد الإدارة المالية', englishSubtitle: 'FINANCE GOVERNANCE', slaBadge: '24 ساعة', category: 'normal', ownersLabel: 'المدير المالي CFO', onCanvas: true, x: 700, y: 185 },
+        { id: 'qt_sent_client', title: 'مرسل للعميل لاعتماده', englishSubtitle: 'SENT TO CUSTOMER', slaBadge: '3 أيام', category: 'normal', ownersLabel: 'مندوب المبيعات', onCanvas: true, x: 1010, y: 185 },
+        { id: 'qt_accepted', title: 'معتمد ومحول لأمر بيع', englishSubtitle: 'ACCEPTED & CONVERTED', slaBadge: 'معتمد', category: 'won', ownersLabel: 'النظام المالي', onCanvas: true, x: 1330, y: 120 },
+      ],
+      transitions: [
+        {
+          id: 'tr_qt_submit_mgr',
+          name: 'رفع لمدير المبيعات',
+          englishName: 'SUBMIT TO MANAGER',
+          fromStageId: 'qt_draft',
+          toStageId: 'qt_mgr_review',
+          tone: 'normal',
+          slaDurationLabel: 'خلال 4 ساعات',
+          enabled: true,
+          roles: ['مندوب المبيعات (Sales Rep)', 'مندوب مبيعات أول (Senior AE)'],
+          beforeConditions: [
+            { id: 'qc1', fieldLabel: 'بنود عرض السعر', operatorLabel: 'أكبر من', valueLabel: 'بند واحد على الأقل', enabled: true },
+          ],
+          mandatoryFields: [
+            { id: 'qmf1', fieldName: 'مبررات منح الخصم التجاري', fieldType: 'نص', required: true },
+          ],
+          requireNotes: true,
+          requireAttachment: false,
+          requireDigitalSignature: false,
+          checklist: [
+            { id: 'qchk1', title: 'التأكد من صحة الضريبة المضافة 15% وبيانات العميل', required: true },
+          ],
+          afterActions: [
+            { id: 'qact1', type: 'create_task', label: 'إشعار فوري لمدير المبيعات لاعتماد العرض', targetDetail: 'تنبيه داخلي', systemTag: 'Approval Alert', enabled: true },
+          ],
+        },
+        {
+          id: 'tr_qt_mgr_to_fin',
+          name: 'إحالة للاعتماد المالي',
+          englishName: 'ESCALATE TO FINANCE',
+          fromStageId: 'qt_mgr_review',
+          toStageId: 'qt_fin_review',
+          tone: 'normal',
+          slaDurationLabel: 'خلال 12 ساعة',
+          enabled: true,
+          roles: ['مدير المبيعات (Sales Director)'],
+          beforeConditions: [
+            { id: 'qc2', fieldLabel: 'هامش الربح الإجمالي', operatorLabel: 'أكبر من أو يساوي', valueLabel: '22%', enabled: true },
+          ],
+          mandatoryFields: [],
+          requireNotes: true,
+          requireAttachment: false,
+          requireDigitalSignature: false,
+          checklist: [
+            { id: 'qchk2', title: 'مراجعة هامش الربح وشروط الدفع الآجلة', required: true },
+          ],
+          afterActions: [],
+        },
+        {
+          id: 'tr_qt_fin_to_send',
+          name: 'اعتماد وإرسال للعميل',
+          englishName: 'APPROVE & SEND',
+          fromStageId: 'qt_fin_review',
+          toStageId: 'qt_sent_client',
+          tone: 'normal',
+          slaDurationLabel: 'خلال 24 ساعة',
+          enabled: true,
+          roles: ['المدير المالي (CFO)', 'مدير النظام (System Admin)'],
+          beforeConditions: [],
+          mandatoryFields: [
+            { id: 'qmf2', fieldName: 'تاريخ انتهاء صلاحية العرض', fieldType: 'تاريخ', required: true },
+          ],
+          requireNotes: false,
+          requireAttachment: false,
+          requireDigitalSignature: true,
+          checklist: [
+            { id: 'qchk3', title: 'ختم العرض إلكترونياً بختم الإدارة المالية', required: true },
+          ],
+          afterActions: [
+            { id: 'qact2', type: 'whatsapp_email', label: 'إرسال PDF عرض السعر المعتمد للعميل', targetDetail: 'بريد + واتساب', systemTag: 'Auto Send', enabled: true },
+          ],
+        },
+        {
+          id: 'tr_qt_client_accept',
+          name: 'تعميد العميل وتحويل لأمر بيع',
+          englishName: 'CLIENT ACCEPTED',
+          fromStageId: 'qt_sent_client',
+          toStageId: 'qt_accepted',
+          tone: 'won',
+          slaDurationLabel: 'فوري',
+          enabled: true,
+          roles: ['مندوب مبيعات أول (Senior AE)', 'مدير المبيعات (Sales Director)', 'المدير المالي (CFO)'],
+          beforeConditions: [],
+          mandatoryFields: [
+            { id: 'qmf3', fieldName: 'تعميد العميل أو أمر الشراء الموقع', fieldType: 'مرفق PDF', required: true },
+          ],
+          requireNotes: true,
+          requireAttachment: true,
+          requireDigitalSignature: false,
+          checklist: [
+            { id: 'qchk4', title: 'إنشاء أمر بيع تلقائي في قسم المبيعات', required: true },
+          ],
+          afterActions: [
+            { id: 'qact3', type: 'webhook', label: 'توليد أمر بيع تلقائي وربطه بالصفقة', targetDetail: 'وحدة أوامر البيع', systemTag: 'Sales Order Sync', enabled: true },
+          ],
+        },
+      ],
     },
   ];
+}
 
-  const currentSimDeal = SIM_SAMPLE_DEALS[simDealIndex % SIM_SAMPLE_DEALS.length];
+// ============================================================================
+// COMPONENT
+// ============================================================================
 
-  const completedSimFieldsCount = useMemo(() => {
-    let count = 0;
-    if (simPdfVerified) count += 1;
-    if (simPoNumber.trim().length > 0) count += 1;
-    if (simPaymentTerms.trim().length > 0) count += 1;
-    if (simServiceDate.trim().length > 0) count += 1;
-    if (simDigitalSignVerified) count += 1;
-    if (simNotes.trim().length > 0) count += 1;
-    return count;
-  }, [
-    simPdfVerified,
-    simPoNumber,
-    simPaymentTerms,
-    simServiceDate,
-    simDigitalSignVerified,
-    simNotes,
-  ]);
+export const BlueprintBuilderPage: React.FC = () => {
+  const { firebaseUser, currentUser } = useCrm();
+  const { currentOrgId } = useSetup();
 
-  const isSimReadyToPass =
-    simRoleMode === 'authorized' && completedSimFieldsCount === 6;
+  const [toastBanner, setToastBanner] = useState<{
+    message: string;
+    tone: 'success' | 'error' | 'info';
+  } | null>(null);
 
-  const handleResetSimulation = () => {
-    setSimRoleMode('authorized');
-    setSimDealIndex(0);
-    setSimPdfVerified(true);
-    setSimPoNumber('PO-99482-KSA');
-    setSimPaymentTerms('دفعة مقدمة 50% / نقدي بشيك مصدق');
-    setSimServiceDate('01/07/2025');
-    setSimDigitalSignVerified(true);
-    setSimNotes(
-      'تم اعتماد خصم 12% بموافقة الإدارة الإقليمية لتسريع التوقيع قبل نهاية الربع الثاني، وحجز رخص الاستضافة السنوية.'
-    );
-    setSimDryRunResult('idle');
-    setToastMsg('تمت إعادة ضبط بيئة المحاكاة إلى القيم الافتراضية');
+  const showToast = (message: string, tone: 'success' | 'error' | 'info' = 'success') => {
+    setToastBanner({ message, tone });
+    window.setTimeout(() => {
+      setToastBanner((prev) => (prev?.message === message ? null : prev));
+    }, 3500);
   };
 
-  const handleCycleSimDeal = () => {
-    const nextIdx = (simDealIndex + 1) % SIM_SAMPLE_DEALS.length;
-    const nextDeal = SIM_SAMPLE_DEALS[nextIdx];
-    setSimDealIndex(nextIdx);
-    setSimPoNumber(nextDeal.po);
-    setSimPdfVerified(true);
-    setSimDryRunResult('idle');
-    setToastMsg(`تم تحميل صفقة الاختبار: ${nextDeal.title}`);
+  const storageKey = `riwaq_zoho_blueprints_v2_${currentOrgId}`;
+
+  // Load blueprints for currentOrgId
+  const [blueprints, setBlueprints] = useState<BlueprintDefinition[]>(() => {
+    try {
+      const saved = localStorage.getItem(`riwaq_zoho_blueprints_v2_${currentOrgId}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // ignore storage errors
+    }
+    return currentOrgId === 'org_riwaq_main' ? createSeedBlueprints(currentOrgId) : [];
+  });
+
+  // View step: 'list' (Blueprints table) or 'editor' (Visual Flowchart Builder)
+  const [viewStep, setViewStep] = useState<'list' | 'editor'>('list');
+  const [activeBlueprintId, setActiveBlueprintId] = useState<string>(
+    () => (currentOrgId === 'org_riwaq_main' ? 'bp_enterprise_deals' : ''),
+  );
+
+  // Sync when switching organizations
+  useEffect(() => {
+    let loaded: BlueprintDefinition[] = [];
+    try {
+      const saved = localStorage.getItem(`riwaq_zoho_blueprints_v2_${currentOrgId}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) loaded = parsed;
+      } else if (currentOrgId === 'org_riwaq_main') {
+        loaded = createSeedBlueprints(currentOrgId);
+      }
+    } catch {
+      loaded = currentOrgId === 'org_riwaq_main' ? createSeedBlueprints(currentOrgId) : [];
+    }
+    setBlueprints(loaded);
+    setViewStep('list');
+    setActiveBlueprintId(loaded[0]?.id ?? '');
+
+    if (firebaseUser) {
+      const ref = doc(db, 'organizations', currentOrgId, 'settings', 'blueprints_definitions');
+      getDoc(ref)
+        .then((snap) => {
+          if (snap.exists()) {
+            const data = snap.data();
+            if (Array.isArray(data.items)) {
+              setBlueprints(data.items as BlueprintDefinition[]);
+              localStorage.setItem(`riwaq_zoho_blueprints_v2_${currentOrgId}`, JSON.stringify(data.items));
+            }
+          }
+        })
+        .catch(() => {
+          // fallback to local state silently
+        });
+    }
+  }, [currentOrgId, firebaseUser]);
+
+  // Persist helper (saves to localStorage + Firestore settings + blueprints summary collection)
+  const persistBlueprintsList = async (
+    nextList: BlueprintDefinition[],
+    changedBlueprint?: BlueprintDefinition,
+  ) => {
+    setBlueprints(nextList);
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(nextList));
+    } catch {
+      // ignore quota errors
+    }
+
+    if (firebaseUser) {
+      try {
+        await setDoc(
+          doc(db, 'organizations', currentOrgId, 'settings', 'blueprints_definitions'),
+          {
+            items: nextList,
+            updatedAt: serverTimestamp(),
+            updatedBy: currentUser.fullName || 'مدير النظام',
+          },
+          { merge: true },
+        );
+
+        if (changedBlueprint) {
+          const stagesCount = Math.max(
+            1,
+            Math.min(30, changedBlueprint.stages.filter((s) => s.onCanvas).length || 1),
+          );
+          await setDoc(
+            doc(db, 'blueprints', changedBlueprint.id),
+            {
+              ownerId: firebaseUser.uid,
+              org_id: currentOrgId.slice(0, 128),
+              name: changedBlueprint.name.slice(0, 120),
+              module: changedBlueprint.module.slice(0, 60),
+              active: Boolean(changedBlueprint.active),
+              stagesCount,
+              description: (changedBlueprint.description || changedBlueprint.criteria || '').slice(0, 300),
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true },
+          );
+        }
+      } catch (err) {
+        try {
+          handleFirestoreError(err, OperationType.WRITE, 'organizations/settings/blueprints_definitions');
+        } catch {
+          // handled
+        }
+      }
+    }
   };
 
-  const handleExecuteDryRun = () => {
-    if (simRoleMode === 'unauthorized') {
-      setSimDryRunResult('blocked');
-      setToastMsg(
-        'فشل الانتقال التجريبي (Dry Run): الدور الوظيفي «مندوب مبيعات مبتدئ» غير مصرح له بتنفيذ هذا الانتقال'
-      );
+  // List View Filters
+  const [listSearch, setListSearch] = useState('');
+  const [listModuleFilter, setListModuleFilter] = useState<string>('ALL');
+  const [listStatusFilter, setListStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
+
+  // Create New Blueprint Modal
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [newBpName, setNewBpName] = useState('');
+  const [newBpModule, setNewBpModule] = useState(MODULE_OPTIONS[0].module);
+  const [newBpField, setNewBpField] = useState(MODULE_OPTIONS[0].fields[0]);
+  const [newBpCriteria, setNewBpCriteria] = useState('كافة السجلات في الموديول');
+  const [newBpDescription, setNewBpDescription] = useState('');
+
+  // Active Blueprint in Editor
+  const activeBlueprint = useMemo(
+    () => blueprints.find((b) => b.id === activeBlueprintId) ?? blueprints[0] ?? null,
+    [blueprints, activeBlueprintId],
+  );
+
+  // Selected element in Editor: either a Transition or a Stage
+  const [selectedElement, setSelectedElement] = useState<{
+    type: 'transition' | 'stage';
+    id: string;
+  } | null>(null);
+
+  // Active tab in Transition Inspector ('before' | 'during' | 'after')
+  const [inspectorTab, setInspectorTab] = useState<'before' | 'during' | 'after'>('during');
+
+  // Ensure a valid selection when entering editor or changing activeBlueprint
+  useEffect(() => {
+    if (!activeBlueprint) {
+      setSelectedElement(null);
       return;
     }
-    if (completedSimFieldsCount < 6) {
-      setSimDryRunResult('blocked');
-      setToastMsg(
-        `فشل الانتقال التجريبي: يرجى استكمال كافة الحقول الإلزامية (${completedSimFieldsCount} من 6 مكتملة)`
-      );
+    if (selectedElement) {
+      if (
+        selectedElement.type === 'transition' &&
+        activeBlueprint.transitions.some((t) => t.id === selectedElement.id)
+      ) {
+        return;
+      }
+      if (
+        selectedElement.type === 'stage' &&
+        activeBlueprint.stages.some((s) => s.id === selectedElement.id)
+      ) {
+        return;
+      }
+    }
+    if (activeBlueprint.transitions.length > 0) {
+      setSelectedElement({ type: 'transition', id: activeBlueprint.transitions[0].id });
+    } else {
+      const firstCanvasStage = activeBlueprint.stages.find((s) => s.onCanvas) ?? activeBlueprint.stages[0];
+      if (firstCanvasStage) {
+        setSelectedElement({ type: 'stage', id: firstCanvasStage.id });
+      }
+    }
+  }, [activeBlueprintId, activeBlueprint]);
+
+  // Canvas Zoom & Pan State
+  const [zoom, setZoom] = useState<number>(0.95);
+  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 20, y: 20 });
+  const [isPanning, setIsPanning] = useState(false);
+  const panStartRef = useRef<{ clientX: number; clientY: number; panX: number; panY: number } | null>(null);
+
+  // Dragging a Stage Node on the Canvas
+  const [draggingStageId, setDraggingStageId] = useState<string | null>(null);
+  const dragNodeRef = useRef<{
+    stageId: string;
+    startClientX: number;
+    startClientY: number;
+    origX: number;
+    origY: number;
+    moved: boolean;
+  } | null>(null);
+
+  // Interactive Connection Creation (Click "+" or Drag from Stage Port to another Stage)
+  const [connectingFromStageId, setConnectingFromStageId] = useState<string | null>(null);
+  const [mouseCanvasPos, setMouseCanvasPos] = useState<{ x: number; y: number } | null>(null);
+  const canvasContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // Add New Stage Modal
+  const [newStageModalOpen, setNewStageModalOpen] = useState(false);
+  const [newStageTitle, setNewStageTitle] = useState('');
+  const [newStageSub, setNewStageSub] = useState('');
+  const [newStageSla, setNewStageSla] = useState('24 ساعة');
+  const [newStageCategory, setNewStageCategory] = useState<BlueprintStageCategory>('normal');
+  const [newStageOwner, setNewStageOwner] = useState('مندوب المبيعات');
+
+  // Create Transition Modal (when user clicks "+ إضافة انتقال" or connects two nodes)
+  const [newTransitionModal, setNewTransitionModal] = useState<{
+    open: boolean;
+    fromStageId: string;
+    toStageId: string;
+    name: string;
+    englishName: string;
+    tone: BlueprintTransitionTone;
+    sla: string;
+  }>({
+    open: false,
+    fromStageId: '',
+    toStageId: '',
+    name: '',
+    englishName: '',
+    tone: 'normal',
+    sla: 'خلال 24 ساعة',
+  });
+
+  // Inspector inline forms
+  const [newConditionField, setNewConditionField] = useState('');
+  const [newConditionOp, setNewConditionOp] = useState('غير فارغ');
+  const [newConditionVal, setNewConditionVal] = useState('محدد');
+
+  const [newMandatoryFieldName, setNewMandatoryFieldName] = useState('');
+  const [newMandatoryFieldType, setNewMandatoryFieldType] = useState('نص');
+
+  const [newChecklistText, setNewChecklistText] = useState('');
+
+  const [newActionType, setNewActionType] = useState<BlueprintAfterActionType>('field_update');
+  const [newActionLabel, setNewActionLabel] = useState('');
+  const [newActionTarget, setNewActionTarget] = useState('');
+
+  const [isSavingCloud, setIsSavingCloud] = useState(false);
+
+  // Interactive Simulator Modal State
+  const [simModalOpen, setSimModalOpen] = useState(false);
+  const [simCurrentStageId, setSimCurrentStageId] = useState<string>('');
+  const [simRole, setSimRole] = useState<string>('مدير المبيعات (Sales Director)');
+  const [simActiveTransitionId, setSimActiveTransitionId] = useState<string | null>(null);
+  const [simFieldValues, setSimFieldValues] = useState<Record<string, string>>({});
+  const [simChecklistValues, setSimChecklistValues] = useState<Record<string, boolean>>({});
+  const [simNotes, setSimNotes] = useState('');
+  const [simAttachmentAdded, setSimAttachmentAdded] = useState(false);
+  const [simSignatureSigned, setSimSignatureSigned] = useState(false);
+  const [simHistory, setSimHistory] = useState<
+    { fromTitle: string; toTitle: string; transitionName: string; time: string; actionsRun: string[] }[]
+  >([]);
+
+  // ============================================================================
+  // MUTATION HELPERS FOR ACTIVE BLUEPRINT
+  // ============================================================================
+
+  const updateActiveBlueprint = (updater: (bp: BlueprintDefinition) => BlueprintDefinition) => {
+    if (!activeBlueprint) return;
+    const updatedBp = updater({
+      ...activeBlueprint,
+      updatedAt: 'الآن',
+    });
+    const nextList = blueprints.map((b) => (b.id === updatedBp.id ? updatedBp : b));
+    setBlueprints(nextList);
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(nextList));
+    } catch {
+      // ignore
+    }
+  };
+
+  const selectedTransition = useMemo(() => {
+    if (!activeBlueprint || selectedElement?.type !== 'transition') return null;
+    return activeBlueprint.transitions.find((t) => t.id === selectedElement.id) ?? null;
+  }, [activeBlueprint, selectedElement]);
+
+  const selectedStage = useMemo(() => {
+    if (!activeBlueprint || selectedElement?.type !== 'stage') return null;
+    return activeBlueprint.stages.find((s) => s.id === selectedElement.id) ?? null;
+  }, [activeBlueprint, selectedElement]);
+
+  const updateSelectedTransition = (
+    updater: (tr: BlueprintTransitionConfig) => BlueprintTransitionConfig,
+  ) => {
+    if (!selectedTransition) return;
+    updateActiveBlueprint((bp) => ({
+      ...bp,
+      transitions: bp.transitions.map((t) => (t.id === selectedTransition.id ? updater(t) : t)),
+    }));
+  };
+
+  const updateSelectedStage = (updater: (st: BlueprintStageNode) => BlueprintStageNode) => {
+    if (!selectedStage) return;
+    updateActiveBlueprint((bp) => ({
+      ...bp,
+      stages: bp.stages.map((s) => (s.id === selectedStage.id ? updater(s) : s)),
+    }));
+  };
+
+  // ============================================================================
+  // BLUEPRINTS LIST ACTIONS
+  // ============================================================================
+
+  const filteredBlueprints = useMemo(() => {
+    return blueprints.filter((bp) => {
+      const q = listSearch.trim().toLowerCase();
+      const matchesQuery =
+        !q ||
+        bp.name.toLowerCase().includes(q) ||
+        bp.module.toLowerCase().includes(q) ||
+        bp.linkedField.toLowerCase().includes(q) ||
+        bp.criteria.toLowerCase().includes(q);
+      const matchesModule = listModuleFilter === 'ALL' || bp.module === listModuleFilter;
+      const matchesStatus =
+        listStatusFilter === 'ALL' ||
+        (listStatusFilter === 'ACTIVE' && bp.active) ||
+        (listStatusFilter === 'INACTIVE' && !bp.active);
+      return matchesQuery && matchesModule && matchesStatus;
+    });
+  }, [blueprints, listSearch, listModuleFilter, listStatusFilter]);
+
+  const handleCreateBlueprint = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanName = newBpName.trim();
+    if (!cleanName) {
+      showToast('يرجى إدخال اسم البلوبرينت أولاً.', 'error');
       return;
     }
-    setSimDryRunResult('passed');
-    setToastMsg(
-      `✓ نجح تنفيذ الانتقال التجريبي (Dry Run) لصفقة «${currentSimDeal.title}» دون تعديل بيانات الإنتاج في Firestore`
+
+    const modulePreset =
+      MODULE_OPTIONS.find((m) => m.module === newBpModule) ?? MODULE_OPTIONS[0];
+
+    const initialStages: BlueprintStageNode[] = modulePreset.defaultStates.map((st, idx) => ({
+      ...st,
+      onCanvas: idx < 4, // Place first 4 stages neatly on the canvas automatically
+      x: 90 + idx * 310,
+      y: 185,
+    }));
+
+    // Build starter transitions between the first 3 placed stages
+    const starterTransitions: BlueprintTransitionConfig[] = [];
+    const placed = initialStages.filter((s) => s.onCanvas);
+    for (let i = 0; i < placed.length - 1; i++) {
+      const fromSt = placed[i];
+      const toSt = placed[i + 1];
+      starterTransitions.push({
+        id: `tr_${Date.now()}_${i}`,
+        name: `الانتقال إلى ${toSt.title}`,
+        englishName: `MOVE TO ${toSt.englishSubtitle}`,
+        fromStageId: fromSt.id,
+        toStageId: toSt.id,
+        tone: toSt.category === 'won' ? 'won' : toSt.category === 'lost' ? 'lost' : 'normal',
+        slaDurationLabel: 'خلال 24 ساعة',
+        enabled: true,
+        roles: ['مندوب المبيعات (Sales Rep)', 'مدير المبيعات (Sales Director)'],
+        beforeConditions: [
+          {
+            id: `cond_${Date.now()}_${i}`,
+            fieldLabel: newBpField,
+            operatorLabel: 'يساوي',
+            valueLabel: fromSt.title,
+            enabled: true,
+          },
+        ],
+        mandatoryFields: [
+          {
+            id: `mf_${Date.now()}_${i}`,
+            fieldName: `ملاحظات مرحلة ${toSt.title}`,
+            fieldType: 'نص',
+            required: true,
+          },
+        ],
+        requireNotes: true,
+        requireAttachment: false,
+        requireDigitalSignature: false,
+        checklist: [
+          {
+            id: `chk_${Date.now()}_${i}`,
+            title: `استكمال متطلبات مرحلة "${fromSt.title}"`,
+            required: true,
+          },
+        ],
+        afterActions: [
+          {
+            id: `act_${Date.now()}_${i}`,
+            type: 'field_update',
+            label: `تحديث ${newBpField} تلقائياً إلى "${toSt.title}"`,
+            targetDetail: newBpModule,
+            systemTag: 'Field Update',
+            enabled: true,
+          },
+        ],
+      });
+    }
+
+    const created: BlueprintDefinition = {
+      id: `bp_${Date.now()}`,
+      orgId: currentOrgId,
+      name: cleanName,
+      description:
+        newBpDescription.trim() ||
+        `مخطط سير عمل مؤتمت لوحدة ${newBpModule} مرتبط بحقل ${newBpField}.`,
+      module: newBpModule,
+      linkedField: newBpField,
+      criteria: newBpCriteria.trim() || 'كافة السجلات في الموديول',
+      active: true,
+      updatedAt: 'الآن',
+      createdBy: currentUser.fullName || 'مدير النظام',
+      stages: initialStages,
+      transitions: starterTransitions,
+    };
+
+    const nextList = [created, ...blueprints];
+    await persistBlueprintsList(nextList, created);
+
+    setCreateModalOpen(false);
+    setNewBpName('');
+    setNewBpDescription('');
+    setNewBpCriteria('كافة السجلات في الموديول');
+
+    setActiveBlueprintId(created.id);
+    if (starterTransitions[0]) {
+      setSelectedElement({ type: 'transition', id: starterTransitions[0].id });
+    } else if (placed[0]) {
+      setSelectedElement({ type: 'stage', id: placed[0].id });
+    }
+    setViewStep('editor');
+    showToast(`تم إنشاء البلوبرينت "${created.name}" وفتح المحرر البصري.`, 'success');
+  };
+
+  const handleToggleBlueprintActive = async (bp: BlueprintDefinition) => {
+    const updated = { ...bp, active: !bp.active, updatedAt: 'الآن' };
+    const nextList = blueprints.map((item) => (item.id === bp.id ? updated : item));
+    await persistBlueprintsList(nextList, updated);
+    showToast(
+      updated.active
+        ? `تم تفعيل مخطط "${updated.name}" بنجاح.`
+        : `تم إيقاف مخطط "${updated.name}" مؤقتاً.`,
+      'info',
     );
   };
 
-  const handleOpenTransitionEditor = (tr?: BlueprintTransitionConfig) => {
-    const target = tr ?? selectedTransition;
-    setSelectedTransitionId(target.id);
-    setEditorButtonLabel(`${target.shortTitle} (${target.englishName})`);
-    setEditorButtonStyle(
-      target.tone === 'won'
-        ? 'emerald'
-        : target.tone === 'lost'
-        ? 'rose'
-        : 'blue'
-    );
-    setEditorActiveTab('b');
-    setTransitionEditorOpen(true);
+  const handleDuplicateBlueprint = async (bp: BlueprintDefinition) => {
+    const cloned: BlueprintDefinition = {
+      ...JSON.parse(JSON.stringify(bp)),
+      id: `bp_${Date.now()}`,
+      name: `${bp.name} (نسخة)`,
+      active: false,
+      updatedAt: 'الآن',
+      createdBy: currentUser.fullName || 'مدير النظام',
+    };
+    const nextList = [cloned, ...blueprints];
+    await persistBlueprintsList(nextList, cloned);
+    showToast(`تم نسخ المخطط إلى "${cloned.name}".`, 'success');
   };
 
-  const handleAddEditorCriterionRow = () => {
-    setEditorCriteriaRows((prev) => [
-      ...prev,
-      {
-        id: `crit_${Date.now()}`,
-        logic: 'AND',
-        field: 'Deal.Discount_Percentage (نسبة الخصم)',
-        operator: '<= (أقل أو يساوي)',
-        value: '15%',
-      },
-    ]);
+  const handleDeleteBlueprint = async (bp: BlueprintDefinition) => {
+    const nextList = blueprints.filter((item) => item.id !== bp.id);
+    setBlueprints(nextList);
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(nextList));
+    } catch {
+      // ignore
+    }
+    if (firebaseUser) {
+      try {
+        await setDoc(
+          doc(db, 'organizations', currentOrgId, 'settings', 'blueprints_definitions'),
+          { items: nextList, updatedAt: serverTimestamp() },
+          { merge: true },
+        );
+        await deleteDoc(doc(db, 'blueprints', bp.id));
+      } catch {
+        // ignore if doc wasn't in cloud yet
+      }
+    }
+    if (activeBlueprintId === bp.id) {
+      setActiveBlueprintId(nextList[0]?.id ?? '');
+    }
+    showToast(`تم حذف البلوبرينت "${bp.name}".`, 'info');
   };
 
-  const handleRemoveEditorCriterionRow = (id: string) => {
-    setEditorCriteriaRows((prev) => prev.filter((r) => r.id !== id));
+  // ============================================================================
+  // CANVAS INTERACTION HANDLERS (DRAG NODES, PAN, ZOOM, AUTO-ARRANGE, CONNECT)
+  // ============================================================================
+
+  const handleCanvasMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Only pan when clicking directly on background grid
+    if ((e.target as HTMLElement).dataset.canvasBg === 'true') {
+      if (connectingFromStageId) {
+        setConnectingFromStageId(null);
+        setMouseCanvasPos(null);
+        return;
+      }
+      setIsPanning(true);
+      panStartRef.current = {
+        clientX: e.clientX,
+        clientY: e.clientY,
+        panX: pan.x,
+        panY: pan.y,
+      };
+    }
   };
 
-  const handleMoveDuringField = (index: number, direction: 'up' | 'down') => {
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    updateSelectedTransition((tr) => {
-      if (targetIndex < 0 || targetIndex >= tr.duringFields.length) return tr;
-      const next = [...tr.duringFields];
-      const [moved] = next.splice(index, 1);
-      next.splice(targetIndex, 0, moved);
-      return { ...tr, duringFields: next };
+  const handleStageMouseDown = (e: React.MouseEvent, stage: BlueprintStageNode) => {
+    e.stopPropagation();
+    // If we are in "connecting mode" from another stage, clicking this stage completes the connection!
+    if (connectingFromStageId && connectingFromStageId !== stage.id) {
+      openQuickTransitionBuilder(connectingFromStageId, stage.id);
+      setConnectingFromStageId(null);
+      setMouseCanvasPos(null);
+      return;
+    }
+
+    setSelectedElement({ type: 'stage', id: stage.id });
+    setDraggingStageId(stage.id);
+    dragNodeRef.current = {
+      stageId: stage.id,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      origX: stage.x,
+      origY: stage.y,
+      moved: false,
+    };
+  };
+
+  const handleCanvasMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (draggingStageId && dragNodeRef.current && activeBlueprint) {
+      // Note: page is RTL, but SVG/absolute left coordinates increase from left to right
+      const dx = (e.clientX - dragNodeRef.current.startClientX) / zoom;
+      const dy = (e.clientY - dragNodeRef.current.startClientY) / zoom;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+        dragNodeRef.current.moved = true;
+      }
+      const nextX = Math.max(20, Math.round((dragNodeRef.current.origX + dx) / 10) * 10);
+      const nextY = Math.max(20, Math.round((dragNodeRef.current.origY + dy) / 10) * 10);
+
+      updateActiveBlueprint((bp) => ({
+        ...bp,
+        stages: bp.stages.map((s) =>
+          s.id === dragNodeRef.current?.stageId ? { ...s, x: nextX, y: nextY } : s,
+        ),
+      }));
+      return;
+    }
+
+    if (isPanning && panStartRef.current) {
+      const dx = e.clientX - panStartRef.current.clientX;
+      const dy = e.clientY - panStartRef.current.clientY;
+      setPan({
+        x: panStartRef.current.panX + dx,
+        y: panStartRef.current.panY + dy,
+      });
+      return;
+    }
+
+    if (connectingFromStageId && canvasContainerRef.current) {
+      const rect = canvasContainerRef.current.getBoundingClientRect();
+      const x = (e.clientX - rect.left - pan.x) / zoom;
+      const y = (e.clientY - rect.top - pan.y) / zoom;
+      setMouseCanvasPos({ x, y });
+    }
+  };
+
+  const handleCanvasMouseUp = () => {
+    setDraggingStageId(null);
+    dragNodeRef.current = null;
+    setIsPanning(false);
+    panStartRef.current = null;
+  };
+
+  // Drag & drop available state from Right Sidebar onto Canvas
+  const handleSidebarStageDragStart = (e: React.DragEvent, stageId: string) => {
+    e.dataTransfer.setData('text/blueprint-stage-id', stageId);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleCanvasDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const stageId = e.dataTransfer.getData('text/blueprint-stage-id');
+    if (!stageId || !activeBlueprint || !canvasContainerRef.current) return;
+
+    const rect = canvasContainerRef.current.getBoundingClientRect();
+    const dropX = Math.max(30, Math.round(((e.clientX - rect.left - pan.x) / zoom - 110) / 10) * 10);
+    const dropY = Math.max(30, Math.round(((e.clientY - rect.top - pan.y) / zoom - 45) / 10) * 10);
+
+    updateActiveBlueprint((bp) => ({
+      ...bp,
+      stages: bp.stages.map((s) =>
+        s.id === stageId ? { ...s, onCanvas: true, x: dropX, y: dropY } : s,
+      ),
+    }));
+    setSelectedElement({ type: 'stage', id: stageId });
+    const st = activeBlueprint.stages.find((s) => s.id === stageId);
+    if (st) {
+      showToast(`تم وضع مرحلة "${st.title}" على لوحة المخطط.`, 'success');
+    }
+  };
+
+  const handlePlaceStageOnCanvas = (stageId: string) => {
+    if (!activeBlueprint) return;
+    const canvasStages = activeBlueprint.stages.filter((s) => s.onCanvas);
+    const maxX = canvasStages.reduce((max, s) => Math.max(max, s.x), 60);
+    const nextX = canvasStages.length === 0 ? 80 : maxX + 290;
+    const nextY = 185;
+
+    updateActiveBlueprint((bp) => ({
+      ...bp,
+      stages: bp.stages.map((s) =>
+        s.id === stageId ? { ...s, onCanvas: true, x: nextX, y: nextY } : s,
+      ),
+    }));
+    setSelectedElement({ type: 'stage', id: stageId });
+    const st = activeBlueprint.stages.find((s) => s.id === stageId);
+    if (st) {
+      showToast(`تمت إضافة مرحلة "${st.title}" إلى لوحة الرسم.`, 'success');
+    }
+  };
+
+  const handleRemoveStageFromCanvas = (stageId: string) => {
+    if (!activeBlueprint) return;
+    const st = activeBlueprint.stages.find((s) => s.id === stageId);
+    updateActiveBlueprint((bp) => ({
+      ...bp,
+      stages: bp.stages.map((s) => (s.id === stageId ? { ...s, onCanvas: false } : s)),
+      transitions: bp.transitions.filter(
+        (t) => t.fromStageId !== stageId && t.toStageId !== stageId,
+      ),
+    }));
+    setSelectedElement(null);
+    if (st) {
+      showToast(`تمت إزالة مرحلة "${st.title}" من اللوحة وإعادتها للمراحل المتاحة.`, 'info');
+    }
+  };
+
+  const handleAutoArrangeCanvas = () => {
+    if (!activeBlueprint) return;
+    const canvasStages = activeBlueprint.stages.filter((s) => s.onCanvas);
+    const normalStages = canvasStages.filter((s) => s.category !== 'won' && s.category !== 'lost');
+    const terminalStages = canvasStages.filter((s) => s.category === 'won' || s.category === 'lost');
+
+    const arrangedMap = new Map<string, { x: number; y: number }>();
+    normalStages.forEach((st, idx) => {
+      const col = idx % 5;
+      const row = Math.floor(idx / 5);
+      arrangedMap.set(st.id, {
+        x: 75 + col * 295,
+        y: 185 + row * 210,
+      });
+    });
+
+    const termX = 75 + Math.min(normalStages.length, 5) * 295;
+    terminalStages.forEach((st, idx) => {
+      arrangedMap.set(st.id, {
+        x: Math.max(380, termX),
+        y: 105 + idx * 185,
+      });
+    });
+
+    updateActiveBlueprint((bp) => ({
+      ...bp,
+      stages: bp.stages.map((s) => {
+        const pos = arrangedMap.get(s.id);
+        return pos ? { ...s, x: pos.x, y: pos.y } : s;
+      }),
+    }));
+    setPan({ x: 20, y: 20 });
+    setZoom(0.95);
+    showToast('تم تنسيق وترتيب عقد المخطط البصري تلقائياً.', 'success');
+  };
+
+  // Create New Custom Stage
+  const handleCreateCustomStage = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeBlueprint || !newStageTitle.trim()) return;
+    const canvasStages = activeBlueprint.stages.filter((s) => s.onCanvas);
+    const maxX = canvasStages.reduce((max, s) => Math.max(max, s.x), 60);
+    const newStage: BlueprintStageNode = {
+      id: `st_custom_${Date.now()}`,
+      title: newStageTitle.trim(),
+      englishSubtitle: (newStageSub.trim() || 'CUSTOM STAGE').toUpperCase(),
+      slaBadge: newStageSla.trim() || '24 ساعة',
+      category: newStageCategory,
+      ownersLabel: newStageOwner.trim() || 'مندوب المبيعات',
+      onCanvas: true,
+      x: canvasStages.length === 0 ? 80 : maxX + 290,
+      y: 185,
+    };
+
+    updateActiveBlueprint((bp) => ({
+      ...bp,
+      stages: [...bp.stages, newStage],
+    }));
+    setSelectedElement({ type: 'stage', id: newStage.id });
+    setNewStageModalOpen(false);
+    setNewStageTitle('');
+    setNewStageSub('');
+    showToast(`تم إنشاء مرحلة "${newStage.title}" وإضافتها إلى اللوحة.`, 'success');
+  };
+
+  // Open Transition Builder Modal between two stages
+  const openQuickTransitionBuilder = (fromId: string, toId: string) => {
+    if (!activeBlueprint) return;
+    const fromSt = activeBlueprint.stages.find((s) => s.id === fromId);
+    const toSt = activeBlueprint.stages.find((s) => s.id === toId);
+    if (!fromSt || !toSt) return;
+
+    const inferredTone: BlueprintTransitionTone =
+      toSt.category === 'won'
+        ? 'won'
+        : toSt.category === 'lost'
+          ? 'lost'
+          : toSt.x < fromSt.x
+            ? 'loop'
+            : 'normal';
+
+    setNewTransitionModal({
+      open: true,
+      fromStageId: fromId,
+      toStageId: toId,
+      name: `الانتقال إلى ${toSt.title}`,
+      englishName: `TO ${toSt.englishSubtitle}`,
+      tone: inferredTone,
+      sla: 'خلال 24 ساعة',
     });
   };
 
-  const handleAddEditorRequiredField = (e: React.FormEvent) => {
+  const handleConfirmCreateTransition = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editorNewFieldName.trim()) return;
-    const added: BlueprintFieldRequirement = {
-      id: `fld_ed_${Date.now()}`,
-      title: editorNewFieldName.trim(),
-      subtitle: 'حقل إلزامي مضاف ضمن محرر قواعد الانتقال',
-      badgeText: editorNewFieldType,
-      badgeTone: editorNewFieldType.includes('مرفق') ? 'danger' : 'info',
+    if (!activeBlueprint) return;
+    const { fromStageId, toStageId, name, englishName, tone, sla } = newTransitionModal;
+    if (!fromStageId || !toStageId || !name.trim()) return;
+
+    const toStage = activeBlueprint.stages.find((s) => s.id === toStageId);
+
+    const newTr: BlueprintTransitionConfig = {
+      id: `tr_${Date.now()}`,
+      name: name.trim(),
+      englishName: (englishName.trim() || 'TRANSITION').toUpperCase(),
+      fromStageId,
+      toStageId,
+      tone,
+      slaDurationLabel: sla.trim() || 'خلال 24 ساعة',
       enabled: true,
+      roles: ['مندوب المبيعات (Sales Rep)', 'مدير المبيعات (Sales Director)'],
+      beforeConditions: [],
+      mandatoryFields: [
+        {
+          id: `mf_${Date.now()}`,
+          fieldName: `ملاحظات الانتقال إلى ${toStage?.title ?? ''}`,
+          fieldType: 'نص',
+          required: true,
+        },
+      ],
+      requireNotes: true,
+      requireAttachment: false,
+      requireDigitalSignature: false,
+      checklist: [
+        {
+          id: `chk_${Date.now()}`,
+          title: `التحقق من اكتمال متطلبات ${name.trim()}`,
+          required: true,
+        },
+      ],
+      afterActions: [
+        {
+          id: `act_${Date.now()}`,
+          type: 'field_update',
+          label: `تحديث ${activeBlueprint.linkedField} إلى "${toStage?.title ?? ''}"`,
+          targetDetail: activeBlueprint.module,
+          systemTag: 'Field Update',
+          enabled: true,
+        },
+      ],
     };
-    updateSelectedTransition((tr) => ({
-      ...tr,
-      duringFields: [...tr.duringFields, added],
-      tableDuringChips: [...tr.tableDuringChips, added.title],
+
+    updateActiveBlueprint((bp) => ({
+      ...bp,
+      transitions: [...bp.transitions, newTr],
     }));
-    setEditorNewFieldName('');
-    setEditorNewFieldOpen(false);
-    setToastMsg(`تمت إضافة الحقل الإلزامي «${added.title}» إلى قواعد الانتقال`);
+    setSelectedElement({ type: 'transition', id: newTr.id });
+    setInspectorTab('during');
+    setNewTransitionModal((prev) => ({ ...prev, open: false }));
+    showToast(`تم إنشاء الانتقال "${newTr.name}" وربطه على المخطط.`, 'success');
   };
 
-  const handleSaveTransitionEditorRules = async () => {
-    const cleanLabel = editorButtonLabel.split('(')[0].trim() || selectedTransition.shortTitle;
-    updateSelectedTransition((tr) => ({
-      ...tr,
-      shortTitle: cleanLabel,
-      beforeCriteriaList: editorCriteriaRows.map(
-        (r) => `${r.field} ${r.operator} ${r.value}`
-      ),
+  const handleDeleteTransition = (trId: string) => {
+    if (!activeBlueprint) return;
+    const tr = activeBlueprint.transitions.find((t) => t.id === trId);
+    updateActiveBlueprint((bp) => ({
+      ...bp,
+      transitions: bp.transitions.filter((t) => t.id !== trId),
     }));
-    await persistBlueprintToFirestore(
-      blueprintActive,
-      stages.length,
-      `تم حفظ وتطبيق قواعد الانتقال «${cleanLabel}» مباشرةً في Firestore`
+    setSelectedElement(null);
+    if (tr) {
+      showToast(`تم حذف الانتقال "${tr.name}".`, 'info');
+    }
+  };
+
+  // Save & Publish Blueprint to Cloud + Local
+  const handleSaveAndPublishBlueprint = async () => {
+    if (!activeBlueprint) return;
+    setIsSavingCloud(true);
+    try {
+      await persistBlueprintsList(blueprints, activeBlueprint);
+      showToast(
+        firebaseUser
+          ? `تم حفظ ونشر البلوبرينت "${activeBlueprint.name}" في سحابة Firestore بنجاح.`
+          : `تم حفظ ونشر البلوبرينت "${activeBlueprint.name}" في مساحة المؤسسة بنجاح.`,
+        'success',
+      );
+    } finally {
+      setIsSavingCloud(false);
+    }
+  };
+
+  // ============================================================================
+  // INTERACTIVE SIMULATOR LOGIC
+  // ============================================================================
+
+  const openSimulator = (bpToSimulate?: BlueprintDefinition) => {
+    const bp = bpToSimulate ?? activeBlueprint;
+    if (!bp) return;
+    if (bp.id !== activeBlueprintId) {
+      setActiveBlueprintId(bp.id);
+    }
+    const canvasStages = bp.stages.filter((s) => s.onCanvas);
+    // Find initial stage (a stage with outgoing transitions and no incoming forward transitions, or first canvas stage)
+    const firstStage = canvasStages[0];
+    setSimCurrentStageId(firstStage?.id ?? '');
+    setSimActiveTransitionId(null);
+    setSimFieldValues({});
+    setSimChecklistValues({});
+    setSimNotes('');
+    setSimAttachmentAdded(false);
+    setSimSignatureSigned(false);
+    setSimHistory([]);
+    setSimModalOpen(true);
+  };
+
+  const handleTriggerSimulatedTransition = (tr: BlueprintTransitionConfig) => {
+    if (!activeBlueprint) return;
+    // Check Role permission (Before)
+    if (tr.roles.length > 0 && !tr.roles.includes(simRole)) {
+      showToast(`الدور الحالي (${simRole}) غير مصرح له بتنفيذ انتقال "${tr.name}".`, 'error');
+      return;
+    }
+    setSimActiveTransitionId(tr.id);
+    setSimFieldValues({});
+    setSimChecklistValues({});
+    setSimNotes('');
+    setSimAttachmentAdded(false);
+    setSimSignatureSigned(false);
+  };
+
+  const handleCompleteSimulatedTransition = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeBlueprint || !simActiveTransitionId) return;
+    const tr = activeBlueprint.transitions.find((t) => t.id === simActiveTransitionId);
+    if (!tr) return;
+
+    // Validate mandatory fields
+    for (const mf of tr.mandatoryFields) {
+      if (mf.required && !simFieldValues[mf.id]?.trim()) {
+        showToast(`يرجى تعبئة الحقل الإلزامي: "${mf.fieldName}"`, 'error');
+        return;
+      }
+    }
+    // Validate required notes
+    if (tr.requireNotes && !simNotes.trim()) {
+      showToast('إدخال ملاحظات المندوب إلزامي لإتمام هذا الانتقال.', 'error');
+      return;
+    }
+    // Validate required attachment
+    if (tr.requireAttachment && !simAttachmentAdded) {
+      showToast('يرجى إرفاق المستند المطلوب قبل تنفيذ الانتقال.', 'error');
+      return;
+    }
+    // Validate digital signature
+    if (tr.requireDigitalSignature && !simSignatureSigned) {
+      showToast('التوقيع الإلكتروني المعتمد مطلوب لإتمام هذا الانتقال.', 'error');
+      return;
+    }
+    // Validate checklist
+    for (const item of tr.checklist) {
+      if (item.required && !simChecklistValues[item.id]) {
+        showToast(`يرجى التأشير على بند التحقق الإلزامي: "${item.title}"`, 'error');
+        return;
+      }
+    }
+
+    const fromSt = activeBlueprint.stages.find((s) => s.id === tr.fromStageId);
+    const toSt = activeBlueprint.stages.find((s) => s.id === tr.toStageId);
+
+    setSimCurrentStageId(tr.toStageId);
+    setSimActiveTransitionId(null);
+    setSimHistory((prev) => [
+      ...prev,
+      {
+        fromTitle: fromSt?.title ?? '',
+        toTitle: toSt?.title ?? '',
+        transitionName: tr.name,
+        time: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        actionsRun: tr.afterActions.filter((a) => a.enabled).map((a) => a.label),
+      },
+    ]);
+    showToast(`تم تنفيذ الانتقال "${tr.name}" بنجاح وتشغيل الإجراءات التلقائية.`, 'success');
+  };
+
+  // ============================================================================
+  // GEOMETRY CALCULATION FOR SVG CURVES & BADGES
+  // ============================================================================
+
+  const NODE_WIDTH = 216;
+  const NODE_HEIGHT = 96;
+
+  const canvasTransitionsWithGeometry = useMemo(() => {
+    if (!activeBlueprint) return [];
+    const stageMap = new Map<string, BlueprintStageNode>();
+    activeBlueprint.stages.forEach((s) => {
+      if (s.onCanvas) stageMap.set(s.id, s);
+    });
+
+    // Track multiple transitions between same pair for clean vertical offset
+    const pairCounter = new Map<string, number>();
+
+    return activeBlueprint.transitions
+      .map((tr) => {
+        const from = stageMap.get(tr.fromStageId);
+        const to = stageMap.get(tr.toStageId);
+        if (!from || !to) return null;
+
+        const pairKey = [from.id, to.id].sort().join('__');
+        const pairIdx = pairCounter.get(pairKey) ?? 0;
+        pairCounter.set(pairKey, pairIdx + 1);
+
+        const isBackwardOrLoop = to.x < from.x - 20 || tr.tone === 'loop';
+
+        let startX: number;
+        let startY: number;
+        let endX: number;
+        let endY: number;
+        let pathD: string;
+        let midX: number;
+        let midY: number;
+
+        if (!isBackwardOrLoop) {
+          startX = from.x + NODE_WIDTH;
+          startY = from.y + NODE_HEIGHT / 2 + (pairIdx > 0 ? pairIdx * 24 : 0);
+          endX = to.x;
+          endY = to.y + NODE_HEIGHT / 2 + (pairIdx > 0 ? pairIdx * 24 : 0);
+          const dx = Math.max(60, Math.abs(endX - startX) * 0.45);
+          pathD = `M ${startX} ${startY} C ${startX + dx} ${startY}, ${endX - dx} ${endY}, ${endX} ${endY}`;
+          midX = (startX + endX) / 2;
+          midY = (startY + endY) / 2 + (pairIdx > 0 ? pairIdx * 18 : 0);
+        } else {
+          // Curved loop arch underneath the nodes
+          startX = from.x + NODE_WIDTH / 2;
+          startY = from.y + NODE_HEIGHT;
+          endX = to.x + NODE_WIDTH / 2;
+          endY = to.y + NODE_HEIGHT;
+          const archY = Math.max(startY, endY) + 95 + pairIdx * 35;
+          pathD = `M ${startX} ${startY} C ${startX} ${archY}, ${endX} ${archY}, ${endX} ${endY}`;
+          midX = (startX + endX) / 2;
+          midY = archY - 22;
+        }
+
+        return {
+          tr,
+          from,
+          to,
+          pathD,
+          midX,
+          midY,
+          isBackwardOrLoop,
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+  }, [activeBlueprint]);
+
+  // ============================================================================
+  // RENDER: VIEW 1 — BLUEPRINTS LIST VIEW (قائمة البلوبرينت المتعددة)
+  // ============================================================================
+
+  if (viewStep === 'list') {
+    const activeCount = blueprints.filter((b) => b.active).length;
+    const totalStagesCount = blueprints.reduce(
+      (sum, b) => sum + b.stages.filter((s) => s.onCanvas).length,
+      0,
     );
-    setTransitionEditorOpen(false);
-  };
+    const totalTransitionsCount = blueprints.reduce((sum, b) => sum + b.transitions.length, 0);
 
-  return (
-    <div className="-mx-4 lg:-mx-6 -mt-4 lg:-mt-6 min-h-screen bg-[#F8FAFC] flex flex-col">
-      {/* 1. TOP FLUSH HEADER */}
-      <header className="bg-[#FFFFFF] border-b border-[#E2E8F0] px-6 pt-3.5 pb-3">
-        <div className="w-full space-y-3">
-          {/* Row 1: Breadcrumb (Right in RTL) | Cloud Sync & Blueprint ID (Left in RTL) */}
-          <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
-            <div className="flex flex-wrap items-center gap-1.5 text-[#64748B]">
-              <Settings className="h-3.5 w-3.5 text-[#475569]" />
-              <Link to="/settings" className="hover:text-[#2563EB] font-medium">
-                الإعدادات والنظام
-              </Link>
-              <span className="text-[#CBD5E1]">‹</span>
-              <span>إدارة العمليات وأتمتة المسارات</span>
-              <span className="text-[#CBD5E1]">‹</span>
-              <span className="font-bold text-[#0F172A]">
-                منشئ البلوبرينت (مسار مبيعات كبار العملاء B2B)
-              </span>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#A7F3D0] bg-[#ECFDF5] px-2.5 py-0.5 text-[11px] font-bold text-[#059669]">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#10B981]" />
-                <span>نشط ويعمل تلقائياً</span>
-              </span>
-              <span className="rounded-md border border-[#BFDBFE] bg-[#EFF6FF] px-2 py-0.5 font-mono text-[11px] font-bold text-[#2563EB]">
-                BP-CORP-9402
-              </span>
-              <span className="text-[11px] font-mono text-[#64748B]">
-                (الإصدار v3.2)
-              </span>
-            </div>
-          </div>
-
-          {/* Row 2: Title + Badges (Right) | View Switcher + Actions (Left) */}
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            {/* Right Side */}
-            <div className="space-y-2 max-w-3xl">
-              <h1 className="text-[20px] sm:text-[22px] font-extrabold text-[#0F172A] leading-tight">
-                منشئ البلوبرينت: مسار مبيعات كبار العملاء{' '}
-                <span className="text-[13px] font-semibold text-[#64748B] font-mono">
-                  (Enterprise Deals Blueprint)
-                </span>
-              </h1>
-
-              <div className="flex flex-wrap items-center gap-2">
-                {/* 3 Metric Pills matching screen_12378196.png */}
-                <span className="inline-flex items-center gap-1.5 rounded-md border border-[#BFDBFE] bg-[#EFF6FF] px-2.5 py-0.5 text-[11px] font-bold text-[#1D4ED8] tabular-nums">
-                  <GitBranch className="h-3 w-3 text-[#2563EB]" />
-                  <span>{stages.length} مراحل معتمدة</span>
-                </span>
-
-                <span className="inline-flex items-center gap-1.5 rounded-md border border-[#BFDBFE] bg-[#EFF6FF] px-2.5 py-0.5 text-[11px] font-bold text-[#1D4ED8] tabular-nums">
-                  <ArrowLeft className="h-3 w-3 text-[#2563EB]" />
-                  <span>9 مسارات تحويل نشطة</span>
-                </span>
-
-                <span className="inline-flex items-center gap-1.5 rounded-md border border-[#A7F3D0] bg-[#ECFDF5] px-2.5 py-0.5 text-[11px] font-bold text-[#059669] tabular-nums">
-                  <ShieldCheck className="h-3 w-3 text-[#059669]" />
-                  <span>{totalMandatoryFieldsCount} حقلاً إلزامياً</span>
-                </span>
-
-                {/* Active / Draft Toggle */}
-                <button
-                  type="button"
-                  onClick={() => void handleToggleBlueprintActive()}
-                  className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-0.5 text-[11px] font-bold transition-colors ${
-                    blueprintActive
-                      ? 'border-[#A7F3D0] bg-[#ECFDF5] text-[#059669]'
-                      : 'border-[#FDE68A] bg-[#FFFBEB] text-[#D97706]'
-                  }`}
-                >
-                  <Check className="h-3 w-3 stroke-[2.5]" />
-                  <span>
-                    {blueprintActive ? 'تفعيل المسار: نشط' : 'وضع المسودة (غير مفعل)'}
-                  </span>
-                </button>
-
-                {/* Target Module Switcher Badge */}
-                <button
-                  type="button"
-                  onClick={() =>
-                    setTargetModule((prev) =>
-                      prev === 'الصفقات والمبيعات'
-                        ? 'العملاء المحتملين'
-                        : 'الصفقات والمبيعات'
-                    )
-                  }
-                  title="تبديل الموديول المستهدف"
-                  className="inline-flex items-center gap-1 rounded-md border border-[#E2E8F0] bg-[#F8FAFC] px-2.5 py-0.5 text-[11px] font-bold text-[#334155] hover:border-[#2563EB] hover:text-[#2563EB] transition-colors"
-                >
-                  <span>الموديول: {targetModule}</span>
-                </button>
+    return (
+      <div dir="rtl" className="min-h-full bg-[#F8FAFC] p-4 sm:p-6 space-y-6">
+        {/* Top Header Banner */}
+        <div className="flex flex-col gap-4 rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-xs lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#EFF6FF] text-[#2563EB] border border-[#BFDBFE]">
+                <GitBranch className="h-5 w-5" />
               </div>
-            </div>
-
-            {/* Left Side Controls */}
-            <div className="flex flex-col items-end gap-2">
-              {/* Top Row of Left Actions: View Toggle + Simulation */}
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="inline-flex items-center rounded-xl border border-[#CBD5E1] bg-[#F8FAFC] p-0.5">
-                  <button
-                    type="button"
-                    onClick={() => setViewMode('visual')}
-                    className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-bold transition-colors whitespace-nowrap ${
-                      viewMode === 'visual'
-                        ? 'bg-[#2563EB] text-[#FFFFFF] shadow-xs'
-                        : 'text-[#475569] hover:text-[#0F172A]'
-                    }`}
-                  >
-                    <LayoutGrid className="h-3.5 w-3.5" />
-                    <span>المخطط المرئي</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setViewMode('table')}
-                    className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-[12px] font-bold transition-colors whitespace-nowrap ${
-                      viewMode === 'table'
-                        ? 'bg-[#2563EB] text-[#FFFFFF] shadow-xs'
-                        : 'text-[#475569] hover:text-[#0F172A]'
-                    }`}
-                  >
-                    <Table2 className="h-3.5 w-3.5" />
-                    <span>عرض الجدول والقائمة</span>
-                  </button>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-lg font-bold text-[#0F172A]">
+                    مخططات سير العمل والحوكمة (Zoho CRM Blueprints)
+                  </h1>
+                  <span className="rounded-md bg-[#EFF6FF] px-2 py-0.5 text-[11px] font-bold text-[#2563EB] border border-[#BFDBFE]">
+                    Multi-Blueprint Engine
+                  </span>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSimStepIndex(0);
-                    setSimulationOpen(true);
-                  }}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[#CBD5E1] bg-[#FFFFFF] hover:bg-[#F8FAFC] px-3.5 text-[12px] font-bold text-[#0F172A] transition-colors whitespace-nowrap"
-                >
-                  <Play className="h-3.5 w-3.5 text-[#475569]" />
-                  <span>تجربة ومحاكاة</span>
-                </button>
-              </div>
-
-              {/* Bottom Row of Left Actions: Version History + Save & Publish */}
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setVersionHistoryOpen(true)}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[#CBD5E1] bg-[#FFFFFF] hover:bg-[#F8FAFC] px-3.5 text-[12px] font-bold text-[#0F172A] transition-colors whitespace-nowrap"
-                >
-                  <History className="h-4 w-4 text-[#475569]" />
-                  <span>سجل الإصدارات</span>
-                </button>
-
-                <button
-                  type="button"
-                  disabled={savingToFirestore}
-                  onClick={() => void persistBlueprintToFirestore()}
-                  className="inline-flex h-9 items-center gap-2 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] px-4 text-[12px] font-extrabold text-[#FFFFFF] shadow-sm transition-colors disabled:opacity-50 whitespace-nowrap"
-                >
-                  <Save className="h-4 w-4" />
-                  <span>
-                    {savingToFirestore ? 'جارٍ الحفظ والنشر...' : 'حفظ ونشر التعديلات'}
-                  </span>
-                </button>
+                <p className="text-xs text-[#64748B]">
+                  صمّم مسارات عمل تفاعلية لكل وحدة، واضبط شروط ما قبل الانتقال (Before)، متطلبات التنفيذ وقوائم التحقق (During)، والأتمتة الفورية (After).
+                </p>
               </div>
             </div>
           </div>
 
-          {/* Row 3 (Shown in Visual Mode): Summary Strip + Quick Add Stage / Transition Buttons */}
-          {viewMode === 'visual' && (
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#F1F5F9] pt-2.5 text-[11px]">
-              <div className="flex flex-wrap items-center gap-4 text-[#475569]">
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-[#2563EB]" />
-                  <span>المراحل:</span>
-                  <strong className="font-extrabold text-[#2563EB]">
-                    {stages.length} حالات معتمدة
-                  </strong>
-                </span>
-
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-[#2563EB]" />
-                  <span>الانتقالات النشطة:</span>
-                  <strong className="font-extrabold text-[#2563EB]">
-                    9 مسارات تحويل
-                  </strong>
-                </span>
-
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-[#10B981]" />
-                  <span>قواعد التحقق:</span>
-                  <strong className="font-extrabold text-[#059669]">
-                    {totalMandatoryFieldsCount} حقلاً إجبارياً
-                  </strong>
-                </span>
-
-                <span className="inline-flex items-center gap-1 text-[#64748B]">
-                  <Clock className="h-3.5 w-3.5" />
-                  <span>آخر نشر موثق: {lastSavedLabel}</span>
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setAddingStageModal(true)}
-                  className="inline-flex items-center gap-1 rounded-lg bg-[#1E3A8A] hover:bg-[#1E40AF] px-3 py-1.5 text-[11px] font-bold text-[#FFFFFF] transition-colors"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  <span>إضافة حالة</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setAddingTransitionModal(true)}
-                  className="inline-flex items-center gap-1 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] px-3 py-1.5 text-[11px] font-bold text-[#FFFFFF] transition-colors"
-                >
-                  <ArrowRight className="h-3.5 w-3.5 rotate-180" />
-                  <span>إضافة انتقال</span>
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </header>
-
-      {/* =====================================================================
-          MODE A: TABLE VIEW ("عرض الجدول والقائمة") — MATCHES screen_12378196.png
-         ===================================================================== */}
-      {viewMode === 'table' ? (
-        <div className="w-full px-6 py-4 space-y-4 flex-1">
-          {/* Green Real-time Confirmation Banner */}
-          {showSaveBanner && (
-            <div className="rounded-xl border border-[#6EE7B7] bg-[#D1FAE5]/85 px-4 py-2.5 flex items-center justify-between gap-3 text-[#065F46] shadow-2xs">
-              <div className="flex items-center gap-2.5 text-[12px] font-extrabold">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#059669] text-[#FFFFFF] shrink-0">
-                  <Check className="h-3.5 w-3.5 stroke-[3]" />
-                </span>
-                <span>
-                  تم حفظ وتطبيق قواعد الانتقال [{selectedTransition.shortTitle} (
-                  {selectedTransition.englishName})] بنجاح ✓ —{' '}
-                  <span className="font-semibold text-[#047857]">
-                    تم تحديث شروط ومسارات البلوبرينت في الوقت الفعلي.
-                  </span>
-                </span>
-              </div>
-
+          <div className="flex flex-wrap items-center gap-2.5">
+            {blueprints.length === 0 && (
               <button
                 type="button"
-                onClick={() => setShowSaveBanner(false)}
-                aria-label="إغلاق شريط التأكيد"
-                className="rounded-lg p-1 text-[#047857] hover:bg-[#A7F3D0]/60 transition-colors"
+                onClick={() => {
+                  const seeded = createSeedBlueprints(currentOrgId);
+                  void persistBlueprintsList(seeded, seeded[0]);
+                  showToast('تم تحميل 3 مخططات بلوبرينت قياسية جاهزة للمؤسسة.', 'success');
+                }}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#CBD5E1] bg-white px-3.5 text-xs font-bold text-[#334155] hover:bg-[#F8FAFC] transition cursor-pointer"
               >
-                <X className="h-4 w-4" />
+                <Sparkles className="h-4 w-4 text-[#2563EB]" />
+                <span>تحميل قوالب بلوبرينت جاهزة</span>
               </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setNewBpName('');
+                setNewBpModule(MODULE_OPTIONS[0].module);
+                setNewBpField(MODULE_OPTIONS[0].fields[0]);
+                setNewBpCriteria('كافة السجلات في الموديول');
+                setNewBpDescription('');
+                setCreateModalOpen(true);
+              }}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#2563EB] px-4 text-xs font-bold text-white shadow-xs hover:bg-[#1D4ED8] transition cursor-pointer"
+            >
+              <Plus className="h-4 w-4" />
+              <span>+ إنشاء بلوبرينت جديد</span>
+            </button>
+          </div>
+        </div>
+
+        {/* KPI Strip */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-[#64748B]">إجمالي المخططات (Blueprints)</span>
+              <Layers className="h-4 w-4 text-[#2563EB]" />
             </div>
-          )}
+            <p className="mt-2 text-2xl font-bold text-[#0F172A] tabular-nums">{blueprints.length}</p>
+            <p className="mt-1 text-[11px] text-[#64748B]">عدد غير محدود من المسارات للمؤسسة</p>
+          </div>
 
-          {/* Filter & Action Bar Above Table */}
-          <div className="rounded-2xl border border-[#E2E8F0] bg-[#FFFFFF] p-3 shadow-2xs flex flex-wrap items-center justify-between gap-3">
-            {/* Right Side Filters */}
-            <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-[280px]">
-              {/* Search Box */}
-              <div className="relative flex-1 min-w-[240px] max-w-md">
-                <Filter className="h-3.5 w-3.5 text-[#94A3B8] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  type="text"
-                  value={tableSearch}
-                  onChange={(e) => setTableSearch(e.target.value)}
-                  placeholder="بحث في المراحل، الانتقالات، الحقول الإلزامية أو الصلاحيات..."
-                  className="w-full rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] pr-9 pl-3 py-2 text-[12px] text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#2563EB] focus:bg-[#FFFFFF] focus:outline-none"
-                />
-              </div>
-
-              {/* Stage Filter Dropdown */}
-              <div className="relative">
-                <select
-                  aria-label="تصفية حسب المرحلة"
-                  value={tableStageFilter}
-                  onChange={(e) => setTableStageFilter(e.target.value)}
-                  className="appearance-none rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] hover:border-[#CBD5E1] pr-3.5 pl-8 py-2 text-[12px] font-bold text-[#0F172A] focus:border-[#2563EB] focus:outline-none cursor-pointer"
-                >
-                  <option value="all">المرحلة: جميع المراحل ({stages.length})</option>
-                  <option value="stg_1">1. عميل محتمل مؤهل</option>
-                  <option value="stg_2">2. تحليل الاحتياج</option>
-                  <option value="stg_3">3. تقديم العرض المالي</option>
-                  <option value="stg_4">4. التفاوض ومراجعة العقود</option>
-                </select>
-                <ChevronDown className="h-3.5 w-3.5 text-[#64748B] absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              </div>
-
-              {/* Path Type Filter Dropdown */}
-              <div className="relative">
-                <select
-                  aria-label="تصفية حسب نوع المسار"
-                  value={tablePathTypeFilter}
-                  onChange={(e) => setTablePathTypeFilter(e.target.value)}
-                  className="appearance-none rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] hover:border-[#CBD5E1] pr-3.5 pl-8 py-2 text-[12px] font-bold text-[#0F172A] focus:border-[#2563EB] focus:outline-none cursor-pointer"
-                >
-                  <option value="all">نوع المسار: الكل (فوز، تقدم، تعثر)</option>
-                  <option value="progress">مسار تقدم واعتماد مرحلي</option>
-                  <option value="won">مسار الفوز والإغلاق (Close Won)</option>
-                  <option value="lost">مسار التعثر والخسارة (Close Lost)</option>
-                </select>
-                <ChevronDown className="h-3.5 w-3.5 text-[#64748B] absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              </div>
+          <div className="rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-[#64748B]">المخططات النشطة حالياً</span>
+              <CheckCircle2 className="h-4 w-4 text-[#10B981]" />
             </div>
+            <p className="mt-2 text-2xl font-bold text-[#10B981] tabular-nums">{activeCount}</p>
+            <p className="mt-1 text-[11px] text-[#64748B]">تطبق الحوكمة الإلزامية على السجلات</p>
+          </div>
 
-            {/* Left Side Action Buttons */}
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-[#64748B]">إجمالي المراحل المفعلة (States)</span>
+              <LayoutGrid className="h-4 w-4 text-[#0284C7]" />
+            </div>
+            <p className="mt-2 text-2xl font-bold text-[#0F172A] tabular-nums">{totalStagesCount}</p>
+            <p className="mt-1 text-[11px] text-[#64748B]">مراحل موزعة على لوحات التدفق البصري</p>
+          </div>
+
+          <div className="rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-[#64748B]">إجمالي الانتقالات (Transitions)</span>
+              <Zap className="h-4 w-4 text-[#D97706]" />
+            </div>
+            <p className="mt-2 text-2xl font-bold text-[#0F172A] tabular-nums">{totalTransitionsCount}</p>
+            <p className="mt-1 text-[11px] text-[#64748B]">بوابات تحقق Before / During / After</p>
+          </div>
+        </div>
+
+        {/* Search & Filter Bar */}
+        <div className="flex flex-col gap-3 rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-2xs md:flex-row md:items-center md:justify-between">
+          <div className="relative flex-1 max-w-md">
+            <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94A3B8]" />
+            <input
+              type="text"
+              value={listSearch}
+              onChange={(e) => setListSearch(e.target.value)}
+              placeholder="ابحث باسم البلوبرينت، الموديول، أو الحقل المرتبط..."
+              className="h-9 w-full rounded-lg border border-[#CBD5E1] bg-[#F8FAFC] pr-9 pl-3 text-xs text-[#0F172A] focus:border-[#2563EB] focus:bg-white focus:outline-none"
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5 text-xs text-[#64748B]">
+              <Filter className="h-3.5 w-3.5" />
+              <span>الموديول:</span>
+            </div>
+            <select
+              value={listModuleFilter}
+              onChange={(e) => setListModuleFilter(e.target.value)}
+              className="h-9 rounded-lg border border-[#CBD5E1] bg-white px-3 text-xs font-semibold text-[#0F172A] focus:border-[#2563EB] focus:outline-none"
+            >
+              <option value="ALL">جميع الموديولات</option>
+              {MODULE_OPTIONS.map((m) => (
+                <option key={m.module} value={m.module}>
+                  {m.module}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={listStatusFilter}
+              onChange={(e) => setListStatusFilter(e.target.value as 'ALL' | 'ACTIVE' | 'INACTIVE')}
+              className="h-9 rounded-lg border border-[#CBD5E1] bg-white px-3 text-xs font-semibold text-[#0F172A] focus:border-[#2563EB] focus:outline-none"
+            >
+              <option value="ALL">كل الحالات</option>
+              <option value="ACTIVE">نشط فقط</option>
+              <option value="INACTIVE">معطل فقط</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Blueprints Table */}
+        <div className="overflow-hidden rounded-xl border border-[#E2E8F0] bg-white shadow-2xs">
+          {filteredBlueprints.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#EFF6FF] text-[#2563EB]">
+                <GitBranch className="h-6 w-6" />
+              </div>
+              <h3 className="mt-3 text-sm font-bold text-[#0F172A]">لا توجد مخططات بلوبرينت مطابقة</h3>
+              <p className="mt-1 max-w-md text-xs text-[#64748B]">
+                أنشئ مخطط بلوبرينت جديداً لتحديد المراحل والانتقالات والحقول الإلزامية لفريق المبيعات والعمليات.
+              </p>
               <button
                 type="button"
-                onClick={() => setAddingTransitionModal(true)}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-[#93C5FD] bg-[#EFF6FF] hover:bg-[#DBEAFE] px-3.5 py-2 text-[12px] font-extrabold text-[#2563EB] transition-colors whitespace-nowrap"
+                onClick={() => setCreateModalOpen(true)}
+                className="mt-4 inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#2563EB] px-4 text-xs font-bold text-white hover:bg-[#1D4ED8] transition cursor-pointer"
               >
                 <Plus className="h-4 w-4" />
-                <span>إضافة انتقال جديد</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setAddingStageModal(true)}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-[#CBD5E1] bg-[#FFFFFF] hover:bg-[#F8FAFC] px-3.5 py-2 text-[12px] font-extrabold text-[#0F172A] transition-colors whitespace-nowrap"
-              >
-                <Plus className="h-4 w-4 text-[#059669]" />
-                <span>إضافة مرحلة جديدة</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleExportMatrix}
-                title="تصدير مصفوفة الانتقالات"
-                aria-label="تصدير مصفوفة الانتقالات"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[#CBD5E1] bg-[#FFFFFF] hover:bg-[#F8FAFC] text-[#475569] hover:text-[#0F172A] transition-colors"
-              >
-                <Download className="h-4 w-4" />
+                <span>+ إنشاء بلوبرينت جديد</span>
               </button>
             </div>
-          </div>
-
-          {/* 1. TRANSITIONS MATRIX TABLE (9 Columns) */}
-          <div className="rounded-2xl border border-[#E2E8F0] bg-[#FFFFFF] shadow-2xs overflow-hidden">
+          ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-right border-collapse min-w-[1160px]">
+              <table className="w-full border-collapse text-right text-xs">
                 <thead>
-                  <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC] text-[11px] font-extrabold text-[#475569]">
-                    <th className="py-3.5 px-3.5 whitespace-nowrap">المرحلة الحالية</th>
-                    <th className="py-3.5 px-3.5 whitespace-nowrap">
-                      اسم الانتقال والزر (Transition)
-                    </th>
-                    <th className="py-3.5 px-3 whitespace-nowrap">المرحلة المستهدفة</th>
-                    <th className="py-3.5 px-3 whitespace-nowrap">الصلاحيات المنفذة</th>
-                    <th className="py-3.5 px-3 whitespace-nowrap">شروط ما قبل الانتقال</th>
-                    <th className="py-3.5 px-3.5 whitespace-nowrap">
-                      الحقول الإلزامية أثناء الانتقال
-                    </th>
-                    <th className="py-3.5 px-3.5 whitespace-nowrap">
-                      أتمتة ما بعد الانتقال
-                    </th>
-                    <th className="py-3.5 px-3 whitespace-nowrap">
-                      اتفاقية الخدمة وسلامة التدفق
-                    </th>
-                    <th className="py-3.5 px-3.5 text-center whitespace-nowrap">
-                      الحالة والإجراءات
-                    </th>
+                  <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC] text-[11px] font-bold text-[#475569]">
+                    <th className="py-3.5 px-4">اسم البلوبرينت والوصف</th>
+                    <th className="py-3.5 px-4">الموديول المستهدف</th>
+                    <th className="py-3.5 px-4">الحقل المرتبط</th>
+                    <th className="py-3.5 px-4">معايير التطبيق</th>
+                    <th className="py-3.5 px-4 text-center">المراحل / الانتقالات</th>
+                    <th className="py-3.5 px-4 text-center">الحالة (تفعيل/تعطيل)</th>
+                    <th className="py-3.5 px-4 text-left">الإجراءات</th>
                   </tr>
                 </thead>
-
-                <tbody className="divide-y divide-[#E2E8F0] text-[12px]">
-                  {filteredTableTransitions.map((tr) => {
-                    const isSelected = tr.id === selectedTransition.id;
-                    const isWonRow = tr.tone === 'won';
-                    const isLostRow = tr.tone === 'lost';
-
+                <tbody className="divide-y divide-[#E2E8F0]">
+                  {filteredBlueprints.map((bp) => {
+                    const canvasCount = bp.stages.filter((s) => s.onCanvas).length;
                     return (
                       <tr
-                        key={tr.id}
-                        onClick={() => setSelectedTransitionId(tr.id)}
-                        className={`cursor-pointer transition-colors relative ${
-                          isSelected
-                            ? 'bg-[#EFF6FF]/65'
-                            : 'hover:bg-[#F8FAFC]'
-                        }`}
+                        key={bp.id}
+                        className="group hover:bg-[#F8FAFC] transition-colors"
                       >
-                        {/* Col 1: المرحلة الحالية */}
-                        <td
-                          className={`py-3.5 px-3.5 align-middle ${
-                            isSelected ? 'border-r-4 border-r-[#2563EB]' : ''
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
+                        <td className="py-3.5 px-4">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveBlueprintId(bp.id);
+                              setViewStep('editor');
+                            }}
+                            className="text-right font-bold text-[#0F172A] hover:text-[#2563EB] transition cursor-pointer block"
+                          >
+                            {bp.name}
+                          </button>
+                          <p className="mt-0.5 text-[11px] text-[#64748B] line-clamp-1">
+                            {bp.description}
+                          </p>
+                          <span className="mt-1 inline-block text-[10px] text-[#94A3B8]">
+                            آخر تحديث: {bp.updatedAt} • بواسطة {bp.createdBy}
+                          </span>
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          <span className="inline-flex items-center gap-1.5 rounded-md border border-[#CBD5E1] bg-[#F8FAFC] px-2.5 py-1 text-[11px] font-semibold text-[#334155]">
+                            {bp.module}
+                          </span>
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          <span className="inline-flex items-center gap-1 rounded-md bg-[#EFF6FF] px-2.5 py-1 text-[11px] font-semibold text-[#2563EB]">
+                            {bp.linkedField}
+                          </span>
+                        </td>
+
+                        <td className="py-3.5 px-4 max-w-[220px]">
+                          <span className="text-[11px] text-[#475569] line-clamp-2">
+                            {bp.criteria}
+                          </span>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-center">
+                          <div className="inline-flex items-center gap-2 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-2.5 py-1 text-[11px] font-semibold text-[#334155] tabular-nums">
+                            <span>{canvasCount} مراحل</span>
+                            <span className="text-[#CBD5E1]">|</span>
+                            <span className="text-[#2563EB]">{bp.transitions.length} انتقالات</span>
+                          </div>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-center">
+                          <button
+                            type="button"
+                            onClick={() => void handleToggleBlueprintActive(bp)}
+                            role="switch"
+                            aria-checked={bp.active}
+                            className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] font-bold transition cursor-pointer ${
+                              bp.active
+                                ? 'border-[#A7F3D0] bg-[#ECFDF5] text-[#059669]'
+                                : 'border-[#E2E8F0] bg-[#F1F5F9] text-[#64748B]'
+                            }`}
+                          >
                             <span
-                              className={`h-2 w-2 rounded-full shrink-0 ${
-                                isWonRow
-                                  ? 'bg-[#10B981]'
-                                  : tr.fromStageNumber === 4
-                                  ? 'bg-[#6366F1]'
-                                  : 'bg-[#2563EB]'
+                              className={`h-2 w-2 rounded-full ${
+                                bp.active ? 'bg-[#10B981]' : 'bg-[#94A3B8]'
                               }`}
                             />
-                            <span
-                              className={`inline-flex h-6 w-6 items-center justify-center rounded-md font-mono text-[11px] font-extrabold tabular-nums shrink-0 ${
-                                isWonRow
-                                  ? 'bg-[#D1FAE5] text-[#047857]'
-                                  : tr.fromStageNumber === 4
-                                  ? 'bg-[#EEF2FF] text-[#4338CA]'
-                                  : 'bg-[#EFF6FF] text-[#2563EB]'
-                              }`}
-                            >
-                              {tr.fromStageNumber}
-                            </span>
-                            <span className="font-extrabold text-[#0F172A] leading-snug max-w-[110px]">
-                              {tr.fromStageName}
-                            </span>
-                          </div>
+                            <span>{bp.active ? 'مفعّل' : 'معطّل'}</span>
+                          </button>
                         </td>
 
-                        {/* Col 2: اسم الانتقال والزر (Transition) */}
-                        <td className="py-3.5 px-3.5 align-middle">
-                          <div className="flex items-center gap-2">
-                            {isWonRow ? (
-                              <>
-                                <span className="inline-flex items-center gap-2 rounded-xl bg-[#047857] px-3.5 py-2 text-[12px] font-extrabold text-[#FFFFFF] shadow-xs">
-                                  <ShieldCheck className="h-4 w-4 shrink-0" />
-                                  <span className="leading-tight">
-                                    إتمام التعاقد والفوز (Close Won)
-                                  </span>
-                                </span>
-                                {isSelected && (
-                                  <span className="rounded-md bg-[#D1FAE5] border border-[#6EE7B7] px-2 py-1 text-[10px] font-extrabold text-[#047857] shrink-0">
-                                    محدد الآن
-                                  </span>
-                                )}
-                              </>
-                            ) : isLostRow ? (
-                              <span className="inline-flex items-center gap-1.5 rounded-xl border border-[#FECDD3] bg-[#FFF1F2] px-3 py-2 text-[11px] font-extrabold text-[#BE123C]">
-                                <X className="h-3.5 w-3.5 shrink-0" />
-                                <span>تعثر الصفقة وخسارة (Mark as Lost)</span>
-                              </span>
-                            ) : tr.iconType === 'loop' ? (
-                              <span className="inline-flex items-center gap-1.5 rounded-xl border border-[#CBD5E1] bg-[#F8FAFC] px-3 py-2 text-[11px] font-extrabold text-[#334155]">
-                                <RotateCcw className="h-3.5 w-3.5 text-[#475569] shrink-0" />
-                                <span>{tr.shortTitle}</span>
-                              </span>
-                            ) : tr.iconType === 'scale' ? (
-                              <span className="inline-flex items-center gap-1.5 rounded-xl border border-[#C7D2FE] bg-[#EEF2FF] px-3 py-2 text-[11px] font-extrabold text-[#3730A3]">
-                                <Scale className="h-3.5 w-3.5 text-[#4338CA] shrink-0" />
-                                <span>{tr.shortTitle}</span>
-                              </span>
-                            ) : tr.iconType === 'monitor' ? (
-                              <span className="inline-flex items-center gap-1.5 rounded-xl border border-[#BFDBFE] bg-[#EFF6FF] px-3 py-2 text-[11px] font-extrabold text-[#1E40AF]">
-                                <Monitor className="h-3.5 w-3.5 text-[#2563EB] shrink-0" />
-                                <span>{tr.shortTitle}</span>
-                              </span>
-                            ) : tr.iconType === 'doc' ? (
-                              <span className="inline-flex items-center gap-1.5 rounded-xl border border-[#BFDBFE] bg-[#EFF6FF] px-3 py-2 text-[11px] font-extrabold text-[#1E40AF]">
-                                <FileText className="h-3.5 w-3.5 text-[#2563EB] shrink-0" />
-                                <span>{tr.shortTitle}</span>
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1.5 rounded-xl border border-[#BFDBFE] bg-[#EFF6FF] px-3 py-2 text-[11px] font-extrabold text-[#1E40AF]">
-                                <ArrowLeft className="h-3.5 w-3.5 text-[#2563EB] shrink-0" />
-                                <span>{tr.shortTitle}</span>
-                              </span>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Col 3: المرحلة المستهدفة */}
-                        <td className="py-3.5 px-3 align-middle">
-                          <span
-                            className={`inline-block rounded-lg border px-2.5 py-1.5 text-[11px] font-bold leading-snug max-w-[115px] ${
-                              isWonRow
-                                ? 'border-[#6EE7B7] bg-[#D1FAE5] text-[#065F46] font-extrabold'
-                                : isLostRow
-                                ? 'border-[#FECDD3] bg-[#FFE4E6] text-[#BE123C] font-extrabold'
-                                : 'border-[#E2E8F0] bg-[#F8FAFC] text-[#334155]'
-                            }`}
-                          >
-                            {tr.toStageBadge}
-                          </span>
-                        </td>
-
-                        {/* Col 4: الصلاحيات المنفذة */}
-                        <td className="py-3.5 px-3 align-middle">
-                          <div className="flex flex-col gap-1 max-w-[125px]">
-                            {tr.tableRoleChips.map((roleChip) => (
-                              <span
-                                key={roleChip}
-                                className="inline-block rounded-md border border-[#E2E8F0] bg-[#F8FAFC] px-2 py-0.5 text-[10px] font-bold text-[#334155] text-center"
-                              >
-                                {roleChip}
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-
-                        {/* Col 5: شروط ما قبل الانتقال */}
-                        <td className="py-3.5 px-3 align-middle">
-                          <span
-                            className={`inline-block rounded-lg px-2.5 py-1.5 text-[10px] font-extrabold leading-snug max-w-[110px] text-center ${
-                              tr.beforeSummaryTone === 'emerald'
-                                ? 'bg-[#A7F3D0]/75 text-[#065F46] border border-[#6EE7B7]'
-                                : 'bg-[#F1F5F9] text-[#475569] border border-[#E2E8F0]'
-                            }`}
-                          >
-                            {tr.beforeSummaryChip}
-                          </span>
-                        </td>
-
-                        {/* Col 6: الحقول الإلزامية أثناء الانتقال */}
-                        <td className="py-3.5 px-3.5 align-middle">
-                          <div className="flex flex-wrap items-center gap-1.5 max-w-[220px]">
-                            {tr.tableDuringChips.map((chip) => (
-                              <span
-                                key={chip}
-                                className={`rounded-md border px-2 py-1 text-[10px] font-bold ${
-                                  isLostRow
-                                    ? 'border-[#FECDD3] bg-[#FFF1F2] text-[#BE123C]'
-                                    : 'border-[#BFDBFE] bg-[#EFF6FF] text-[#1E40AF]'
-                                }`}
-                              >
-                                {chip}
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-
-                        {/* Col 7: أتمتة ما بعد الانتقال */}
-                        <td className="py-3.5 px-3.5 align-middle">
-                          <div className="flex flex-wrap items-center gap-1.5 max-w-[165px]">
-                            {tr.tableAfterChips.map((chip) => (
-                              <span
-                                key={chip}
-                                className={`rounded-md border px-2 py-1 text-[10px] font-bold ${
-                                  isWonRow
-                                    ? 'border-[#A7F3D0] bg-[#ECFDF5] text-[#047857]'
-                                    : 'border-[#E2E8F0] bg-[#F8FAFC] text-[#475569]'
-                                }`}
-                              >
-                                {chip}
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-
-                        {/* Col 8: اتفاقية الخدمة وسلامة التدفق */}
-                        <td className="py-3.5 px-3 align-middle">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[11px] font-bold text-[#334155] tabular-nums max-w-[65px] leading-tight">
-                              {tr.slaDurationLabel}
-                            </span>
-                            <span className="inline-flex items-center gap-1 rounded-md bg-[#6EE7B7]/60 border border-[#34D399] px-2 py-1 text-[10px] font-extrabold text-[#065F46] shrink-0">
-                              <Check className="h-3 w-3 stroke-[2.5]" />
-                              <span>{tr.slaStatusLabel}</span>
-                            </span>
-                          </div>
-                        </td>
-
-                        {/* Col 9: الحالة والإجراءات */}
-                        <td
-                          className="py-3.5 px-3.5 align-middle"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <div className="flex items-center justify-center gap-2 relative">
-                            {/* Toggle Switch */}
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center justify-end gap-1.5">
                             <button
                               type="button"
-                              role="switch"
-                              aria-checked={tr.enabled}
-                              aria-label={`تفعيل أو إيقاف ${tr.shortTitle}`}
-                              onClick={(e) => void handleToggleTransitionRowEnabled(tr.id, e)}
-                              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-150 ${
-                                tr.enabled
-                                  ? isWonRow
-                                    ? 'bg-[#059669]'
-                                    : 'bg-[#2563EB]'
-                                  : 'bg-[#CBD5E1]'
-                              }`}
-                            >
-                              <span
-                                className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-[#FFFFFF] shadow-xs transition-transform duration-150 ${
-                                  tr.enabled ? '-translate-x-4' : 'translate-x-0'
-                                }`}
-                              />
-                            </button>
-
-                            {/* Edit Button */}
-                            <button
-                              type="button"
-                              title="تعديل قواعد الانتقال"
-                              aria-label={`تعديل ${tr.shortTitle}`}
-                              onClick={() => handleOpenTransitionEditor(tr)}
-                              className="rounded-lg p-1.5 text-[#64748B] hover:bg-[#EFF6FF] hover:text-[#2563EB] transition-colors"
+                              onClick={() => {
+                                setActiveBlueprintId(bp.id);
+                                setViewStep('editor');
+                              }}
+                              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#2563EB] px-3 text-[11px] font-bold text-white hover:bg-[#1D4ED8] transition cursor-pointer"
                             >
                               <Pencil className="h-3.5 w-3.5" />
+                              <span>تعديل المخطط</span>
                             </button>
 
-                            {/* Play / Test Transition Button */}
                             <button
                               type="button"
-                              title="معاينة وتجربة الانتقال"
-                              aria-label={`معاينة ${tr.shortTitle}`}
-                              onClick={() => {
-                                setSelectedTransitionId(tr.id);
-                                setSellerPreviewOpen(true);
-                              }}
-                              className="rounded-lg p-1.5 text-[#64748B] hover:bg-[#ECFDF5] hover:text-[#059669] transition-colors"
+                              onClick={() => openSimulator(bp)}
+                              title="محاكاة واختبار هذا البلوبرينت"
+                              className="inline-flex h-8 items-center gap-1 rounded-lg border border-[#CBD5E1] bg-white px-2.5 text-[11px] font-semibold text-[#334155] hover:bg-[#F8FAFC] transition cursor-pointer"
                             >
-                              <Play className="h-3.5 w-3.5" />
+                              <Play className="h-3.5 w-3.5 text-[#2563EB]" />
+                              <span className="hidden xl:inline">محاكاة</span>
                             </button>
 
-                            {/* More Menu Button */}
                             <button
                               type="button"
-                              title="خيارات إضافية"
-                              aria-label="خيارات إضافية"
-                              onClick={() =>
-                                setOpenRowMenuId((prev) => (prev === tr.id ? null : tr.id))
-                              }
-                              className="rounded-lg p-1 text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#0F172A] transition-colors"
+                              onClick={() => void handleDuplicateBlueprint(bp)}
+                              title="نسخ المخطط (Clone)"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#CBD5E1] bg-white text-[#475569] hover:bg-[#F8FAFC] hover:text-[#0F172A] transition cursor-pointer"
                             >
-                              <MoreVertical className="h-3.5 w-3.5" />
+                              <Copy className="h-3.5 w-3.5" />
                             </button>
 
-                            {openRowMenuId === tr.id && (
-                              <div className="flyout-surface absolute left-0 top-8 z-30 w-44 rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] py-1 shadow-xl text-right">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedTransitionId(tr.id);
-                                    setSellerPreviewOpen(true);
-                                    setOpenRowMenuId(null);
-                                  }}
-                                  className="block w-full px-3 py-1.5 text-[11px] font-bold text-[#334155] hover:bg-[#EFF6FF] hover:text-[#2563EB]"
-                                >
-                                  معاينة شاشة البائع
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    handleOpenTransitionEditor(tr);
-                                    setOpenRowMenuId(null);
-                                  }}
-                                  className="block w-full px-3 py-1.5 text-[11px] font-bold text-[#334155] hover:bg-[#EFF6FF] hover:text-[#2563EB]"
-                                >
-                                  تعديل قواعد الانتقال الكاملة
-                                </button>
-                              </div>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => void handleDeleteBlueprint(bp)}
+                              title="حذف المخطط"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#FECDD3] bg-[#FFF1F2] text-[#E11D48] hover:bg-[#FFE4E6] transition cursor-pointer"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -1918,3053 +2047,2173 @@ export const BlueprintBuilderPage: React.FC = () => {
                 </tbody>
               </table>
             </div>
-
-            {/* Table Bottom Status Strip */}
-            <div className="border-t border-[#E2E8F0] bg-[#F8FAFC] px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-[11px]">
-              <div className="flex flex-wrap items-center gap-2 text-[#475569]">
-                <span>
-                  إجمالي الانتقالات المعرفة:{' '}
-                  <strong className="font-extrabold text-[#0F172A] tabular-nums">
-                    9 من 9
-                  </strong>
-                </span>
-                <span className="text-[#CBD5E1]">•</span>
-                <span className="inline-flex items-center gap-1.5 font-extrabold text-[#059669]">
-                  <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
-                  <span>
-                    فحص المسار التلقائي: خالي تماماً من الحلقات المغلقة (Deadlock Free)
-                  </span>
-                </span>
-              </div>
-
-              <span className="text-[11px] font-semibold text-[#64748B]">
-                عرض كل المراحل في صفحة واحدة
-              </span>
-            </div>
-          </div>
-
-          {/* 2. BOTTOM SELECTED TRANSITION SUMMARY PANEL */}
-          <div className="rounded-2xl border border-[#CBD5E1] bg-[#FFFFFF] p-5 shadow-xs space-y-4">
-            {/* Panel Header */}
-            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#F1F5F9] pb-4">
-              {/* Right Side: Icon + Title + Badge + Description */}
-              <div className="flex items-start gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#059669] text-[#FFFFFF] shadow-xs shrink-0">
-                  <ShieldCheck className="h-6 w-6" />
-                </div>
-                <div className="space-y-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-[16px] font-extrabold text-[#0F172A]">
-                      تفاصيل وقواعد الانتقال: {selectedTransition.shortTitle} (
-                      {selectedTransition.englishName})
-                    </h2>
-                    <span className="rounded-md bg-[#A7F3D0]/80 border border-[#34D399] px-2.5 py-0.5 text-[11px] font-extrabold text-[#065F46]">
-                      انتقال حاسم للنظام
-                    </span>
-                  </div>
-                  <p className="text-[12px] text-[#475569]">
-                    ينقل الصفقة من مرحلة{' '}
-                    <strong className="font-extrabold text-[#0F172A]">
-                      {selectedTransition.fromStageId === 'stg_4'
-                        ? '4. التفاوض ومراجعة العقود'
-                        : `${selectedTransition.fromStageNumber}. ${selectedTransition.fromStageName}`}
-                    </strong>{' '}
-                    إلى{' '}
-                    <strong className="font-extrabold text-[#059669]">
-                      {selectedTransition.toStageBadge}
-                    </strong>{' '}
-                    ويطلق دورة تشغيلية كاملة
-                  </p>
-                </div>
-              </div>
-
-              {/* Left Side: "معاينة شاشة البائع" & "تعديل قواعد الانتقال الكاملة" */}
-              <div className="flex flex-wrap items-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setSellerPreviewOpen(true)}
-                  className="inline-flex items-center gap-2 rounded-xl border border-[#CBD5E1] bg-[#F8FAFC] hover:bg-[#F1F5F9] px-4 py-2.5 text-[12px] font-extrabold text-[#0F172A] transition-colors"
-                >
-                  <Eye className="h-4 w-4 text-[#475569]" />
-                  <span>معاينة شاشة البائع</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleOpenTransitionEditor(selectedTransition)}
-                  className="inline-flex items-center gap-2 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] px-4 py-2.5 text-[12px] font-extrabold text-[#FFFFFF] shadow-xs transition-colors"
-                >
-                  <Sliders className="h-4 w-4" />
-                  <span>تعديل قواعد الانتقال الكاملة</span>
-                </button>
-              </div>
-            </div>
-
-            {/* 3-Card Breakdown Grid (Before Criteria | During Fields | After Actions) */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
-              {/* Card 1 (Right in RTL): شروط ما قبل الظهور (Before Criteria) */}
-              <div className="rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC]/70 p-4 flex flex-col justify-between space-y-3">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Lock className="h-4 w-4 text-[#2563EB] shrink-0" />
-                      <h3 className="text-[13px] font-extrabold text-[#0F172A]">
-                        شروط ما قبل الظهور (Before Criteria)
-                      </h3>
-                    </div>
-                    <span className="rounded-lg border border-[#CBD5E1] bg-[#FFFFFF] px-2.5 py-0.5 text-[10px] font-extrabold text-[#334155] shrink-0">
-                      {selectedTransition.beforeCriteriaList.length} شروط نشطة
-                    </span>
-                  </div>
-
-                  <p className="text-[11px] text-[#64748B] leading-relaxed">
-                    الشروط الرياضية والمنطقية التي يجب استيفاؤها قبل إتاحة هذا الزر لمسؤول المبيعات:
-                  </p>
-
-                  <div className="space-y-2 pt-1">
-                    {selectedTransition.beforeCriteriaList.map((criterion, idx) => (
-                      <div
-                        key={idx}
-                        className="flex items-start gap-2 text-[12px] font-bold text-[#0F172A] leading-relaxed"
-                      >
-                        <CheckCircle2 className="h-4 w-4 text-[#059669] shrink-0 mt-0.5" />
-                        <span>{criterion}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="border-t border-[#E2E8F0] pt-2.5 text-[11px] text-[#64748B]">
-                  <span>الصلاحية محصورة لـ : </span>
-                  <strong className="font-extrabold text-[#0F172A]">
-                    {selectedTransition.rolesSummaryText}
-                  </strong>
-                </div>
-              </div>
-
-              {/* Card 2 (Center): الإدخال الإلزامي أثناء النقر (During Fields) */}
-              <div className="rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC]/70 p-4 flex flex-col justify-between space-y-3">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-[#2563EB] shrink-0" />
-                      <h3 className="text-[13px] font-extrabold text-[#0F172A]">
-                        الإدخال الإلزامي أثناء النقر (During Fields)
-                      </h3>
-                    </div>
-                    <span className="rounded-lg border border-[#93C5FD] bg-[#DBEAFE]/70 px-2.5 py-0.5 text-[10px] font-extrabold text-[#1E40AF] shrink-0">
-                      {selectedTransition.duringCountBadge}
-                    </span>
-                  </div>
-
-                  <p className="text-[11px] text-[#64748B] leading-relaxed">
-                    حقول تظهر في نافذة منبثقة إجبارية لا يمكن تخطيها لحماية نزاهة بيانات CRM:
-                  </p>
-
-                  {/* 2x2 Grid of Mandatory Fields */}
-                  <div className="grid grid-cols-2 gap-2 pt-1">
-                    {selectedTransition.duringGridCards.map((card, idx) => (
-                      <div
-                        key={idx}
-                        className="rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] px-3 py-2.5 flex items-center gap-2 text-[11px] font-extrabold text-[#0F172A] shadow-2xs"
-                      >
-                        {card.icon === 'pdf' && (
-                          <Paperclip className="h-3.5 w-3.5 text-[#2563EB] shrink-0" />
-                        )}
-                        {card.icon === 'po' && (
-                          <Hash className="h-3.5 w-3.5 text-[#2563EB] shrink-0" />
-                        )}
-                        {card.icon === 'payment' && (
-                          <CreditCard className="h-3.5 w-3.5 text-[#2563EB] shrink-0" />
-                        )}
-                        {card.icon === 'date' && (
-                          <Calendar className="h-3.5 w-3.5 text-[#2563EB] shrink-0" />
-                        )}
-                        <span className="truncate">{card.label}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="pt-2 flex justify-center">
-                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#6EE7B7]/65 border border-[#34D399] px-3 py-1 text-[11px] font-extrabold text-[#065F46]">
-                    <ShieldCheck className="h-3.5 w-3.5" />
-                    <span>مربوط بمصادقة DocuSign / منصة نفاذ الوطنية</span>
-                  </span>
-                </div>
-              </div>
-
-              {/* Card 3 (Left in RTL): الأتمتة الفورية بعد الفوز (After Actions) */}
-              <div className="rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC]/70 p-4 flex flex-col justify-between space-y-3">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Zap className="h-4 w-4 text-[#059669] shrink-0" />
-                      <h3 className="text-[13px] font-extrabold text-[#0F172A]">
-                        الأتمتة الفورية بعد الفوز (After Actions)
-                      </h3>
-                    </div>
-                    <span className="rounded-lg bg-[#6EE7B7]/75 border border-[#34D399] px-2.5 py-0.5 text-[10px] font-extrabold text-[#065F46] shrink-0">
-                      {selectedTransition.afterCountBadge}
-                    </span>
-                  </div>
-
-                  <p className="text-[11px] text-[#64748B] leading-relaxed">
-                    إجراءات نظامية تنطلق تلقائياً فور اعتماد المسار بنجاح:
-                  </p>
-
-                  <div className="space-y-2 pt-0.5">
-                    {selectedTransition.afterDetailRows.map((row, idx) => (
-                      <div
-                        key={idx}
-                        className="rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] px-3 py-2 flex items-center justify-between gap-2 shadow-2xs"
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          {idx === 0 ? (
-                            <RefreshCw className="h-3.5 w-3.5 text-[#059669] shrink-0" />
-                          ) : idx === 1 ? (
-                            <MessageSquare className="h-3.5 w-3.5 text-[#059669] shrink-0" />
-                          ) : (
-                            <CheckCircle2 className="h-3.5 w-3.5 text-[#059669] shrink-0" />
-                          )}
-                          <span className="text-[11px] font-bold text-[#0F172A] truncate">
-                            {row.label}
-                          </span>
-                        </div>
-                        <span className="rounded border border-[#E2E8F0] bg-[#F8FAFC] px-2 py-0.5 font-mono text-[9px] font-extrabold text-[#2563EB] shrink-0">
-                          {row.tag}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="border-t border-[#E2E8F0] pt-2.5 flex items-center justify-between text-[11px] text-[#64748B]">
-                  <span>فترة إعادة المحاولة التلقائية: 3 مرات عند الفشل</span>
-                  <ShieldCheck className="h-4 w-4 text-[#059669]" />
-                </div>
-              </div>
-            </div>
-          </div>
+          )}
         </div>
-      ) : (
-        /* =====================================================================
-           MODE B: 3-COLUMN VISUAL BUILDER WORKSPACE (Right 22% | Center 48% | Left 30%)
-           ===================================================================== */
-        <div className="w-full flex-1 grid grid-cols-1 xl:grid-cols-[22%_48%_30%] items-stretch">
-          {/* RIGHT COLUMN (22%): مستودع المراحل (Stages) + Rules/Actions Palette */}
-          <aside className="bg-[#FFFFFF] border-l border-[#E2E8F0] p-4 flex flex-col justify-between space-y-5">
-            <div className="space-y-4">
-              {/* Stages Header */}
-              <div className="flex items-center justify-between gap-2">
+
+        {/* Create New Blueprint Modal */}
+        {createModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-[1px]">
+            <div
+              dir="rtl"
+              className="w-full max-w-lg rounded-xl border border-[#E2E8F0] bg-white shadow-xl overflow-hidden"
+            >
+              <div className="flex items-center justify-between border-b border-[#E2E8F0] bg-[#F8FAFC] px-5 py-4">
                 <div className="flex items-center gap-2">
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#EFF6FF] text-[#2563EB]">
-                    <Briefcase className="h-4 w-4" />
+                    <GitBranch className="h-4 w-4" />
                   </div>
                   <div>
-                    <h2 className="text-[13px] font-extrabold text-[#0F172A]">
-                      مستودع المراحل
-                    </h2>
-                    <p className="text-[10px] text-[#64748B]">
-                      اسحب وأفلت في لوحة الرسم
+                    <h2 className="text-sm font-bold text-[#0F172A]">إنشاء بلوبرينت جديد</h2>
+                    <p className="text-[11px] text-[#64748B]">
+                      حدد الموديول والحقل المرتبط للانتقال مباشرةً إلى المحرر البصري التفاعلي
                     </p>
                   </div>
                 </div>
-                <span className="rounded-md bg-[#EFF6FF] border border-[#BFDBFE] px-2 py-0.5 text-[10px] font-extrabold text-[#2563EB] tabular-nums">
-                  {stages.length} حالات
-                </span>
+                <button
+                  type="button"
+                  onClick={() => setCreateModalOpen(false)}
+                  className="rounded-lg p-1 text-[#64748B] hover:bg-[#E2E8F0]/50"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
 
-              {/* Search Stages */}
-              <div className="relative">
-                <Search className="h-3.5 w-3.5 text-[#94A3B8] absolute right-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={stageSearch}
-                  onChange={(e) => setStageSearch(e.target.value)}
-                  placeholder="بحث في الحالات والقواعد..."
-                  className="w-full rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] pr-8 pl-3 py-2 text-[11px] text-[#0F172A] focus:border-[#2563EB] focus:bg-[#FFFFFF] focus:outline-none"
-                />
-              </div>
+              <form onSubmit={(e) => void handleCreateBlueprint(e)} className="p-5 space-y-4">
+                <div>
+                  <label className="mb-1.5 block text-xs font-bold text-[#0F172A]">
+                    اسم البلوبرينت <span className="text-[#E11D48]">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newBpName}
+                    onChange={(e) => setNewBpName(e.target.value)}
+                    placeholder="مثال: مسار صفقات القطاع الحكومي أو مسار اعتماد الخصومات"
+                    className="h-9 w-full rounded-lg border border-[#CBD5E1] bg-white px-3 text-xs text-[#0F172A] focus:border-[#2563EB] focus:outline-none"
+                  />
+                </div>
 
-              {/* Stages List */}
-              <div className="space-y-2">
-                <p className="text-[10px] font-bold tracking-wide text-[#94A3B8] uppercase">
-                  مراحل دورة البيع (DEAL STAGES)
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-bold text-[#0F172A]">
+                      الموديول المستهدف <span className="text-[#E11D48]">*</span>
+                    </label>
+                    <select
+                      value={newBpModule}
+                      onChange={(e) => {
+                        const mod = e.target.value;
+                        setNewBpModule(mod);
+                        const preset = MODULE_OPTIONS.find((m) => m.module === mod);
+                        if (preset && preset.fields[0]) {
+                          setNewBpField(preset.fields[0]);
+                        }
+                      }}
+                      className="h-9 w-full rounded-lg border border-[#CBD5E1] bg-white px-3 text-xs font-semibold text-[#0F172A] focus:border-[#2563EB] focus:outline-none"
+                    >
+                      {MODULE_OPTIONS.map((m) => (
+                        <option key={m.module} value={m.module}>
+                          {m.module}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-xs font-bold text-[#0F172A]">
+                      الحقل المرتبط (Stage / Status) <span className="text-[#E11D48]">*</span>
+                    </label>
+                    <select
+                      value={newBpField}
+                      onChange={(e) => setNewBpField(e.target.value)}
+                      className="h-9 w-full rounded-lg border border-[#CBD5E1] bg-white px-3 text-xs font-semibold text-[#0F172A] focus:border-[#2563EB] focus:outline-none"
+                    >
+                      {(
+                        MODULE_OPTIONS.find((m) => m.module === newBpModule)?.fields ?? [
+                          'المرحلة (Stage)',
+                        ]
+                      ).map((f) => (
+                        <option key={f} value={f}>
+                          {f}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-xs font-bold text-[#0F172A]">
+                    معايير التطبيق الاختيارية (Criteria)
+                  </label>
+                  <input
+                    type="text"
+                    value={newBpCriteria}
+                    onChange={(e) => setNewBpCriteria(e.target.value)}
+                    placeholder="مثال: قيمة الصفقة >= 50,000 ر.س أو كافة السجلات"
+                    className="h-9 w-full rounded-lg border border-[#CBD5E1] bg-white px-3 text-xs text-[#0F172A] focus:border-[#2563EB] focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-xs font-bold text-[#0F172A]">
+                    وصف مختصر للمسار
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={newBpDescription}
+                    onChange={(e) => setNewBpDescription(e.target.value)}
+                    placeholder="اشرح الهدف من هذا المسار والفرق المستفيدة منه..."
+                    className="w-full rounded-lg border border-[#CBD5E1] bg-white p-2.5 text-xs text-[#0F172A] focus:border-[#2563EB] focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 border-t border-[#E2E8F0] pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setCreateModalOpen(false)}
+                    className="h-9 rounded-lg border border-[#CBD5E1] bg-white px-4 text-xs font-semibold text-[#475569] hover:bg-[#F8FAFC]"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    type="submit"
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#2563EB] px-4 text-xs font-bold text-white hover:bg-[#1D4ED8] cursor-pointer"
+                  >
+                    <span>إنشاء وفتح المحرر البصري</span>
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Simulator Modal if triggered from list */}
+        {simModalOpen && activeBlueprint && renderSimulatorModal()}
+
+        {/* Toast Notification */}
+        {toastBanner && (
+          <div className="fixed bottom-5 left-5 z-50 flex items-center gap-2.5 rounded-xl border border-[#E2E8F0] bg-[#0F172A] px-4 py-3 text-xs font-bold text-white shadow-xl">
+            <CheckCircle2
+              className={`h-4 w-4 shrink-0 ${
+                toastBanner.tone === 'error'
+                  ? 'text-[#F43F5E]'
+                  : toastBanner.tone === 'info'
+                    ? 'text-[#60A5FA]'
+                    : 'text-[#10B981]'
+              }`}
+            />
+            <span>{toastBanner.message}</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ============================================================================
+  // RENDER HELPER: SIMULATOR MODAL
+  // ============================================================================
+
+  function renderSimulatorModal() {
+    if (!activeBlueprint) return null;
+    const currentStage = activeBlueprint.stages.find((s) => s.id === simCurrentStageId);
+    const outgoingTransitions = activeBlueprint.transitions.filter(
+      (t) => t.fromStageId === simCurrentStageId && t.enabled,
+    );
+    const activeSimTransition = activeBlueprint.transitions.find(
+      (t) => t.id === simActiveTransitionId,
+    );
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-[1px]">
+        <div
+          dir="rtl"
+          className="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-xl border border-[#E2E8F0] bg-white shadow-2xl overflow-hidden"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-[#E2E8F0] bg-[#0F172A] px-5 py-3.5 text-white">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#2563EB] text-white">
+                <Play className="h-4 w-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold">
+                  محاكاة تنفيذ البلوبرينت: {activeBlueprint.name}
+                </h3>
+                <p className="text-[11px] text-[#94A3B8]">
+                  اختبر صلاحيات الأدوار (Before)، الحقول الإلزامية وقائمة التحقق (During)، والأتمتة الفورية (After) كما يراها المندوب
                 </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSimModalOpen(false)}
+              className="rounded-lg p-1.5 text-[#94A3B8] hover:bg-white/10 hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
 
-                <div className="space-y-2">
-                  {filteredStages.map((stg) => {
-                    const isSelected = stg.id === selectedStageId;
+          <div className="flex-1 overflow-y-auto p-5 space-y-5">
+            {/* Role Selector & Current State Bar */}
+            <div className="flex flex-col gap-3 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <span className="text-[11px] font-semibold text-[#64748B]">
+                  المرحلة الحالية للسجل ({activeBlueprint.linkedField}):
+                </span>
+                <div className="mt-1 flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#2563EB] px-3 py-1 text-xs font-bold text-white">
+                    {currentStage?.title ?? 'غير محدد'}
+                  </span>
+                  <span className="text-[11px] text-[#64748B]">
+                    (SLA: {currentStage?.slaBadge ?? '—'})
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-bold text-[#334155]">اختبار بصلاحية دور:</label>
+                <select
+                  value={simRole}
+                  onChange={(e) => setSimRole(e.target.value)}
+                  className="h-8 rounded-lg border border-[#CBD5E1] bg-white px-2.5 text-xs font-semibold text-[#0F172A]"
+                >
+                  {AVAILABLE_ROLES.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => openSimulator(activeBlueprint)}
+                  className="inline-flex h-8 items-center gap-1 rounded-lg border border-[#CBD5E1] bg-white px-2.5 text-xs font-semibold text-[#475569] hover:bg-[#F1F5F9]"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  <span>إعادة من البداية</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Available Transition Buttons (Zoho Blueprint Strip) */}
+            <div className="rounded-xl border border-[#E2E8F0] bg-white p-4">
+              <p className="mb-2.5 text-xs font-bold text-[#0F172A]">
+                أزرار الانتقال المتاحة في شريط السجل (Transitions Bar):
+              </p>
+              {outgoingTransitions.length === 0 ? (
+                <div className="rounded-lg border border-[#A7F3D0] bg-[#ECFDF5] p-3 text-xs font-semibold text-[#059669]">
+                  وصل السجل إلى مرحلة نهائية ({currentStage?.title}) ولا توجد انتقالات تالية.
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {outgoingTransitions.map((tr) => {
+                    const roleAllowed = tr.roles.length === 0 || tr.roles.includes(simRole);
                     return (
                       <button
-                        key={stg.id}
+                        key={tr.id}
                         type="button"
-                        onClick={() => setSelectedStageId(stg.id)}
-                        className={`w-full rounded-xl border p-2.5 text-right transition-all flex items-center justify-between gap-2 ${
-                          isSelected
-                            ? 'border-[#2563EB] bg-[#EFF6FF]/90 ring-1 ring-[#2563EB]/20'
-                            : 'border-[#E2E8F0] bg-[#F8FAFC] hover:bg-[#FFFFFF] hover:border-[#CBD5E1]'
+                        onClick={() => handleTriggerSimulatedTransition(tr)}
+                        className={`inline-flex items-center gap-2 rounded-lg border px-3.5 py-2 text-xs font-bold transition cursor-pointer ${
+                          simActiveTransitionId === tr.id
+                            ? 'border-[#2563EB] bg-[#2563EB] text-white shadow-xs'
+                            : roleAllowed
+                              ? 'border-[#BFDBFE] bg-[#EFF6FF] text-[#1D4ED8] hover:bg-[#DBEAFE]'
+                              : 'border-[#FECDD3] bg-[#FFF1F2] text-[#E11D48] opacity-80'
                         }`}
                       >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-[#94A3B8] text-xs font-bold shrink-0">
-                            =
-                          </span>
-                          <span
-                            className={`h-2 w-2 rounded-full shrink-0 ${
-                              stg.category === 'won'
-                                ? 'bg-[#10B981]'
-                                : stg.category === 'lost'
-                                ? 'bg-[#E11D48]'
-                                : stg.category === 'active'
-                                ? 'bg-[#F59E0B]'
-                                : 'bg-[#2563EB]'
-                            }`}
-                          />
-                          <div className="min-w-0">
-                            <p
-                              className={`text-[12px] font-extrabold truncate ${
-                                isSelected
-                                  ? 'text-[#1E40AF]'
-                                  : stg.category === 'lost'
-                                  ? 'text-[#BE123C]'
-                                  : 'text-[#0F172A]'
-                              }`}
-                            >
-                              {stg.stepIndex}. {stg.title.replace(/^\d+\.\s*/, '')}
-                            </p>
-                            <p className="text-[10px] text-[#64748B] truncate mt-0.5">
-                              {stg.englishSubtitle}
-                            </p>
-                          </div>
-                        </div>
-
-                        {isSelected ? (
-                          <span className="rounded bg-[#2563EB] px-1.5 py-0.5 text-[9px] font-bold text-[#FFFFFF] shrink-0">
-                            محدد
-                          </span>
-                        ) : stg.category === 'won' ? (
-                          <span className="rounded bg-[#ECFDF5] border border-[#A7F3D0] px-1.5 py-0.5 text-[9px] font-bold text-[#059669] shrink-0">
-                            فوز
-                          </span>
-                        ) : stg.category === 'lost' ? (
-                          <span className="rounded bg-[#FFF1F2] border border-[#FECDD3] px-1.5 py-0.5 text-[9px] font-bold text-[#E11D48] shrink-0">
-                            خسارة
-                          </span>
-                        ) : (
-                          <span className="rounded bg-[#E2E8F0]/70 px-1.5 py-0.5 font-mono text-[10px] font-bold text-[#64748B] tabular-nums shrink-0">
-                            {stg.numberLabel}
+                        <Zap className="h-3.5 w-3.5" />
+                        <span>{tr.name}</span>
+                        {!roleAllowed && (
+                          <span className="rounded bg-white/80 px-1.5 py-0.5 text-[10px]">
+                            مقيد للدور
                           </span>
                         )}
                       </button>
                     );
                   })}
                 </div>
-
-                <button
-                  type="button"
-                  onClick={() => setAddingStageModal(true)}
-                  className="w-full rounded-xl border border-dashed border-[#93C5FD] bg-[#EFF6FF]/40 hover:bg-[#EFF6FF] py-2.5 text-[11px] font-extrabold text-[#2563EB] flex items-center justify-center gap-1.5 transition-colors"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  <span>إنشاء حالة مخصصة جديدة</span>
-                </button>
-              </div>
-
-              {/* Rules & Actions Palette */}
-              <div className="space-y-2 pt-2 border-t border-[#F1F5F9]">
-                <p className="text-[10px] font-bold tracking-wide text-[#94A3B8] uppercase">
-                  قواعد وضوابط التحقق (RULES & ACTIONS)
-                </p>
-
-                <div className="space-y-1.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setInspectorTab('during');
-                      setAddingFieldInline(true);
-                    }}
-                    className="w-full flex items-center justify-between rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] hover:border-[#93C5FD] px-3 py-2 text-right text-[11px] font-bold text-[#0F172A] transition-colors"
-                  >
-                    <span>حقول تحقق إلزامية (Mandatory)</span>
-                    <CheckCircle2 className="h-4 w-4 text-[#2563EB] shrink-0" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setInspectorTab('before');
-                      setToastMsg('تم فتح شروط موافقة المدير الإلزامية');
-                    }}
-                    className="w-full flex items-center justify-between rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] hover:border-[#93C5FD] px-3 py-2 text-right text-[11px] font-bold text-[#0F172A] transition-colors"
-                  >
-                    <span>موافقة المدير الإلزامية (Approval)</span>
-                    <UserCheck className="h-4 w-4 text-[#7C3AED] shrink-0" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setInspectorTab('during');
-                      setToastMsg('تم تحديد شرط إرفاق المستند الرسمي (PDF)');
-                    }}
-                    className="w-full flex items-center justify-between rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] hover:border-[#93C5FD] px-3 py-2 text-right text-[11px] font-bold text-[#0F172A] transition-colors"
-                  >
-                    <span>إلزام إرفاق مستند رسمي (File Upload)</span>
-                    <FileText className="h-4 w-4 text-[#D97706] shrink-0" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setInspectorTab('after');
-                      setToastMsg('تم عرض إعدادات إشعارات واتساب / Webhook');
-                    }}
-                    className="w-full flex items-center justify-between rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] hover:border-[#93C5FD] px-3 py-2 text-right text-[11px] font-bold text-[#0F172A] transition-colors"
-                  >
-                    <span>إرسال واتساب / بريد آلي (Webhook)</span>
-                    <MessageSquare className="h-4 w-4 text-[#059669] shrink-0" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setInspectorTab('after');
-                      setToastMsg('تم تفعيل مزامنة الحقول مع الفوترة وأوامر البيع');
-                    }}
-                    className="w-full flex items-center justify-between rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] hover:border-[#93C5FD] px-3 py-2 text-right text-[11px] font-bold text-[#0F172A] transition-colors"
-                  >
-                    <span>تحديث حقل في موديول آخر (Sync)</span>
-                    <RefreshCw className="h-4 w-4 text-[#2563EB] shrink-0" />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Bottom Info Box */}
-            <div className="rounded-xl border border-[#DBEAFE] bg-[#EFF6FF]/60 p-3 flex items-start gap-2 text-[11px] text-[#334155] leading-relaxed">
-              <Info className="h-4 w-4 text-[#2563EB] shrink-0 mt-0.5" />
-              <span>
-                في وضع البلوبرينت، لن يتمكن البائع من اختيار المرحلة القادمة يدوياً إلا بالنقر على زر الانتقال المعتمد بعد تحقيق الشروط.
-              </span>
-            </div>
-          </aside>
-
-          {/* CENTER COLUMN (48%): Interactive Flow Diagram */}
-          <section className="bg-[#F8FAFC] border-l border-[#E2E8F0] flex flex-col justify-between relative">
-            {/* Canvas Top Bar */}
-            <div className="bg-[#FFFFFF] border-b border-[#E2E8F0] px-4 py-2.5 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-[#10B981]" />
-                <h2 className="text-[13px] font-extrabold text-[#0F172A]">
-                  مخطط التدفق التفاعلي (Interactive Flow Diagram)
-                </h2>
-                <span className="rounded border border-[#E2E8F0] bg-[#F8FAFC] px-1.5 py-0.5 font-mono text-[10px] font-bold text-[#64748B]">
-                  RTL Flow Engine
-                </span>
-              </div>
-
-              <div className="flex items-center gap-3 text-[11px]">
-                <div className="hidden sm:flex items-center gap-2.5 text-[#64748B]">
-                  <span className="inline-flex items-center gap-1">
-                    <span className="h-2.5 w-2.5 rounded-xs border border-[#CBD5E1] bg-[#FFFFFF]" />
-                    <span>مرحلة عادية</span>
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <span className="h-2.5 w-2.5 rounded-xs bg-[#2563EB]" />
-                    <span>زر انتقال</span>
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <span className="h-2.5 w-2.5 rounded-xs bg-[#059669]" />
-                    <span>محطة فوز</span>
-                  </span>
-                </div>
-
-                <div className="inline-flex items-center rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-1.5 py-0.5 text-[11px] font-bold text-[#475569] tabular-nums">
-                  <button
-                    type="button"
-                    onClick={() => setZoomPercent((z) => Math.min(125, z + 10))}
-                    className="px-1 hover:text-[#0F172A]"
-                    aria-label="تكبير المخطط"
-                  >
-                    <Plus className="h-3 w-3" />
-                  </button>
-                  <span className="px-1.5">{zoomPercent}%</span>
-                  <button
-                    type="button"
-                    onClick={() => setZoomPercent((z) => Math.max(80, z - 10))}
-                    className="px-1 hover:text-[#0F172A]"
-                    aria-label="تصغير المخطط"
-                  >
-                    <Minus className="h-3 w-3" />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Canvas Body */}
-            <div className="flex-1 overflow-y-auto px-5 py-6 bg-[radial-gradient(#CBD5E1_1px,transparent_1px)] [background-size:18px_18px]">
-              <div className="mx-auto max-w-[540px] flex flex-col items-center">
-                {/* Stage 1 Node */}
-                <div
-                  onClick={() => setSelectedStageId('stg_1')}
-                  className={`w-full rounded-2xl border bg-[#FFFFFF] p-3.5 shadow-xs cursor-pointer transition-all flex items-center justify-between gap-3 ${
-                    selectedStageId === 'stg_1'
-                      ? 'border-[#2563EB] ring-2 ring-[#2563EB]/15'
-                      : 'border-[#E2E8F0] hover:border-[#93C5FD]'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#EFF6FF] font-mono text-[13px] font-extrabold text-[#2563EB]">
-                      1
-                    </span>
-                    <div className="text-right">
-                      <p className="text-[13px] font-extrabold text-[#0F172A]">
-                        عميل محتمل مؤهل (Qualified Lead)
-                      </p>
-                      <p className="text-[11px] text-[#64748B]">
-                        الحد الأقصى للإقامة: 3 أيام عمل
-                      </p>
-                    </div>
-                  </div>
-                  <span className="rounded-md bg-[#EFF6FF] px-2.5 py-1 text-[10px] font-bold text-[#2563EB]">
-                    بداية المسار
-                  </span>
-                </div>
-
-                {/* Connector + Transition 1 (`tr_901`) */}
-                <div className="h-3.5 w-0.5 bg-[#2563EB]/60" />
-                <button
-                  type="button"
-                  onClick={() => setSelectedTransitionId('tr_901')}
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-1.5 text-[11px] font-bold transition-all shadow-2xs ${
-                    selectedTransitionId === 'tr_901'
-                      ? 'border-[#2563EB] bg-[#2563EB] text-[#FFFFFF] ring-2 ring-[#2563EB]/25'
-                      : 'border-[#93C5FD] bg-[#EFF6FF] text-[#2563EB] hover:bg-[#DBEAFE]'
-                  }`}
-                >
-                  <Zap className="h-3.5 w-3.5" />
-                  <span>انتقال: «إرسال العرض التوضيحي الفني»</span>
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#10B981]" />
-                </button>
-                <div className="h-3.5 w-0.5 bg-[#2563EB]/60" />
-
-                {/* Stage 2 Node */}
-                <div
-                  onClick={() => setSelectedStageId('stg_2')}
-                  className={`w-full rounded-2xl border bg-[#FFFFFF] p-3.5 shadow-xs cursor-pointer transition-all flex items-center justify-between gap-3 ${
-                    selectedStageId === 'stg_2'
-                      ? 'border-[#2563EB] ring-2 ring-[#2563EB]/15'
-                      : 'border-[#E2E8F0] hover:border-[#93C5FD]'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#EFF6FF] font-mono text-[13px] font-extrabold text-[#2563EB]">
-                      2
-                    </span>
-                    <div className="text-right">
-                      <p className="text-[13px] font-extrabold text-[#0F172A]">
-                        تحليل الاحتياج والعرض الفني
-                      </p>
-                      <p className="text-[11px] text-[#64748B]">
-                        يتطلب حضور مهندس المبيعات واعتماد النطاق
-                      </p>
-                    </div>
-                  </div>
-                  <span className="rounded-md bg-[#F1F5F9] px-2.5 py-1 text-[10px] font-bold text-[#475569]">
-                    SLA: 5 أيام
-                  </span>
-                </div>
-
-                {/* Connector + Transition 2 (`tr_902`) */}
-                <div className="h-3.5 w-0.5 bg-[#2563EB]/60" />
-                <button
-                  type="button"
-                  onClick={() => setSelectedTransitionId('tr_902')}
-                  className={`inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-[11px] font-bold transition-all shadow-2xs ${
-                    selectedTransitionId === 'tr_902'
-                      ? 'border-[#2563EB] bg-[#2563EB] text-[#FFFFFF] ring-2 ring-[#2563EB]/25'
-                      : 'border-[#93C5FD] bg-[#EFF6FF] text-[#2563EB] hover:bg-[#DBEAFE]'
-                  }`}
-                >
-                  <FileText className="h-3.5 w-3.5" />
-                  <span>انتقال: «إصدار العرض المالي المعتمد»</span>
-                  <span className="rounded bg-[#DBEAFE] px-1.5 py-0.5 text-[9px] font-extrabold text-[#1E40AF]">
-                    موافقة مالية
-                  </span>
-                </button>
-                <div className="h-3.5 w-0.5 bg-[#2563EB]/60" />
-
-                {/* Stage 3 Node */}
-                <div
-                  onClick={() => setSelectedStageId('stg_3')}
-                  className={`w-full rounded-2xl border bg-[#FFFFFF] p-3.5 shadow-xs cursor-pointer transition-all flex items-center justify-between gap-3 ${
-                    selectedStageId === 'stg_3'
-                      ? 'border-[#2563EB] ring-2 ring-[#2563EB]/15'
-                      : 'border-[#E2E8F0] hover:border-[#93C5FD]'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#EFF6FF] font-mono text-[13px] font-extrabold text-[#2563EB]">
-                      3
-                    </span>
-                    <div className="text-right">
-                      <p className="text-[13px] font-extrabold text-[#0F172A]">
-                        تقديم العرض المالي (Quote Sent)
-                      </p>
-                      <p className="text-[11px] text-[#64748B]">
-                        تم التسليم رسمياً - بانتظار استجابة المشتريات
-                      </p>
-                    </div>
-                  </div>
-                  <span className="rounded-md bg-[#FFFBEB] border border-[#FDE68A] px-2.5 py-1 text-[10px] font-bold text-[#D97706]">
-                    تحت النظر
-                  </span>
-                </div>
-
-                {/* Connector + Transition 3 (`tr_903`) */}
-                <div className="h-3.5 w-0.5 bg-[#2563EB]/60" />
-                <button
-                  type="button"
-                  onClick={() => setSelectedTransitionId('tr_903')}
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-1.5 text-[11px] font-bold transition-all shadow-2xs ${
-                    selectedTransitionId === 'tr_903'
-                      ? 'border-[#2563EB] bg-[#2563EB] text-[#FFFFFF] ring-2 ring-[#2563EB]/25'
-                      : 'border-[#93C5FD] bg-[#EFF6FF] text-[#2563EB] hover:bg-[#DBEAFE]'
-                  }`}
-                >
-                  <GitBranch className="h-3.5 w-3.5" />
-                  <span>انتقال: «بدء التفاوض والمراجعة القانونية»</span>
-                </button>
-                <div className="h-4 w-0.5 bg-[#2563EB]/60" />
-
-                {/* Stage 4 Node (Active Highlighted Stage Card) */}
-                <div className="w-full relative pt-2">
-                  <div className="-top-1 left-1/2 -translate-x-1/2 absolute z-10">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-[#1E3A8A] px-3 py-0.5 text-[10px] font-bold text-[#FFFFFF] shadow-xs">
-                      <Pencil className="h-2.5 w-2.5" />
-                      <span>المرحلة المحددة للتحرير حالياً</span>
-                    </span>
-                  </div>
-
-                  <div
-                    onClick={() => setSelectedStageId('stg_4')}
-                    className="w-full rounded-2xl border-2 border-[#F59E0B] bg-[#FFFFFF] p-4 shadow-md space-y-3 cursor-pointer"
-                  >
-                    <div className="flex items-start justify-between gap-2 pt-1">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#F59E0B] font-mono text-[14px] font-extrabold text-[#FFFFFF] shrink-0">
-                          4
-                        </span>
-                        <div className="text-right">
-                          <p className="text-[14px] font-extrabold text-[#0F172A]">
-                            4. التفاوض ومراجعة العقود (Negotiation)
-                          </p>
-                          <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px]">
-                            <span className="rounded bg-[#FEF3C7] px-2 py-0.5 font-bold text-[#B45309]">
-                              مرحلة حساسة وحرجة
-                            </span>
-                            <span className="text-[#64748B]">
-                              • تنبيه اختناق: بعد 5 أيام بدون حركة
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#D97706]">
-                        <span className="h-2 w-2 rounded-full bg-[#F59E0B]" />
-                        <span>نشط</span>
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3 text-[11px]">
-                      <div>
-                        <p className="text-[10px] text-[#64748B]">المسؤولين عن المرحلة:</p>
-                        <p className="font-bold text-[#0F172A] mt-0.5">
-                          مدير المبيعات + الشؤون القانونية
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] text-[#64748B]">المستندات المطلوبة مسبقاً:</p>
-                        <p className="font-bold text-[#0F172A] mt-0.5">
-                          مسودة الاتفاقية + جدول الأسعار المعتمد
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Branching Section Below Stage 4 */}
-                <div className="my-3 text-[11px] font-bold text-[#64748B]">
-                  الانتقالات المتاحة من هذه المرحلة:
-                </div>
-
-                <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-4 items-stretch">
-                  {/* Right Branch: Success Path (Close Won) */}
-                  <div className="rounded-2xl border border-[#A7F3D0] bg-[#ECFDF5]/60 p-3.5 flex flex-col items-center space-y-2.5">
-                    <div className="inline-flex items-center gap-1.5 text-[11px] font-extrabold text-[#059669]">
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                      <span>مسار الفوز والاعتماد (Success Path)</span>
-                    </div>
-
-                    {/* Transition Pill 4 (`tr_904` - Selected by default) */}
-                    <button
-                      type="button"
-                      onClick={() => setSelectedTransitionId('tr_904')}
-                      className={`w-full rounded-xl p-3 text-right transition-all flex items-center justify-between gap-2 shadow-sm ${
-                        selectedTransitionId === 'tr_904'
-                          ? 'bg-[#2563EB] text-[#FFFFFF] ring-2 ring-[#2563EB]/35'
-                          : 'bg-[#1D4ED8] text-[#FFFFFF] opacity-90 hover:opacity-100'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Lock className="h-4 w-4 shrink-0" />
-                        <div className="min-w-0">
-                          <p className="text-[12px] font-extrabold leading-snug">
-                            إتمام التعاقد والفوز (Close Won)
-                          </p>
-                        </div>
-                      </div>
-                      <span className="rounded bg-[#FFFFFF]/20 px-2 py-0.5 text-[9px] font-bold text-[#FFFFFF] shrink-0">
-                        {selectedTransitionId === 'tr_904' ? 'محدد للضبط' : 'انتقال'}
-                      </span>
-                    </button>
-
-                    <div className="h-2.5 w-0.5 bg-[#059669]/50" />
-
-                    {/* Stage 5 Terminal Won Node */}
-                    <div
-                      onClick={() => setSelectedStageId('stg_5')}
-                      className="w-full rounded-xl bg-[#059669] p-3 text-[#FFFFFF] text-center shadow-xs cursor-pointer"
-                    >
-                      <p className="text-[12px] font-extrabold flex items-center justify-center gap-1.5">
-                        <CheckCircle2 className="h-4 w-4" />
-                        <span>5. إغلاق فوز (Closed Won)</span>
-                      </p>
-                      <p className="text-[10px] text-[#D1FAE5] mt-0.5">
-                        توليد الفاتورة والبدء في تجهيز المشروع
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Left Branch: Drop Path (Closed Lost) */}
-                  <div className="rounded-2xl border border-[#FECDD3] bg-[#FFF1F2]/60 p-3.5 flex flex-col items-center space-y-2.5">
-                    <div className="inline-flex items-center gap-1.5 text-[11px] font-extrabold text-[#E11D48]">
-                      <X className="h-3.5 w-3.5" />
-                      <span>مسار التعثر والإلغاء (Drop Path)</span>
-                    </div>
-
-                    {/* Transition Pill 5 (`tr_905`) */}
-                    <button
-                      type="button"
-                      onClick={() => setSelectedTransitionId('tr_905')}
-                      className={`w-full rounded-xl border p-3 text-right transition-all flex items-center justify-between gap-2 ${
-                        selectedTransitionId === 'tr_905'
-                          ? 'border-[#E11D48] bg-[#FFE4E6] text-[#9F1239] ring-2 ring-[#E11D48]/25'
-                          : 'border-[#FECDD3] bg-[#FFFFFF] text-[#BE123C] hover:bg-[#FFF1F2]'
-                      }`}
-                    >
-                      <span className="text-[12px] font-extrabold leading-snug">
-                        تعثر الصفقة وخسارة (Mark as Lost)
-                      </span>
-                      <span className="rounded bg-[#FFF1F2] border border-[#FECDD3] px-1.5 py-0.5 text-[9px] font-bold text-[#E11D48] shrink-0">
-                        سبب إلزامي
-                      </span>
-                    </button>
-
-                    <div className="h-2.5 w-0.5 bg-[#E11D48]/40" />
-
-                    {/* Stage 6 Terminal Lost Node */}
-                    <div
-                      onClick={() => setSelectedStageId('stg_6')}
-                      className="w-full rounded-xl border-2 border-[#F43F5E] bg-[#FFFFFF] p-3 text-center cursor-pointer"
-                    >
-                      <p className="text-[12px] font-extrabold text-[#BE123C]">
-                        6. إغلاق خسارة (Closed Lost)
-                      </p>
-                      <p className="text-[10px] text-[#64748B] mt-0.5">
-                        تحديد أسباب الفقد وتحليل المنافسين
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Canvas Bottom Status Strip */}
-            <div className="bg-[#FFFFFF] border-t border-[#E2E8F0] px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-[11px]">
-              <div className="flex items-center gap-1.5 font-bold text-[#059669]">
-                <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                <span>
-                  تم التحقق من صحة المسار المنطقي: لا توجد حلقات مفرغة (No Deadlocks)
-                </span>
-              </div>
-              <div className="flex items-center gap-3 font-mono text-[10px] text-[#64748B] tabular-nums">
-                <span>دقة الشاشة: 1440x900</span>
-                <span>الإحداثيات: X: 420, Y: 680</span>
-              </div>
-            </div>
-          </section>
-
-          {/* LEFT COLUMN (30%): إعدادات الانتقال (Transition Inspector) */}
-          <aside className="bg-[#FFFFFF] p-4 flex flex-col justify-between space-y-4">
-            <div className="space-y-4">
-              {/* Inspector Header */}
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#2563EB] text-[#FFFFFF] shadow-2xs shrink-0">
-                    <Sliders className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <h2 className="text-[15px] font-extrabold text-[#0F172A] leading-tight">
-                      إعدادات الانتقال
-                    </h2>
-                    <p className="font-mono text-[10px] font-bold text-[#2563EB]">
-                      Transition Inspector
-                    </p>
-                  </div>
-                </div>
-
-                <span className="rounded-md border border-[#A7F3D0] bg-[#ECFDF5] px-2.5 py-1 font-mono text-[11px] font-extrabold text-[#059669]">
-                  معرف: {selectedTransition.code}
-                </span>
-              </div>
-
-              {/* Selected Transition From -> To Banner */}
-              <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2.5 flex items-center justify-between gap-2 text-[12px] font-bold">
-                <span className="text-[#0F172A]">
-                  من: [{selectedTransition.fromStageName}]
-                </span>
-                <span className="text-[#2563EB] font-extrabold">«</span>
-                <span
-                  className={
-                    selectedTransition.tone === 'lost'
-                      ? 'text-[#E11D48] font-extrabold'
-                      : 'text-[#059669] font-extrabold'
-                  }
-                >
-                  إلى: [{selectedTransition.toStageName}]
-                </span>
-              </div>
-
-              {/* Execution Roles Section */}
-              <div className="space-y-2">
-                <div>
-                  <h3 className="text-[12px] font-extrabold text-[#0F172A]">
-                    من يُسمح له بتنفيذ هذا الانتقال؟ (Execution Roles)
-                  </h3>
-                  <p className="text-[11px] text-[#64748B]">
-                    حدد الأدوار الوظيفية المصرح لها بتحويل الصفقة للفوز:
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {selectedTransition.roles.map((roleName) => (
-                    <span
-                      key={roleName}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#BFDBFE] bg-[#EFF6FF] px-2.5 py-1 text-[11px] font-bold text-[#1D4ED8]"
-                    >
-                      <span>{roleName}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveRole(roleName)}
-                        aria-label={`إزالة دور ${roleName}`}
-                        className="text-[#2563EB] hover:text-[#E11D48]"
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
-
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setAddingRoleMenu((p) => !p)}
-                      className="inline-flex items-center gap-1 rounded-lg border border-dashed border-[#CBD5E1] bg-[#F8FAFC] hover:border-[#2563EB] px-2.5 py-1 text-[11px] font-semibold text-[#475569] hover:text-[#2563EB]"
-                    >
-                      <Plus className="h-3 w-3" />
-                      <span>إضافة دور وظيفي</span>
-                    </button>
-
-                    {addingRoleMenu && (
-                      <div className="flyout-surface absolute right-0 top-8 z-30 w-56 rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] py-1 shadow-xl">
-                        {rolePool.map((rName) => (
-                          <button
-                            key={rName}
-                            type="button"
-                            onClick={() => handleAddRole(rName)}
-                            className="block w-full px-3 py-1.5 text-right text-[11px] font-semibold text-[#334155] hover:bg-[#EFF6FF] hover:text-[#2563EB]"
-                          >
-                            {rName}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* 3 Tabs: قبل الانتقال | أثناء الانتقال (نافذة الإدخال) | بعد الانتقال (الأتمتة) */}
-              <div className="grid grid-cols-3 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-1 text-center text-[11px]">
-                <button
-                  type="button"
-                  onClick={() => setInspectorTab('before')}
-                  className={`rounded-lg py-2 font-bold transition-colors ${
-                    inspectorTab === 'before'
-                      ? 'bg-[#FFFFFF] text-[#2563EB] shadow-2xs border border-[#BFDBFE]'
-                      : 'text-[#64748B] hover:text-[#0F172A]'
-                  }`}
-                >
-                  قبل الانتقال
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setInspectorTab('during')}
-                  className={`rounded-lg py-1.5 font-extrabold transition-colors leading-tight ${
-                    inspectorTab === 'during'
-                      ? 'bg-[#FFFFFF] text-[#2563EB] shadow-2xs border border-[#BFDBFE]'
-                      : 'text-[#64748B] hover:text-[#0F172A]'
-                  }`}
-                >
-                  أثناء الانتقال
-                  <span className="block text-[9px] font-semibold">(نافذة الإدخال)</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setInspectorTab('after')}
-                  className={`rounded-lg py-1.5 font-bold transition-colors leading-tight ${
-                    inspectorTab === 'after'
-                      ? 'bg-[#FFFFFF] text-[#2563EB] shadow-2xs border border-[#BFDBFE]'
-                      : 'text-[#64748B] hover:text-[#0F172A]'
-                  }`}
-                >
-                  بعد الانتقال
-                  <span className="block text-[9px] font-semibold">(الأتمتة)</span>
-                </button>
-              </div>
-
-              {/* Tab 1 Content: Before Transition Conditions */}
-              {inspectorTab === 'before' && (
-                <div className="space-y-2.5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[12px] font-extrabold text-[#0F172A]">
-                      شروط التحقق المسبقة (Before Conditions):
-                    </span>
-                    <span className="text-[10px] font-bold text-[#2563EB]">
-                      جميع الشروط مفعلة
-                    </span>
-                  </div>
-
-                  {selectedTransition.beforeConditions.map((cond) => (
-                    <label
-                      key={cond.id}
-                      className="flex items-start justify-between gap-2 rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] p-2.5 cursor-pointer"
-                    >
-                      <div className="flex items-start gap-2">
-                        <input
-                          type="checkbox"
-                          checked={cond.enabled}
-                          onChange={() => handleToggleBeforeCondition(cond.id)}
-                          className="mt-0.5 h-4 w-4 rounded border-[#CBD5E1] text-[#2563EB]"
-                        />
-                        <div>
-                          <p className="text-[12px] font-bold text-[#0F172A]">
-                            {cond.fieldLabel}
-                          </p>
-                          <p className="text-[10px] text-[#64748B]">
-                            {cond.operatorLabel}:{' '}
-                            <strong className="text-[#0F172A]">{cond.valueLabel}</strong>
-                          </p>
-                        </div>
-                      </div>
-                      <span className="rounded bg-[#ECFDF5] px-2 py-0.5 text-[10px] font-bold text-[#059669]">
-                        شرط أساسي
-                      </span>
-                    </label>
-                  ))}
-                </div>
               )}
+            </div>
 
-              {/* Tab 2 Content (Default): Mandatory Fields in Completion Window */}
-              {inspectorTab !== 'before' && (
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <h3 className="text-[12px] font-extrabold text-[#0F172A]">
-                      الحقول الإلزامية في نافذة الإتمام:
-                    </h3>
-                    <button
-                      type="button"
-                      onClick={() => setAddingFieldInline((prev) => !prev)}
-                      className="text-[11px] font-bold text-[#2563EB] hover:underline"
-                    >
-                      + إضافة حقل إلزامي
-                    </button>
+            {/* Active Transition "During" Gate Form */}
+            {activeSimTransition && (
+              <form
+                onSubmit={handleCompleteSimulatedTransition}
+                className="rounded-xl border-2 border-[#2563EB] bg-[#F8FAFC] p-4 space-y-4"
+              >
+                <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
+                  <div>
+                    <span className="text-[11px] font-bold text-[#2563EB]">
+                      نافذة التحقق أثناء الانتقال (During Transition Gate)
+                    </span>
+                    <h4 className="text-sm font-bold text-[#0F172A]">
+                      تنفيذ: {activeSimTransition.name}
+                    </h4>
                   </div>
+                  <span className="rounded-md bg-white px-2.5 py-1 text-[11px] font-semibold text-[#475569] border border-[#E2E8F0]">
+                    {activeSimTransition.slaDurationLabel}
+                  </span>
+                </div>
 
-                  {addingFieldInline && (
-                    <form
-                      onSubmit={handleAddCustomFieldSubmit}
-                      className="rounded-xl border border-[#BFDBFE] bg-[#EFF6FF]/60 p-2.5 space-y-2"
-                    >
-                      <input
-                        type="text"
-                        required
-                        placeholder="عنوان الحقل الإلزامي..."
-                        value={newFieldTitle}
-                        onChange={(e) => setNewFieldTitle(e.target.value)}
-                        className="w-full rounded-lg border border-[#CBD5E1] bg-[#FFFFFF] px-2.5 py-1.5 text-[11px] text-[#0F172A] focus:border-[#2563EB] focus:outline-none"
-                      />
-                      <input
-                        type="text"
-                        placeholder="وصف التحقق (اختياري)..."
-                        value={newFieldSubtitle}
-                        onChange={(e) => setNewFieldSubtitle(e.target.value)}
-                        className="w-full rounded-lg border border-[#CBD5E1] bg-[#FFFFFF] px-2.5 py-1.5 text-[11px] text-[#0F172A] focus:border-[#2563EB] focus:outline-none"
-                      />
-                      <div className="flex justify-end gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => setAddingFieldInline(false)}
-                          className="rounded px-2 py-1 text-[10px] font-bold text-[#64748B]"
-                        >
-                          إلغاء
-                        </button>
-                        <button
-                          type="submit"
-                          className="rounded bg-[#2563EB] px-2.5 py-1 text-[10px] font-bold text-[#FFFFFF]"
-                        >
-                          إضافة الحقل
-                        </button>
-                      </div>
-                    </form>
-                  )}
+                {/* Mandatory Fields */}
+                {activeSimTransition.mandatoryFields.length > 0 && (
+                  <div className="space-y-2.5">
+                    <p className="text-xs font-bold text-[#0F172A]">1. الحقول الإلزامية المطلوبة:</p>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      {activeSimTransition.mandatoryFields.map((mf) => (
+                        <div key={mf.id}>
+                          <label className="mb-1 block text-xs font-semibold text-[#334155]">
+                            {mf.fieldName} ({mf.fieldType}){' '}
+                            {mf.required && <span className="text-[#E11D48]">*</span>}
+                          </label>
+                          <input
+                            type="text"
+                            value={simFieldValues[mf.id] ?? ''}
+                            onChange={(e) =>
+                              setSimFieldValues((prev) => ({ ...prev, [mf.id]: e.target.value }))
+                            }
+                            placeholder={`أدخل ${mf.fieldName}...`}
+                            className="h-9 w-full rounded-lg border border-[#CBD5E1] bg-white px-3 text-xs text-[#0F172A]"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
+                {/* Checklist */}
+                {activeSimTransition.checklist.length > 0 && (
                   <div className="space-y-2">
-                    {selectedTransition.duringFields.map((fld) => (
-                      <label
-                        key={fld.id}
-                        className="flex items-start justify-between gap-2.5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] hover:bg-[#FFFFFF] p-2.5 cursor-pointer transition-colors"
-                      >
-                        <div className="flex items-start gap-2.5 min-w-0">
+                    <p className="text-xs font-bold text-[#0F172A]">
+                      2. قائمة التحقق الإلزامية (Checklist):
+                    </p>
+                    <div className="space-y-1.5">
+                      {activeSimTransition.checklist.map((item) => (
+                        <label
+                          key={item.id}
+                          className="flex items-center gap-2.5 rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-xs font-medium text-[#0F172A] cursor-pointer"
+                        >
                           <input
                             type="checkbox"
-                            checked={fld.enabled}
-                            onChange={() => handleToggleDuringField(fld.id)}
-                            className="mt-0.5 h-4 w-4 rounded border-[#CBD5E1] text-[#2563EB] focus:ring-[#2563EB] shrink-0"
+                            checked={Boolean(simChecklistValues[item.id])}
+                            onChange={(e) =>
+                              setSimChecklistValues((prev) => ({
+                                ...prev,
+                                [item.id]: e.target.checked,
+                              }))
+                            }
+                            className="h-4 w-4 rounded border-[#CBD5E1] text-[#2563EB]"
                           />
-                          <div className="min-w-0">
-                            <p className="text-[12px] font-extrabold text-[#0F172A] leading-snug">
-                              {fld.title}
-                            </p>
-                            <p className="text-[10px] text-[#64748B] mt-0.5 leading-relaxed">
-                              {fld.subtitle}
-                            </p>
-                          </div>
-                        </div>
-
-                        <span
-                          className={`rounded-md px-2 py-0.5 text-[10px] font-bold shrink-0 ${
-                            fld.badgeTone === 'danger'
-                              ? 'bg-[#FEE2E2] text-[#DC2626]'
-                              : fld.badgeTone === 'info'
-                              ? 'bg-[#DBEAFE] text-[#2563EB]'
-                              : 'bg-[#E2E8F0] text-[#475569]'
-                          }`}
-                        >
-                          {fld.badgeText}
-                        </span>
-                      </label>
-                    ))}
-
-                    {/* Digital Signature Toggle (نفاذ / DocuSign) */}
-                    <label className="flex items-center justify-between gap-2 rounded-xl border border-[#BFDBFE] bg-[#EFF6FF]/70 px-3 py-2.5 cursor-pointer">
-                      <div className="flex items-center gap-2 text-[12px] font-extrabold text-[#0F172A]">
-                        <Link2 className="h-4 w-4 text-[#2563EB] shrink-0" />
-                        <span>طلب توقيع رقمي عبر (نفاذ / DocuSign)</span>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={selectedTransition.requireDigitalSignature}
-                        onChange={(e) =>
-                          updateSelectedTransition((tr) => ({
-                            ...tr,
-                            requireDigitalSignature: e.target.checked,
-                          }))
-                        }
-                        className="h-4 w-4 rounded border-[#93C5FD] text-[#2563EB] focus:ring-[#2563EB]"
-                      />
-                    </label>
-                  </div>
-
-                  {/* Strict Pipeline Lock Warning */}
-                  <div className="rounded-xl border border-[#FDE68A] bg-[#FFFBEB] p-3 flex items-start gap-2 text-[11px] text-[#B45309] leading-relaxed">
-                    <AlertTriangle className="h-4 w-4 text-[#D97706] shrink-0 mt-0.5" />
-                    <span>
-                      <strong className="font-extrabold">قفل مسار المبيعات الصارم:</strong> لن يتمكن موظف المبيعات من النقر على زر الفوز في صفحة الصفقة ما لم يتم رفع العقد وتعبئة كافة البيانات أعلاه.
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* Post-Transition Automated Actions (`إجراءات الأتمتة اللاحقة After Transition Actions`) */}
-              <div className="space-y-2 pt-2 border-t border-[#F1F5F9]">
-                <h3 className="text-[12px] font-extrabold text-[#0F172A]">
-                  إجراءات الأتمتة اللاحقة (After Transition Actions):
-                </h3>
-
-                <div className="space-y-1.5">
-                  {selectedTransition.afterActions.map((act) => (
-                    <div
-                      key={act.id}
-                      onClick={() => handleToggleAfterAction(act.id)}
-                      className="flex items-center justify-between gap-2 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] hover:bg-[#FFFFFF] px-3 py-2 cursor-pointer transition-colors"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span
-                          className={`h-2 w-2 rounded-full shrink-0 ${
-                            act.enabled ? 'bg-[#10B981]' : 'bg-[#94A3B8]'
-                          }`}
-                        />
-                        <span className="text-[11px] font-bold text-[#0F172A] truncate">
-                          {act.label}
-                        </span>
-                      </div>
-
-                      <span
-                        className={`rounded px-2 py-0.5 text-[10px] font-extrabold shrink-0 ${
-                          act.enabled
-                            ? 'bg-[#ECFDF5] text-[#059669]'
-                            : 'bg-[#E2E8F0] text-[#64748B]'
-                        }`}
-                      >
-                        {act.enabled ? 'مفعل' : 'معطل'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Inspector Footer Buttons */}
-            <div className="space-y-2 pt-2 border-t border-[#E2E8F0]">
-              <button
-                type="button"
-                onClick={() => handleOpenTransitionEditor(selectedTransition)}
-                className="w-full rounded-xl border border-[#BFDBFE] bg-[#EFF6FF] hover:bg-[#DBEAFE] py-2.5 px-4 text-[12px] font-extrabold text-[#1D4ED8] transition-colors flex items-center justify-center gap-1.5"
-              >
-                <Sliders className="h-3.5 w-3.5" />
-                <span>تعديل قواعد الانتقال الكاملة</span>
-              </button>
-
-              <button
-                type="button"
-                disabled={savingToFirestore}
-                onClick={() =>
-                  void persistBlueprintToFirestore(
-                    blueprintActive,
-                    stages.length,
-                    `تم حفظ إعدادات انتقال «${selectedTransition.shortTitle}» في قاعدة البيانات`
-                  )
-                }
-                className="w-full rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] py-3 px-4 text-[13px] font-extrabold text-[#FFFFFF] shadow-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                <Check className="h-4 w-4 stroke-[2.5]" />
-                <span>حفظ إعدادات انتقال «{selectedTransition.shortTitle}»</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleResetInspectorDefaults}
-                className="w-full rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] hover:bg-[#F1F5F9] py-2.5 px-4 text-[12px] font-bold text-[#475569] transition-colors flex items-center justify-center gap-1.5"
-              >
-                <RotateCcw className="h-3.5 w-3.5" />
-                <span>إلغاء التغييرات واستعادة الإعداد الافتراضي</span>
-              </button>
-            </div>
-          </aside>
-        </div>
-      )}
-
-      {/* Seller Screen Preview Modal ("معاينة شاشة البائع") */}
-      {sellerPreviewOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F172A]/50 backdrop-blur-[2px] p-4"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="w-full max-w-xl rounded-2xl border border-[#E2E8F0] bg-[#FFFFFF] p-5 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-[#F1F5F9] pb-3">
-              <div className="space-y-0.5">
-                <span className="inline-block rounded-md bg-[#EFF6FF] border border-[#BFDBFE] px-2 py-0.5 text-[10px] font-extrabold text-[#2563EB]">
-                  معاينة نافذة البائع (Seller Transition Modal Preview)
-                </span>
-                <h3 className="text-[15px] font-extrabold text-[#0F172A]">
-                  إتمام متطلبات الانتقال: {selectedTransition.shortTitle} (
-                  {selectedTransition.englishName})
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSellerPreviewOpen(false)}
-                className="rounded-lg p-1 text-[#64748B] hover:bg-[#F1F5F9]"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="space-y-3 text-[12px]">
-              <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3 flex items-center justify-between font-bold">
-                <span className="text-[#475569]">
-                  من: <strong className="text-[#0F172A]">{selectedTransition.fromStageName}</strong>
-                </span>
-                <span className="text-[#2563EB]">←</span>
-                <span className="text-[#059669]">
-                  إلى: <strong>{selectedTransition.toStageBadge}</strong>
-                </span>
-              </div>
-
-              <p className="text-[11px] font-bold text-[#64748B]">
-                الحقول الإلزامية التي يطالب بها البائع عند النقر على زر الانتقال:
-              </p>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {selectedTransition.duringGridCards.map((item, idx) => (
-                  <div
-                    key={idx}
-                    className="rounded-xl border border-[#CBD5E1] bg-[#FFFFFF] p-3 space-y-1"
-                  >
-                    <label className="block text-[11px] font-extrabold text-[#0F172A]">
-                      {item.label} <span className="text-[#E11D48]">*</span>
-                    </label>
-                    <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-2.5 py-1.5 text-[11px] text-[#64748B]">
-                      {item.icon === 'pdf'
-                        ? 'إرفاق ملف موثق (PDF)...'
-                        : item.icon === 'date'
-                        ? '2025-05-15'
-                        : 'حقل إلزامي محمي بالبلوبرينت'}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="rounded-xl border border-[#A7F3D0] bg-[#ECFDF5]/70 p-3 space-y-1.5">
-                <p className="text-[11px] font-extrabold text-[#065F46]">
-                  الأتمتة التلقائية فور تأكيد البائع ({selectedTransition.afterCountBadge}):
-                </p>
-                {selectedTransition.afterDetailRows.map((a, idx) => (
-                  <p key={idx} className="text-[11px] text-[#047857] flex items-center gap-1.5">
-                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                    <span>{a.label}</span>
-                  </p>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#F1F5F9]">
-              <button
-                type="button"
-                onClick={() => setSellerPreviewOpen(false)}
-                className="rounded-xl border border-[#CBD5E1] px-4 py-2 text-[12px] font-bold text-[#475569]"
-              >
-                إغلاق المعاينة
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setSellerPreviewOpen(false);
-                  setViewMode('visual');
-                }}
-                className="rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] px-4 py-2 text-[12px] font-extrabold text-[#FFFFFF]"
-              >
-                تعديل حقول هذه النافذة
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add Custom Stage Modal */}
-      {addingStageModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F172A]/50 backdrop-blur-[2px] p-4"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="w-full max-w-md rounded-2xl border border-[#E2E8F0] bg-[#FFFFFF] p-5 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-[#F1F5F9] pb-3">
-              <h3 className="text-[15px] font-extrabold text-[#0F172A]">
-                إضافة مرحلة جديدة في مستودع المراحل
-              </h3>
-              <button
-                type="button"
-                onClick={() => setAddingStageModal(false)}
-                className="rounded-lg p-1 text-[#64748B] hover:bg-[#F1F5F9]"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateCustomStage} className="space-y-3.5">
-              <div>
-                <label className="block text-[12px] font-bold text-[#0F172A] mb-1">
-                  اسم المرحلة / الحالة *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="مثال: المراجعة الأمنية والامتثال"
-                  value={newStageTitle}
-                  onChange={(e) => setNewStageTitle(e.target.value)}
-                  className="w-full rounded-xl border border-[#CBD5E1] bg-[#F8FAFC] px-3 py-2 text-[12px] text-[#0F172A] focus:border-[#2563EB] focus:bg-[#FFFFFF] focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[12px] font-bold text-[#0F172A] mb-1">
-                  اتفاقية مستوى الخدمة (SLA)
-                </label>
-                <input
-                  type="text"
-                  value={newStageSla}
-                  onChange={(e) => setNewStageSla(e.target.value)}
-                  className="w-full rounded-xl border border-[#CBD5E1] bg-[#F8FAFC] px-3 py-2 text-[12px] text-[#0F172A] focus:border-[#2563EB] focus:bg-[#FFFFFF] focus:outline-none"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#F1F5F9]">
-                <button
-                  type="button"
-                  onClick={() => setAddingStageModal(false)}
-                  className="rounded-xl px-3.5 py-2 text-[12px] font-bold text-[#475569]"
-                >
-                  إلغاء
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-xl bg-[#2563EB] px-4 py-2 text-[12px] font-bold text-[#FFFFFF]"
-                >
-                  إضافة وحفظ في Firestore
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Add Custom Transition Modal */}
-      {addingTransitionModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F172A]/50 backdrop-blur-[2px] p-4"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="w-full max-w-md rounded-2xl border border-[#E2E8F0] bg-[#FFFFFF] p-5 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-[#F1F5F9] pb-3">
-              <h3 className="text-[15px] font-extrabold text-[#0F172A]">
-                إضافة انتقال جديد في المسار
-              </h3>
-              <button
-                type="button"
-                onClick={() => setAddingTransitionModal(false)}
-                className="rounded-lg p-1 text-[#64748B] hover:bg-[#F1F5F9]"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateCustomTransition} className="space-y-3.5">
-              <div>
-                <label className="block text-[12px] font-bold text-[#0F172A] mb-1">
-                  عنوان زر الانتقال *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="مثال: اعتماد التسعير الاستثنائي"
-                  value={newTrTitle}
-                  onChange={(e) => setNewTrTitle(e.target.value)}
-                  className="w-full rounded-xl border border-[#CBD5E1] bg-[#F8FAFC] px-3 py-2 text-[12px] text-[#0F172A] focus:border-[#2563EB] focus:bg-[#FFFFFF] focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[12px] font-bold text-[#0F172A] mb-1">
-                  المرحلة المستهدفة
-                </label>
-                <input
-                  type="text"
-                  value={newTrToStage}
-                  onChange={(e) => setNewTrToStage(e.target.value)}
-                  className="w-full rounded-xl border border-[#CBD5E1] bg-[#F8FAFC] px-3 py-2 text-[12px] text-[#0F172A] focus:border-[#2563EB] focus:bg-[#FFFFFF] focus:outline-none"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#F1F5F9]">
-                <button
-                  type="button"
-                  onClick={() => setAddingTransitionModal(false)}
-                  className="rounded-xl px-3.5 py-2 text-[12px] font-bold text-[#475569]"
-                >
-                  إلغاء
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-xl bg-[#2563EB] px-4 py-2 text-[12px] font-bold text-[#FFFFFF]"
-                >
-                  إضافة الانتقال
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Simulation Modal ("محاكاة واختبار مسار البلوبرينت (Blueprint Test Run)") */}
-      {simulationOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F172A]/60 backdrop-blur-[2px] p-4 overflow-y-auto"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="blueprint-test-run-title"
-        >
-          <div className="w-full max-w-[920px] rounded-2xl border border-[#E2E8F0] bg-[#FFFFFF] shadow-2xl overflow-hidden my-auto">
-            {/* 1. MODAL HEADER & ROLE SIMULATION SWITCHER */}
-            <div className="border-b border-[#E2E8F0] bg-[#FFFFFF] px-6 py-4 flex flex-wrap items-start justify-between gap-4">
-              {/* Right Side: Flask Icon + Title + Sandbox Pill + Transition Subtitle */}
-              <div className="flex items-start gap-3.5">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#DBEAFE] bg-[#EFF6FF] text-[#2563EB]">
-                  <svg
-                    className="h-5 w-5"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M10 2v7.31" />
-                    <path d="M14 9.3V1.99" />
-                    <path d="M8.5 2h7" />
-                    <path d="M14 9.3a6.5 6.5 0 1 1-4 0" />
-                    <path d="M5.52 16h12.96" />
-                  </svg>
-                </div>
-
-                <div className="space-y-1">
-                  <div className="flex flex-wrap items-center gap-2.5">
-                    <h3
-                      id="blueprint-test-run-title"
-                      className="text-[16px] sm:text-[17px] font-extrabold text-[#0F172A]"
-                    >
-                      محاكاة واختبار مسار البلوبرينت (Blueprint Test Run)
-                    </h3>
-
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#6EE7B7]/85 px-2.5 py-0.5 text-[10px] font-extrabold text-[#065F46]">
-                      <span className="h-1.5 w-1.5 rounded-full bg-[#059669]" />
-                      <span>بيئة اختبار فورية (Sandbox Mode)</span>
-                    </span>
-                  </div>
-
-                  <p className="text-[11px] text-[#64748B]">
-                    اختبار انتقال:{' '}
-                    <span className="font-extrabold text-[#2563EB]">
-                      [{selectedTransition.shortTitle} ({selectedTransition.englishName})]
-                    </span>{' '}
-                    من مرحلة{' '}
-                    <span className="font-bold text-[#334155]">
-                      [4. التفاوض ومراجعة العقود]
-                    </span>
-                  </p>
-                </div>
-              </div>
-
-              {/* Left Side: Reset Simulation + Close X */}
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={handleResetSimulation}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] hover:bg-[#F1F5F9] px-3 py-1.5 text-[11px] font-bold text-[#334155] transition-colors"
-                >
-                  <RefreshCw className="h-3.5 w-3.5 text-[#64748B]" />
-                  <span>إعادة ضبط المحاكاة</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setSimulationOpen(false)}
-                  aria-label="إغلاق نافذة المحاكاة"
-                  className="rounded-lg p-1.5 text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#0F172A] transition-colors"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Sub-header Strip: Role Simulation Switcher + Sample Deal Pill */}
-            <div className="border-b border-[#E2E8F0] bg-[#F8FAFC] px-6 py-3 space-y-2">
-              {/* Row A: Role Switcher Pills */}
-              <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                <span className="font-bold text-[#64748B]">محاكاة الصلاحية:</span>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSimRoleMode('authorized');
-                    setSimDryRunResult('idle');
-                  }}
-                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-[11px] font-extrabold transition-all ${
-                    simRoleMode === 'authorized'
-                      ? 'bg-[#2563EB] text-[#FFFFFF] shadow-xs'
-                      : 'border border-[#E2E8F0] bg-[#FFFFFF] text-[#475569] hover:bg-[#F1F5F9]'
-                  }`}
-                >
-                  {simRoleMode === 'authorized' && (
-                    <Check className="h-3 w-3 stroke-[2.5]" />
-                  )}
-                  <span>مدير المبيعات الإقليمي (مصرح له ✓)</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSimRoleMode('unauthorized');
-                    setSimDryRunResult('idle');
-                  }}
-                  className={`inline-flex items-center gap-2 rounded-lg px-3 py-1 text-[11px] font-extrabold transition-all ${
-                    simRoleMode === 'unauthorized'
-                      ? 'border border-[#FCA5A5] bg-[#FEF2F2] text-[#B91C1C] shadow-xs'
-                      : 'border border-[#E2E8F0] bg-[#FFFFFF] text-[#475569] hover:bg-[#F1F5F9]'
-                  }`}
-                >
-                  {simRoleMode === 'unauthorized' && (
-                    <X className="h-3 w-3 stroke-[2.5] text-[#DC2626]" />
-                  )}
-                  <span>مندوب مبيعات مبتدئ (غير مصرح ✕)</span>
-                  {simRoleMode === 'unauthorized' && (
-                    <span className="rounded bg-[#B91C1C] px-1.5 py-0.5 text-[9.5px] font-extrabold text-[#FFFFFF]">
-                      نشط في المحاكاة
-                    </span>
-                  )}
-                </button>
-              </div>
-
-              {/* Row B: Sample Deal Selector Pill */}
-              <div>
-                <div className="inline-flex flex-wrap items-center gap-2 rounded-lg border border-[#E2E8F0] bg-[#FFFFFF] px-3 py-1 text-[11px] shadow-2xs">
-                  <span className="text-[#64748B] font-semibold">صفقة الاختبار:</span>
-                  <span className="font-extrabold text-[#0F172A]">
-                    {currentSimDeal.title}
-                  </span>
-                  <span className="rounded bg-[#DBEAFE] px-2 py-0.5 font-mono text-[11px] font-extrabold text-[#1E40AF] tabular-nums">
-                    {currentSimDeal.amountLabel}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* 1B. ROSE SECURITY ALERT BANNER (Shown immediately when Junior Rep is selected) */}
-            {simRoleMode === 'unauthorized' && (
-              <div className="mx-6 mt-4 rounded-xl border border-[#FCA5A5] bg-[#FFF1F2] p-3.5 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#B91C1C] text-[#FFFFFF] shadow-2xs">
-                    <AlertTriangle className="h-5 w-5" />
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h4 className="text-[13px] font-extrabold text-[#991B1B]">
-                        إجراء مقيد أمنياً (Access Denied / Restricted Transition)
-                      </h4>
-                      <span className="rounded bg-[#991B1B] px-2 py-0.5 text-[10px] font-extrabold text-[#FFFFFF]">
-                        مخالفة صلاحيات
-                      </span>
-                    </div>
-
-                    <p className="text-[11px] text-[#7F1D1D] leading-relaxed">
-                      لا يملك الدور الوظيفي الحالي{' '}
-                      <strong className="font-extrabold text-[#DC2626]">
-                        «مندوب مبيعات مبتدئ»
-                      </strong>{' '}
-                      الصلاحيات المعتمدة في البلوبرينت لإتمام الانتقال إلى مرحلة{' '}
-                      <strong className="font-extrabold text-[#0F172A]">
-                        [إغلاق فوز (Close Won)]
-                      </strong>
-                      . الأدوار المصرح لها فقط:{' '}
-                      <strong className="font-extrabold text-[#1D4ED8] underline decoration-[#93C5FD] underline-offset-2">
-                        [مدير المبيعات الإقليمي، مسؤول حساب كبار العملاء Senior KAM]
-                      </strong>
-                    </p>
-                  </div>
-                </div>
-
-                <div
-                  className="text-[10.5px] font-mono font-extrabold text-[#DC2626] shrink-0 self-end sm:self-start"
-                  dir="ltr"
-                >
-                  رمز الخطأ: SEC_ERR_ROLE_UNAUTHORIZED
-                </div>
-              </div>
-            )}
-
-            {/* 2. 2-COLUMN SIMULATION BODY */}
-            <div className="p-6 grid grid-cols-1 lg:grid-cols-12 gap-5 bg-[#FFFFFF]">
-              {/* RIGHT COLUMN (7 cols in 12-col grid): Simulated "نموذج الإدخال الإلزامي المعتمد في البلوبرينت" */}
-              <div className="lg:col-span-7 space-y-4">
-                {/* Stage Transition Visual Strip */}
-                <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-4 py-2.5 flex items-center justify-between gap-2">
-                  {/* Right: From Stage 4 */}
-                  <div className="flex items-center gap-2.5">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#F59E0B] text-[12px] font-extrabold text-[#FFFFFF]">
-                      4
-                    </span>
-                    <div>
-                      <p className="text-[12px] font-extrabold text-[#0F172A] leading-tight">
-                        التفاوض ومراجعة العقود
-                      </p>
-                      <p className="text-[10px] font-bold text-[#D97706]">
-                        الحالة الحالية للصفقة
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Center: Verification Window Indicator */}
-                  {simRoleMode === 'unauthorized' ? (
-                    <div className="flex items-center gap-1.5 text-[11px] font-extrabold text-[#DC2626]">
-                      <Lock className="h-3.5 w-3.5 shrink-0" />
-                      <span className="underline decoration-[#FCA5A5] underline-offset-4">
-                        نافذة التحقق (مقيدة)
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-1 text-[11px] font-extrabold text-[#2563EB]">
-                      <span>«</span>
-                      <span className="underline decoration-[#93C5FD] underline-offset-4">
-                        نافذة التحقق
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Left: Target Stage 5 */}
-                  <div className="flex items-center gap-2.5">
-                    <span
-                      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[12px] font-extrabold text-[#FFFFFF] ${
-                        simRoleMode === 'unauthorized'
-                          ? 'bg-[#94A3B8]'
-                          : 'bg-[#059669]'
-                      }`}
-                    >
-                      5
-                    </span>
-                    <div>
-                      <p
-                        className={`text-[12px] font-extrabold leading-tight ${
-                          simRoleMode === 'unauthorized'
-                            ? 'text-[#64748B]'
-                            : 'text-[#0F172A]'
-                        }`}
-                      >
-                        إغلاق فوز (Close Won)
-                      </p>
-                      <p className="text-[10px] text-[#64748B]">
-                        {simRoleMode === 'unauthorized'
-                          ? 'محظور الوصول'
-                          : 'الوجهة المستهدفة'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Form Title + Verified Fields Count / Blocked Badge */}
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5">
-                    <h4 className="text-[13px] font-extrabold text-[#0F172A]">
-                      نموذج الإدخال الإلزامي المعتمد في البلوبرينت:
-                    </h4>
-                    {simRoleMode === 'unauthorized' && (
-                      <Lock className="h-3.5 w-3.5 text-[#64748B]" />
-                    )}
-                  </div>
-
-                  {simRoleMode === 'unauthorized' ? (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-[#FCA5A5] bg-[#FFF1F2] px-2.5 py-0.5 text-[10px] font-extrabold text-[#B91C1C]">
-                      <span>⊘ محجوب عن دور مندوب المبيعات</span>
-                    </span>
-                  ) : (
-                    <span
-                      className={`rounded-md px-2.5 py-0.5 text-[10px] font-extrabold ${
-                        completedSimFieldsCount === 6
-                          ? 'bg-[#D1FAE5] text-[#065F46]'
-                          : 'bg-[#FEF3C7] text-[#B45309]'
-                      }`}
-                    >
-                      {completedSimFieldsCount} حقول تم التحقق منها
-                    </span>
-                  )}
-                </div>
-
-                {/* Form Fields Wrapper (with Locked Overlay when simRoleMode === 'unauthorized') */}
-                <div className="relative">
-                  <div
-                    className={`space-y-4 transition-all ${
-                      simRoleMode === 'unauthorized'
-                        ? 'blur-[3px] opacity-35 pointer-events-none select-none'
-                        : ''
-                    }`}
-                  >
-                    {/* Field 1: Signed Contract PDF Upload Box */}
-                    <div className="rounded-xl border border-dashed border-[#CBD5E1] bg-[#F8FAFC] p-3.5 space-y-2.5">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5 text-[12px] font-extrabold text-[#0F172A]">
-                          <CheckCircle2
-                            className={`h-4 w-4 ${
-                              simPdfVerified ? 'text-[#059669]' : 'text-[#94A3B8]'
-                            }`}
-                          />
-                          <span>العقد النهائي الموقع (PDF)</span>
-                        </div>
-                        <span className="rounded bg-[#FFE4E6] px-2 py-0.5 text-[10px] font-extrabold text-[#E11D48]">
-                          مرفق إلزامي
-                        </span>
-                      </div>
-
-                      <div className="rounded-lg border border-[#E2E8F0] bg-[#FFFFFF] px-3 py-2 flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <FileText className="h-4 w-4 text-[#DC2626] shrink-0" />
-                          <span
-                            className="font-mono text-[11px] font-bold text-[#0F172A] truncate"
-                            dir="ltr"
-                          >
-                            {currentSimDeal.pdfName}
-                          </span>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => setSimPdfVerified((prev) => !prev)}
-                          className={`inline-flex items-center gap-1 text-[11px] font-extrabold shrink-0 ${
-                            simPdfVerified ? 'text-[#059669]' : 'text-[#DC2626]'
-                          }`}
-                        >
-                          {simPdfVerified ? (
-                            <>
-                              <Check className="h-3.5 w-3.5 stroke-[2.5]" />
-                              <span>تم التحقق</span>
-                            </>
-                          ) : (
-                            <span>غير مرفق (اضغط للإرفاق)</span>
+                          <span>{item.title}</span>
+                          {item.required && (
+                            <span className="mr-auto rounded bg-[#FFF1F2] px-1.5 py-0.5 text-[10px] font-bold text-[#E11D48]">
+                              إلزامي
+                            </span>
                           )}
-                        </button>
-                      </div>
+                        </label>
+                      ))}
                     </div>
+                  </div>
+                )}
 
-                    {/* Row of 2 Fields: PO Number (Right) + Payment Terms (Left) */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {/* PO Number */}
-                      <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC]/60 p-3 space-y-1.5">
-                        <label className="block text-[11px] font-bold text-[#334155]">
-                          رقم أمر الشراء (PO Number)
-                        </label>
-                        <input
-                          type="text"
-                          value={simPoNumber}
-                          onChange={(e) => setSimPoNumber(e.target.value)}
-                          dir="ltr"
-                          className="w-full rounded-lg border border-[#E2E8F0] bg-[#FFFFFF] px-3 py-1.5 font-mono text-[12px] font-extrabold text-[#0F172A] text-center focus:border-[#2563EB] focus:outline-none"
-                        />
-                      </div>
-
-                      {/* Payment Terms */}
-                      <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC]/60 p-3 space-y-1.5">
-                        <label className="block text-[11px] font-bold text-[#334155]">
-                          طريقة الدفع وجدول الدفعات
-                        </label>
-                        <div className="relative">
-                          <select
-                            value={simPaymentTerms}
-                            onChange={(e) => setSimPaymentTerms(e.target.value)}
-                            className="w-full appearance-none rounded-lg border border-[#E2E8F0] bg-[#FFFFFF] px-3 py-1.5 pl-7 text-[11px] font-bold text-[#0F172A] focus:border-[#2563EB] focus:outline-none"
-                          >
-                            <option value="دفعة مقدمة 50% / نقدي بشيك مصدق">
-                              دفعة مقدمة 50% / نقدي بشيك مصدق
-                            </option>
-                            <option value="دفعات ربع سنوية (خطاب اعتماد بنكي)">
-                              دفعات ربع سنوية (خطاب اعتماد بنكي)
-                            </option>
-                            <option value="سداد كامل عند التسليم (آجل 30 يوم)">
-                              سداد كامل عند التسليم (آجل 30 يوم)
-                            </option>
-                          </select>
-                          <ChevronDown className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#64748B]" />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Row of 2 Fields: Service Start Date (Right) + Digital Signature Verification (Left) */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {/* Service Start Date */}
-                      <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC]/60 p-3 space-y-1.5">
-                        <label className="block text-[11px] font-bold text-[#334155]">
-                          تاريخ بدء سريان الخدمة
-                        </label>
-                        <input
-                          type="text"
-                          value={simServiceDate}
-                          onChange={(e) => setSimServiceDate(e.target.value)}
-                          dir="ltr"
-                          className="w-full rounded-lg border border-[#E2E8F0] bg-[#FFFFFF] px-3 py-1.5 font-mono text-[12px] font-bold text-[#0F172A] text-center focus:border-[#2563EB] focus:outline-none"
-                        />
-                      </div>
-
-                      {/* Verified Digital Signature */}
-                      <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC]/60 p-3 space-y-1.5">
-                        <label className="block text-[11px] font-bold text-[#334155]">
-                          التوقيع الرقمي المعتمد
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => setSimDigitalSignVerified((prev) => !prev)}
-                          className={`w-full rounded-lg border px-3 py-1.5 flex items-center justify-center gap-1.5 text-[11px] font-extrabold transition-colors ${
-                            simDigitalSignVerified
-                              ? 'border-[#A7F3D0] bg-[#D1FAE5]/70 text-[#065F46]'
-                              : 'border-[#FECDD3] bg-[#FFF1F2] text-[#E11D48]'
-                          }`}
-                        >
-                          <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                          <span>
-                            {simDigitalSignVerified
-                              ? 'موثق بنجاح (DocuSign / نفاذ)'
-                              : 'بانتظار التوقيع الرقمي'}
-                          </span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Final Discount Negotiation Summary (Notes) */}
-                    <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC]/60 p-3 space-y-1.5">
-                      <label className="block text-[11px] font-bold text-[#334155]">
-                        ملخص تفاوض الخصم النهائي (ملاحظات)
+                {/* Notes / Attachments / Digital Signature */}
+                <div className="space-y-3">
+                  {activeSimTransition.requireNotes && (
+                    <div>
+                      <label className="mb-1 block text-xs font-bold text-[#0F172A]">
+                        ملاحظات المندوب الإلزامية <span className="text-[#E11D48]">*</span>
                       </label>
                       <textarea
                         rows={2}
                         value={simNotes}
                         onChange={(e) => setSimNotes(e.target.value)}
-                        className="w-full rounded-lg border border-[#E2E8F0] bg-[#FFFFFF] p-2.5 text-[11.5px] font-medium text-[#0F172A] leading-relaxed focus:border-[#2563EB] focus:outline-none"
+                        placeholder="اكتب ملخص الإجراء والملاحظات..."
+                        className="w-full rounded-lg border border-[#CBD5E1] bg-white p-2.5 text-xs"
                       />
                     </div>
-                  </div>
-
-                  {/* 2B. LOCKED FORM OVERLAY (Centered Lock Card when Junior Rep is selected) */}
-                  {simRoleMode === 'unauthorized' && (
-                    <div className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl border border-[#FECDD3] bg-[#FFFFFF]/55 backdrop-blur-[2px] p-5">
-                      <div className="max-w-md text-center space-y-2.5">
-                        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#FFE4E6] text-[#DC2626] shadow-2xs">
-                          <Lock className="h-5 w-5" />
-                        </div>
-
-                        <h5 className="text-[15px] font-extrabold text-[#991B1B]">
-                          النموذج مغلق وغير قابل للتعديل
-                        </h5>
-
-                        <p className="text-[11.5px] text-[#475569] leading-relaxed">
-                          يتطلب صلاحيات مدير المبيعات الإقليمي أو مسؤول كبار العملاء لتعديل أو اعتماد حقول هذا الانتقال.
-                        </p>
-
-                        <div className="pt-1">
-                          <span
-                            className="inline-flex items-center gap-1.5 rounded-full border border-[#CBD5E1] bg-[#FFFFFF] px-3.5 py-1 font-mono text-[10.5px] font-extrabold text-[#334155] shadow-2xs"
-                            dir="ltr"
-                          >
-                            <Lock className="h-3 w-3 text-[#D97706]" />
-                            <span>READ-ONLY MODE (POLICY ENFORCED)</span>
-                          </span>
-                        </div>
-                      </div>
-                    </div>
                   )}
-                </div>
-              </div>
 
-              {/* LEFT COLUMN (5 cols in 12-col grid): "لوحة فحص قواعد الأتمتة (Diagnostics)" */}
-              <div className="lg:col-span-5 rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC]/75 p-4 flex flex-col justify-between space-y-4">
-                <div className="space-y-4">
-                  {/* Diagnostics Header */}
-                  <div className="flex items-center justify-between gap-2 border-b border-[#E2E8F0] pb-3">
-                    <div className="flex items-center gap-2">
-                      {simRoleMode === 'unauthorized' ? (
-                        <AlertTriangle className="h-4 w-4 text-[#DC2626] shrink-0" />
-                      ) : (
-                        <CheckCircle2 className="h-4 w-4 text-[#2563EB] shrink-0" />
-                      )}
-                      <h4 className="text-[13px] font-extrabold text-[#0F172A]">
-                        لوحة فحص قواعد الأتمتة (Diagnostics)
-                      </h4>
-                    </div>
+                  <div className="flex flex-wrap gap-3">
+                    {activeSimTransition.requireAttachment && (
+                      <label className="flex items-center gap-2 rounded-lg border border-[#CBD5E1] bg-white px-3 py-2 text-xs font-semibold text-[#334155] cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={simAttachmentAdded}
+                          onChange={(e) => setSimAttachmentAdded(e.target.checked)}
+                          className="h-4 w-4 text-[#2563EB]"
+                        />
+                        <Paperclip className="h-3.5 w-3.5 text-[#2563EB]" />
+                        <span>إرفاق المستند المطلوب (PDF)</span>
+                      </label>
+                    )}
 
-                    {simRoleMode === 'unauthorized' ? (
-                      <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#FECDD3] bg-[#FFF1F2] px-2.5 py-1 text-[10px] font-extrabold text-[#B91C1C] leading-tight">
-                        <span className="h-1.5 w-1.5 rounded-full bg-[#DC2626]" />
-                        <span>فشل التحقق (1 انتهاك)</span>
-                      </span>
-                    ) : (
-                      <span
-                        className={`rounded-lg border px-2.5 py-1 text-[10px] font-extrabold text-center leading-tight ${
-                          isSimReadyToPass
-                            ? 'border-[#A7F3D0] bg-[#FFFFFF] text-[#059669]'
-                            : 'border-[#FECDD3] bg-[#FFF1F2] text-[#DC2626]'
-                        }`}
-                      >
-                        <span className="block font-mono">100%</span>
-                        <span>نجاح</span>
-                      </span>
+                    {activeSimTransition.requireDigitalSignature && (
+                      <label className="flex items-center gap-2 rounded-lg border border-[#CBD5E1] bg-white px-3 py-2 text-xs font-semibold text-[#334155] cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={simSignatureSigned}
+                          onChange={(e) => setSimSignatureSigned(e.target.checked)}
+                          className="h-4 w-4 text-[#2563EB]"
+                        />
+                        <ShieldCheck className="h-3.5 w-3.5 text-[#10B981]" />
+                        <span>اعتماد التوقيع الإلكتروني الرسمي</span>
+                      </label>
                     )}
                   </div>
-
-                  {/* 3 Live Diagnostic Check Rows */}
-                  <div className="space-y-2 text-[11.5px]">
-                    {/* Check 1: Role Permission Check */}
-                    <div
-                      className={`flex items-center justify-between rounded-xl border bg-[#FFFFFF] px-3 py-2 ${
-                        simRoleMode === 'unauthorized'
-                          ? 'border-[#FCA5A5] border-r-4 border-r-[#DC2626]'
-                          : 'border-[#E2E8F0]'
-                      }`}
-                    >
-                      <span className="font-semibold text-[#334155]">
-                        فحص صلاحيات الدور الوظيفي:
-                      </span>
-                      {simRoleMode === 'authorized' ? (
-                        <span className="inline-flex items-center gap-1 font-extrabold text-[#059669]">
-                          <Check className="h-3.5 w-3.5 stroke-[2.5]" />
-                          <span>مطابق ومصرح ✓</span>
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 font-extrabold text-[#DC2626]">
-                          <span>⊗ غير مصرح (Junior Rep) ✕</span>
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Check 2: Mandatory Fields Check */}
-                    <div className="flex items-center justify-between rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] px-3 py-2">
-                      <span className="font-semibold text-[#334155]">
-                        فحص الحقول الإلزامية:
-                      </span>
-                      {simRoleMode === 'unauthorized' ? (
-                        <span className="inline-flex items-center gap-1 font-extrabold text-[#B45309]">
-                          <AlertTriangle className="h-3.5 w-3.5 text-[#D97706]" />
-                          <span>6 من 6 (محجوبة الإرسال)</span>
-                        </span>
-                      ) : (
-                        <span
-                          className={`inline-flex items-center gap-1 font-extrabold ${
-                            completedSimFieldsCount === 6
-                              ? 'text-[#059669]'
-                              : 'text-[#D97706]'
-                          }`}
-                        >
-                          <Check className="h-3.5 w-3.5 stroke-[2.5]" />
-                          <span>{completedSimFieldsCount} من 6 مكتملة ✓</span>
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Check 3: Path Integrity / Deadlocks Check */}
-                    <div className="flex items-center justify-between rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] px-3 py-2">
-                      <span className="font-semibold text-[#334155]">
-                        سلامة المسار (Deadlocks Check):
-                      </span>
-                      <span className="inline-flex items-center gap-1 font-extrabold text-[#059669]">
-                        <Check className="h-3.5 w-3.5 stroke-[2.5]" />
-                        <span>لا توجد حلقات مفرغة ✓</span>
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Post-Actions Trigger Preview */}
-                  <div className="space-y-2 pt-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <h5 className="text-[11.5px] font-extrabold text-[#0F172A]">
-                        معاينة تشغيل الأتمتة اللاحقة (Post-Actions):
-                      </h5>
-                      {simRoleMode === 'unauthorized' && (
-                        <span className="rounded bg-[#FFE4E6] px-2 py-0.5 text-[9.5px] font-extrabold text-[#B91C1C]">
-                          معلقة - موقوفة
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="space-y-1.5 text-[11px]">
-                      {[
-                        'إشعار مباركة في واتساب وقناة مبيعات سلاك',
-                        'تحديث حالة الحساب في موديول الشركات إلى «استراتيجي نشط»',
-                        'إنشاء مشروع جديد ومهمة تشغيل تلقائية لفريق التنفيذ',
-                        'تصدير الفاتورة الضريبية إلى نظام ERP (متوافق مع زاتكا)',
-                      ].map((actionText, idx) => (
-                        <div
-                          key={idx}
-                          className="flex items-center justify-between gap-2 rounded-lg border border-[#E2E8F0] bg-[#FFFFFF] px-3 py-2"
-                        >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span
-                              className={`h-2 w-2 rounded-full shrink-0 ${
-                                simRoleMode === 'unauthorized'
-                                  ? 'bg-[#94A3B8]'
-                                  : 'bg-[#059669]'
-                              }`}
-                            />
-                            <span
-                              className={`font-semibold truncate ${
-                                simRoleMode === 'unauthorized'
-                                  ? 'text-[#64748B]'
-                                  : 'text-[#334155]'
-                              }`}
-                            >
-                              {actionText}
-                            </span>
-                          </div>
-
-                          {simRoleMode === 'unauthorized' && (
-                            <span className="text-[10px] font-extrabold text-[#DC2626] shrink-0">
-                              لن ينفذ
-                            </span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
                 </div>
 
-                {/* Readiness Status Banner */}
-                {isSimReadyToPass ? (
-                  <div className="rounded-xl border border-[#A7F3D0] bg-[#ECFDF5] p-3.5 flex items-start gap-2.5">
-                    <CheckCircle2 className="h-4 w-4 text-[#059669] shrink-0 mt-0.5" />
-                    <div className="space-y-0.5">
-                      <p className="text-[12px] font-extrabold text-[#065F46]">
-                        المسار سليم وجاهز للنشر 100%
-                      </p>
-                      <p className="text-[10.5px] text-[#047857] leading-relaxed">
-                        كافة القواعد الشرطية والشروط الصارمة تعمل بدون أي تعارض في البلوبرينت.
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-[#FCA5A5] bg-[#FFF1F2] p-3.5 flex items-start gap-2.5">
-                    <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#DC2626] text-[10px] font-bold text-[#FFFFFF]">
-                      ✕
-                    </span>
-                    <div className="space-y-0.5">
-                      <p className="text-[12px] font-extrabold text-[#991B1B]">
-                        {simRoleMode === 'unauthorized'
-                          ? 'الانتقال محجوب بحكم سياسة الحوكمة والصلاحيات'
-                          : 'الانتقال متوقف: توجد حقول إلزامية غير مكتملة'}
-                      </p>
-                      <p className="text-[10.5px] text-[#7F1D1D] leading-relaxed">
-                        {simRoleMode === 'unauthorized'
-                          ? 'تم قفل مسار الانتقال تلقائياً لأن قاعدة الدور الوظيفي غير مستوفاة في مصفوفة الصلاحيات (RACI).'
-                          : 'يجب استيفاء جميع الحقول الـ 6 الإلزامية قبل السماح بالانتقال.'}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Dry Run Execution Feedback Strip (when clicked) */}
-            {simDryRunResult !== 'idle' && (
-              <div
-                className={`mx-6 mb-3 rounded-xl border px-4 py-2.5 flex items-center justify-between text-[12px] font-bold ${
-                  simDryRunResult === 'passed'
-                    ? 'border-[#A7F3D0] bg-[#ECFDF5] text-[#065F46]'
-                    : 'border-[#FECDD3] bg-[#FFF1F2] text-[#BE123C]'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 shrink-0" />
-                  <span>
-                    {simDryRunResult === 'passed'
-                      ? `تم تنفيذ الانتقال التجريبي (Dry Run) بنجاح على «${currentSimDeal.title}» دون المساس بقاعدة بيانات الإنتاج.`
-                      : 'تم منع الانتقال التجريبي بنجاح وفق قواعد الحماية الصارمة في البلوبرينت.'}
-                  </span>
+                <div className="flex items-center justify-end gap-2 border-t border-[#E2E8F0] pt-3">
+                  <button
+                    type="button"
+                    onClick={() => setSimActiveTransitionId(null)}
+                    className="h-8 rounded-lg border border-[#CBD5E1] bg-white px-3 text-xs font-semibold text-[#475569]"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    type="submit"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#10B981] px-4 text-xs font-bold text-white hover:bg-[#059669] cursor-pointer"
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                    <span>تأكيد الانتقال وتشغيل الأتمتة</span>
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setSimDryRunResult('idle')}
-                  className="text-current opacity-75 hover:opacity-100"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
+              </form>
             )}
 
-            {/* 3. MODAL FOOTER ACTIONS */}
-            <div className="border-t border-[#E2E8F0] bg-[#F8FAFC] px-6 py-3.5 flex flex-wrap items-center justify-between gap-3">
-              {/* Right Side Status Indicator */}
-              {simRoleMode === 'unauthorized' ? (
-                <div className="flex items-center gap-2 text-[11.5px] font-extrabold text-[#B91C1C]">
-                  <span className="h-2.5 w-2.5 rounded-full bg-[#DC2626]" />
-                  <Lock className="h-3.5 w-3.5 text-[#DC2626]" />
-                  <span>
-                    الحالة: محجوب أمنياً — غير قابل للتنفيذ (Blocked by Policy)
-                  </span>
+            {/* Execution Log */}
+            {simHistory.length > 0 && (
+              <div className="rounded-xl border border-[#E2E8F0] bg-white p-4 space-y-2.5">
+                <p className="text-xs font-bold text-[#0F172A]">
+                  سجل انتقالات المحاكاة والإجراءات المنفذة (After Actions Log):
+                </p>
+                <div className="space-y-2">
+                  {simHistory.map((h, i) => (
+                    <div
+                      key={i}
+                      className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-2.5 text-xs"
+                    >
+                      <div className="flex items-center justify-between font-bold text-[#0F172A]">
+                        <span>
+                          {h.fromTitle} ← {h.toTitle} (عبر: {h.transitionName})
+                        </span>
+                        <span className="text-[11px] text-[#64748B] tabular-nums">{h.time}</span>
+                      </div>
+                      {h.actionsRun.length > 0 && (
+                        <div className="mt-1.5 flex flex-wrap gap-1.5">
+                          {h.actionsRun.map((act, idx) => (
+                            <span
+                              key={idx}
+                              className="inline-flex items-center gap-1 rounded bg-[#ECFDF5] px-2 py-0.5 text-[10px] font-semibold text-[#059669] border border-[#A7F3D0]"
+                            >
+                              <CheckCircle2 className="h-3 w-3" />
+                              {act}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              ) : (
-                <div className="flex items-center gap-2 text-[11.5px] font-bold text-[#334155]">
-                  <span
-                    className={`h-2.5 w-2.5 rounded-full ${
-                      isSimReadyToPass ? 'bg-[#059669]' : 'bg-[#DC2626]'
-                    }`}
-                  />
-                  <span>
-                    {isSimReadyToPass
-                      ? 'الحالة: جاهز للتنفيذ الوهمي (Ready for Dry Run)'
-                      : 'الحالة: محظور بواسطة قواعد التحقق (Blocked by Guardrails)'}
-                  </span>
-                </div>
-              )}
-
-              {/* Left Side Action Buttons */}
-              <div className="flex flex-wrap items-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setSimulationOpen(false)}
-                  className="rounded-xl border border-[#CBD5E1] bg-[#FFFFFF] hover:bg-[#F1F5F9] px-4 py-2 text-[12px] font-bold text-[#334155] transition-colors"
-                >
-                  إلغاء وإغلاق
-                </button>
-
-                {simRoleMode === 'unauthorized' ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setToastMsg(
-                          'تم إرسال طلب إذن استثنائي وتصعيد المعاملة إلى مدير المبيعات الإقليمي (Request Override Sent)'
-                        )
-                      }
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-[#93C5FD] bg-[#EFF6FF] hover:bg-[#DBEAFE] px-4 py-2 text-[12px] font-extrabold text-[#1D4ED8] transition-colors"
-                    >
-                      <Link2 className="h-3.5 w-3.5" />
-                      <span>طلب إذن استثنائي / تصعيد للمدير (Request Override)</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled
-                      className="inline-flex items-center gap-2 rounded-xl border border-[#CBD5E1] bg-[#E2E8F0]/80 px-4 py-2 text-[12px] font-bold text-[#64748B] cursor-not-allowed"
-                    >
-                      <Lock className="h-3.5 w-3.5 text-[#64748B]" />
-                      <span>تنفيذ الانتقال التجريبي</span>
-                      <span className="rounded bg-[#FFE4E6] px-2 py-0.5 text-[10px] font-extrabold text-[#DC2626]">
-                        محجوب (Disabled)
-                      </span>
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={handleCycleSimDeal}
-                      className="rounded-xl border border-[#BFDBFE] bg-[#EFF6FF] hover:bg-[#DBEAFE] px-4 py-2 text-[12px] font-extrabold text-[#1D4ED8] transition-colors"
-                    >
-                      اختبار مع صفقة أخرى
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleExecuteDryRun}
-                      className="inline-flex items-center gap-2 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] px-5 py-2 text-[12px] font-extrabold text-[#FFFFFF] shadow-sm transition-colors"
-                    >
-                      <Play className="h-3.5 w-3.5 fill-current" />
-                      <span>تنفيذ الانتقال التجريبي (Execute Dry Run)</span>
-                    </button>
-                  </>
-                )}
               </div>
-            </div>
+            )}
           </div>
         </div>
-      )}
+      </div>
+    );
+  }
 
-      {/* Version History Modal ("سجل الإصدارات") */}
-      {versionHistoryOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F172A]/50 backdrop-blur-[2px] p-4"
-          role="dialog"
-          aria-modal="true"
+  // ============================================================================
+  // RENDER: VIEW 2 — ZOHO VISUAL FLOWCHART EDITOR & SYNCHRONIZED INSPECTOR
+  // ============================================================================
+
+  if (!activeBlueprint) {
+    return (
+      <div dir="rtl" className="p-8 text-center">
+        <p className="text-sm font-semibold text-[#475569]">لم يتم تحديد أي مخطط بلوبرينت.</p>
+        <button
+          type="button"
+          onClick={() => setViewStep('list')}
+          className="mt-3 rounded-lg bg-[#2563EB] px-4 py-2 text-xs font-bold text-white"
         >
-          <div className="w-full max-w-md rounded-2xl border border-[#E2E8F0] bg-[#FFFFFF] p-5 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-[#F1F5F9] pb-3">
-              <h3 className="text-[15px] font-extrabold text-[#0F172A]">
-                سجل إصدارات البلوبرينت (BP-CORP-9402)
-              </h3>
+          العودة لقائمة المخططات
+        </button>
+      </div>
+    );
+  }
+
+  const canvasStages = activeBlueprint.stages.filter((s) => s.onCanvas);
+  const unplacedStages = activeBlueprint.stages.filter((s) => !s.onCanvas);
+
+  return (
+    <div dir="rtl" className="flex h-[calc(100vh-3.5rem)] flex-col overflow-hidden bg-[#F8FAFC]">
+      {/* ====================================================================
+          CLEAN TOP EDITOR TOOLBAR
+         ==================================================================== */}
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[#E2E8F0] bg-white px-4 py-2.5 shadow-2xs z-20">
+        {/* Right side: Back to list + Blueprint identity */}
+        <div className="flex items-center gap-3 min-w-0">
+          <button
+            type="button"
+            onClick={() => {
+              setConnectingFromStageId(null);
+              setViewStep('list');
+            }}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#CBD5E1] bg-[#F8FAFC] px-3 text-xs font-bold text-[#334155] hover:bg-[#F1F5F9] transition cursor-pointer shrink-0"
+          >
+            <ArrowRight className="h-3.5 w-3.5" />
+            <span>رجوع للقائمة</span>
+          </button>
+
+          <div className="h-5 w-px bg-[#E2E8F0] hidden sm:block" />
+
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={activeBlueprint.name}
+                onChange={(e) =>
+                  updateActiveBlueprint((bp) => ({ ...bp, name: e.target.value }))
+                }
+                aria-label="اسم البلوبرينت"
+                className="truncate rounded border border-transparent bg-transparent px-1.5 py-0.5 text-sm font-bold text-[#0F172A] hover:border-[#CBD5E1] focus:border-[#2563EB] focus:bg-white focus:outline-none max-w-[260px] sm:max-w-[340px]"
+              />
+              <span className="hidden md:inline-flex items-center rounded-md bg-[#EFF6FF] px-2 py-0.5 text-[11px] font-bold text-[#2563EB] border border-[#BFDBFE] shrink-0">
+                {activeBlueprint.module} • {activeBlueprint.linkedField}
+              </span>
+            </div>
+            <p className="text-[11px] text-[#64748B] truncate max-w-[420px]">
+              المعايير: {activeBlueprint.criteria}
+            </p>
+          </div>
+        </div>
+
+        {/* Left side: Active switch, Auto-Arrange, Simulator, Save & Publish */}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Active Toggle */}
+          <button
+            type="button"
+            onClick={() => void handleToggleBlueprintActive(activeBlueprint)}
+            className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-xs font-bold transition cursor-pointer ${
+              activeBlueprint.active
+                ? 'border-[#A7F3D0] bg-[#ECFDF5] text-[#059669]'
+                : 'border-[#CBD5E1] bg-[#F8FAFC] text-[#64748B]'
+            }`}
+          >
+            <span
+              className={`h-2 w-2 rounded-full ${
+                activeBlueprint.active ? 'bg-[#10B981]' : 'bg-[#94A3B8]'
+              }`}
+            />
+            <span>{activeBlueprint.active ? 'مخطط نشط' : 'مخطط معطل'}</span>
+          </button>
+
+          {/* Auto-Arrange */}
+          <button
+            type="button"
+            onClick={handleAutoArrangeCanvas}
+            title="ترتيب وتنسيق العقد تلقائياً على اللوحة"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#CBD5E1] bg-white px-3 text-xs font-bold text-[#334155] hover:bg-[#F8FAFC] transition cursor-pointer"
+          >
+            <LayoutGrid className="h-3.5 w-3.5 text-[#2563EB]" />
+            <span className="hidden sm:inline">تنسيق تلقائي</span>
+          </button>
+
+          {/* Simulate & Test */}
+          <button
+            type="button"
+            onClick={() => openSimulator(activeBlueprint)}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#BFDBFE] bg-[#EFF6FF] px-3 text-xs font-bold text-[#1D4ED8] hover:bg-[#DBEAFE] transition cursor-pointer"
+          >
+            <Play className="h-3.5 w-3.5" />
+            <span>محاكاة واختبار</span>
+          </button>
+
+          {/* Save & Publish */}
+          <button
+            type="button"
+            disabled={isSavingCloud}
+            onClick={() => void handleSaveAndPublishBlueprint()}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#2563EB] px-4 text-xs font-bold text-white shadow-xs hover:bg-[#1D4ED8] disabled:opacity-60 transition cursor-pointer"
+          >
+            <Save className="h-3.5 w-3.5" />
+            <span>{isSavingCloud ? 'جاري النشر...' : 'حفظ ونشر'}</span>
+          </button>
+        </div>
+      </header>
+
+      {/* ====================================================================
+          3-PANE ZOHO BLUEPRINT WORKSPACE:
+          1. RIGHT PANE: Available States (المراحل المتاحة)
+          2. CENTER PANE: Interactive Dot-Grid Flowchart Canvas
+          3. LEFT PANE: Synchronized Inspector (Before / During / After)
+         ==================================================================== */}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        {/* ==================================================================
+            1. RIGHT SIDEBAR: AVAILABLE STATES (المراحل المتاحة)
+           ================================================================== */}
+        <aside className="flex w-68 shrink-0 flex-col border-l border-[#E2E8F0] bg-white z-10">
+          <div className="flex items-center justify-between border-b border-[#E2E8F0] px-4 py-3">
+            <div>
+              <h2 className="text-xs font-bold text-[#0F172A]">المراحل المتاحة (States)</h2>
+              <p className="text-[10px] text-[#64748B]">
+                اسحب أي مرحلة للوحة أو انقر لإضافتها
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setNewStageModalOpen(true)}
+              className="inline-flex h-7 items-center gap-1 rounded-md bg-[#EFF6FF] px-2 text-[11px] font-bold text-[#2563EB] hover:bg-[#DBEAFE] transition cursor-pointer"
+            >
+              <Plus className="h-3 w-3" />
+              <span>مرحلة جديدة</span>
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-3 space-y-4">
+            {/* Unplaced States (Ready to drag/add to canvas) */}
+            <div>
+              <div className="mb-2 flex items-center justify-between text-[11px] font-bold text-[#475569]">
+                <span>غير موضوعة على اللوحة ({unplacedStages.length})</span>
+              </div>
+              {unplacedStages.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-[#CBD5E1] bg-[#F8FAFC] p-3 text-center text-[11px] text-[#64748B]">
+                  جميع المراحل موضوعة حالياً على لوحة المخطط. يمكنك إضافة مرحلة جديدة أعلاه.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {unplacedStages.map((stage) => (
+                    <div
+                      key={stage.id}
+                      draggable
+                      onDragStart={(e) => handleSidebarStageDragStart(e, stage.id)}
+                      className="group flex items-center justify-between rounded-lg border border-[#CBD5E1] bg-[#F8FAFC] p-2.5 hover:border-[#2563EB] hover:bg-white transition cursor-grab active:cursor-grabbing"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <GripVertical className="h-4 w-4 text-[#94A3B8] shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-[#0F172A] truncate">{stage.title}</p>
+                          <p className="text-[10px] text-[#64748B] truncate">
+                            {stage.englishSubtitle}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handlePlaceStageOnCanvas(stage.id)}
+                        title="إضافة إلى لوحة المخطط"
+                        className="inline-flex h-6 items-center gap-1 rounded bg-[#2563EB] px-2 text-[10px] font-bold text-white hover:bg-[#1D4ED8] shrink-0 cursor-pointer"
+                      >
+                        <Plus className="h-3 w-3" />
+                        <span>إضافة</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Placed States on Canvas */}
+            <div>
+              <div className="mb-2 flex items-center justify-between text-[11px] font-bold text-[#475569]">
+                <span>المراحل النشطة على اللوحة ({canvasStages.length})</span>
+              </div>
+              <div className="space-y-1.5">
+                {canvasStages.map((stage) => {
+                  const isSelected =
+                    selectedElement?.type === 'stage' && selectedElement.id === stage.id;
+                  return (
+                    <div
+                      key={stage.id}
+                      onClick={() => setSelectedElement({ type: 'stage', id: stage.id })}
+                      className={`flex items-center justify-between rounded-lg border px-2.5 py-2 text-xs transition cursor-pointer ${
+                        isSelected
+                          ? 'border-[#2563EB] bg-[#EFF6FF] text-[#1D4ED8]'
+                          : 'border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span
+                          className={`h-2.5 w-2.5 rounded-full shrink-0 ${
+                            stage.category === 'won'
+                              ? 'bg-[#10B981]'
+                              : stage.category === 'lost'
+                                ? 'bg-[#E11D48]'
+                                : stage.category === 'active'
+                                  ? 'bg-[#2563EB]'
+                                  : 'bg-[#64748B]'
+                          }`}
+                        />
+                        <span className="font-semibold truncate">{stage.title}</span>
+                      </div>
+                      <span className="text-[10px] text-[#64748B] shrink-0">{stage.slaBadge}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Quick Tip Box */}
+            <div className="rounded-xl border border-[#BFDBFE] bg-[#EFF6FF]/70 p-3 text-[11px] text-[#1E40AF] space-y-1">
+              <p className="font-bold flex items-center gap-1.5">
+                <Info className="h-3.5 w-3.5 shrink-0 text-[#2563EB]" />
+                <span>طريقة الاستخدام (Zoho Style):</span>
+              </p>
+              <ul className="list-disc pr-4 space-y-0.5 text-[10px] text-[#334155]">
+                <li>اسحب أي مرحلة لتحريكها بحرية على الشبكة.</li>
+                <li>انقر زر <b>(+)</b> على أي مرحلة ثم انقر مرحلة أخرى لإنشاء انتقال (Transition).</li>
+                <li>انقر أي مرحلة أو انتقال لتعديل إعداداته فوراً في اللوحة اليسرى.</li>
+              </ul>
+            </div>
+          </div>
+        </aside>
+
+        {/* ==================================================================
+            2. CENTER INTERACTIVE DOT-GRID FLOWCHART CANVAS
+           ================================================================== */}
+        <main
+          ref={canvasContainerRef}
+          onMouseDown={handleCanvasMouseDown}
+          onMouseMove={handleCanvasMouseMove}
+          onMouseUp={handleCanvasMouseUp}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={handleCanvasDrop}
+          data-canvas-bg="true"
+          className={`relative flex-1 overflow-hidden select-none ${
+            isPanning ? 'cursor-grabbing' : 'cursor-grab'
+          }`}
+          style={{
+            backgroundColor: '#F1F5F9',
+            backgroundImage: 'radial-gradient(#CBD5E1 1.35px, transparent 1.35px)',
+            backgroundSize: '22px 22px',
+          }}
+        >
+          {/* Floating Top-Right Canvas Helper Banner when Connecting */}
+          {connectingFromStageId && (
+            <div className="absolute top-3 right-1/2 translate-x-1/2 z-30 flex items-center gap-2 rounded-full border border-[#2563EB] bg-[#0F172A] px-4 py-1.5 text-xs font-bold text-white shadow-lg">
+              <Link2 className="h-3.5 w-3.5 text-[#60A5FA]" />
+              <span>
+                وضع الربط السريع: انقر الآن على المرحلة المستهدفة لإنشاء انتقال جديد...
+              </span>
               <button
                 type="button"
-                onClick={() => setVersionHistoryOpen(false)}
-                className="rounded-lg p-1 text-[#64748B] hover:bg-[#F1F5F9]"
+                onClick={() => {
+                  setConnectingFromStageId(null);
+                  setMouseCanvasPos(null);
+                }}
+                className="mr-2 rounded-full bg-white/15 px-2 py-0.5 text-[10px] hover:bg-white/25"
+              >
+                إلغاء (Esc)
+              </button>
+            </div>
+          )}
+
+          {/* Floating Zoom & Canvas Controls */}
+          <div className="absolute bottom-4 right-4 z-20 flex items-center gap-1 rounded-xl border border-[#CBD5E1] bg-white/95 p-1.5 shadow-md backdrop-blur-xs">
+            <button
+              type="button"
+              onClick={() => setZoom((z) => Math.max(0.55, Number((z - 0.1).toFixed(2))))}
+              title="تصغير (Zoom Out)"
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-[#475569] hover:bg-[#F1F5F9] cursor-pointer"
+            >
+              <Minus className="h-3.5 w-3.5" />
+            </button>
+            <span className="min-w-[46px] text-center text-[11px] font-bold text-[#0F172A] tabular-nums">
+              {Math.round(zoom * 100)}%
+            </span>
+            <button
+              type="button"
+              onClick={() => setZoom((z) => Math.min(1.45, Number((z + 0.1).toFixed(2))))}
+              title="تكبير (Zoom In)"
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-[#475569] hover:bg-[#F1F5F9] cursor-pointer"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+            <div className="h-4 w-px bg-[#E2E8F0] mx-0.5" />
+            <button
+              type="button"
+              onClick={() => {
+                setZoom(0.95);
+                setPan({ x: 20, y: 20 });
+              }}
+              title="إعادة ضبط العرض"
+              className="flex h-7 items-center gap-1 rounded-lg px-2 text-[11px] font-semibold text-[#475569] hover:bg-[#F1F5F9] cursor-pointer"
+            >
+              <Maximize2 className="h-3 w-3" />
+              <span>ضبط المركز</span>
+            </button>
+          </div>
+
+          {/* Transformed Canvas Plane (LTR coordinate space for crisp SVG + Node alignment) */}
+          <div
+            dir="ltr"
+            data-canvas-bg="true"
+            style={{
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+              transformOrigin: '0 0',
+              width: '2400px',
+              height: '1400px',
+            }}
+            className="relative"
+          >
+            {/* SVG Layer for Curved Arrows */}
+            <svg
+              width="2400"
+              height="1400"
+              className="pointer-events-none absolute inset-0 overflow-visible"
+            >
+              <defs>
+                <marker
+                  id="arrow-normal"
+                  viewBox="0 0 10 10"
+                  refX="8"
+                  refY="5"
+                  markerWidth="6.5"
+                  markerHeight="6.5"
+                  orient="auto-start-reverse"
+                >
+                  <path d="M 0 1.5 L 8.5 5 L 0 8.5 z" fill="#64748B" />
+                </marker>
+                <marker
+                  id="arrow-selected"
+                  viewBox="0 0 10 10"
+                  refX="8"
+                  refY="5"
+                  markerWidth="7"
+                  markerHeight="7"
+                  orient="auto-start-reverse"
+                >
+                  <path d="M 0 1.5 L 8.5 5 L 0 8.5 z" fill="#2563EB" />
+                </marker>
+                <marker
+                  id="arrow-won"
+                  viewBox="0 0 10 10"
+                  refX="8"
+                  refY="5"
+                  markerWidth="6.5"
+                  markerHeight="6.5"
+                  orient="auto-start-reverse"
+                >
+                  <path d="M 0 1.5 L 8.5 5 L 0 8.5 z" fill="#10B981" />
+                </marker>
+                <marker
+                  id="arrow-lost"
+                  viewBox="0 0 10 10"
+                  refX="8"
+                  refY="5"
+                  markerWidth="6.5"
+                  markerHeight="6.5"
+                  orient="auto-start-reverse"
+                >
+                  <path d="M 0 1.5 L 8.5 5 L 0 8.5 z" fill="#E11D48" />
+                </marker>
+                <marker
+                  id="arrow-loop"
+                  viewBox="0 0 10 10"
+                  refX="8"
+                  refY="5"
+                  markerWidth="6.5"
+                  markerHeight="6.5"
+                  orient="auto-start-reverse"
+                >
+                  <path d="M 0 1.5 L 8.5 5 L 0 8.5 z" fill="#D97706" />
+                </marker>
+              </defs>
+
+              {canvasTransitionsWithGeometry.map(({ tr, pathD, isBackwardOrLoop }) => {
+                const isSelected =
+                  selectedElement?.type === 'transition' && selectedElement.id === tr.id;
+                const strokeColor = isSelected
+                  ? '#2563EB'
+                  : tr.tone === 'won'
+                    ? '#10B981'
+                    : tr.tone === 'lost'
+                      ? '#E11D48'
+                      : tr.tone === 'loop' || isBackwardOrLoop
+                        ? '#D97706'
+                        : '#94A3B8';
+
+                const markerId = isSelected
+                  ? 'url(#arrow-selected)'
+                  : tr.tone === 'won'
+                    ? 'url(#arrow-won)'
+                    : tr.tone === 'lost'
+                      ? 'url(#arrow-lost)'
+                      : tr.tone === 'loop' || isBackwardOrLoop
+                        ? 'url(#arrow-loop)'
+                        : 'url(#arrow-normal)';
+
+                return (
+                  <g key={tr.id}>
+                    {/* Invisible wide hit-area path so clicking the line selects the transition */}
+                    <path
+                      d={pathD}
+                      fill="none"
+                      stroke="transparent"
+                      strokeWidth={16}
+                      className="pointer-events-auto cursor-pointer"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedElement({ type: 'transition', id: tr.id });
+                      }}
+                    />
+                    <path
+                      d={pathD}
+                      fill="none"
+                      stroke={strokeColor}
+                      strokeWidth={isSelected ? 3 : 2.2}
+                      strokeDasharray={
+                        !tr.enabled ? '5 5' : isBackwardOrLoop ? '6 4' : undefined
+                      }
+                      markerEnd={markerId}
+                    />
+                  </g>
+                );
+              })}
+
+              {/* Interactive live rubber-band line when connecting from a stage */}
+              {connectingFromStageId &&
+                mouseCanvasPos &&
+                (() => {
+                  const fromSt = canvasStages.find((s) => s.id === connectingFromStageId);
+                  if (!fromSt) return null;
+                  const sx = fromSt.x + NODE_WIDTH;
+                  const sy = fromSt.y + NODE_HEIGHT / 2;
+                  return (
+                    <line
+                      x1={sx}
+                      y1={sy}
+                      x2={mouseCanvasPos.x}
+                      y2={mouseCanvasPos.y}
+                      stroke="#2563EB"
+                      strokeWidth={2.5}
+                      strokeDasharray="6 4"
+                      markerEnd="url(#arrow-selected)"
+                    />
+                  );
+                })()}
+            </svg>
+
+            {/* Clickable Transition Badges in the Middle of Each SVG Curve */}
+            {canvasTransitionsWithGeometry.map(({ tr, midX, midY }) => {
+              const isSelected =
+                selectedElement?.type === 'transition' && selectedElement.id === tr.id;
+
+              const toneClasses = isSelected
+                ? 'border-[#2563EB] bg-[#2563EB] text-white ring-4 ring-[#2563EB]/20'
+                : tr.tone === 'won'
+                  ? 'border-[#10B981] bg-[#ECFDF5] text-[#065F46] hover:bg-[#D1FAE5]'
+                  : tr.tone === 'lost'
+                    ? 'border-[#FDA4AF] bg-[#FFF1F2] text-[#9F1239] hover:bg-[#FFE4E6]'
+                    : tr.tone === 'loop'
+                      ? 'border-[#FCD34D] bg-[#FFFBEB] text-[#92400E] hover:bg-[#FEF3C7]'
+                      : 'border-[#CBD5E1] bg-white text-[#1E293B] hover:border-[#2563EB]';
+
+              return (
+                <button
+                  key={`badge_${tr.id}`}
+                  type="button"
+                  dir="rtl"
+                  style={{
+                    left: `${midX}px`,
+                    top: `${midY}px`,
+                    transform: 'translate(-50%, -50%)',
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedElement({ type: 'transition', id: tr.id });
+                  }}
+                  className={`absolute z-20 flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-bold shadow-sm transition cursor-pointer whitespace-nowrap ${toneClasses}`}
+                >
+                  <Zap className="h-3 w-3 shrink-0" />
+                  <span>{tr.name}</span>
+                  {!tr.enabled && (
+                    <span className="rounded bg-black/10 px-1 text-[9px]">معطل</span>
+                  )}
+                </button>
+              );
+            })}
+
+            {/* Stage Nodes on Canvas */}
+            {canvasStages.map((stage) => {
+              const isSelected =
+                selectedElement?.type === 'stage' && selectedElement.id === stage.id;
+              const isConnectSource = connectingFromStageId === stage.id;
+
+              const headerBarClass =
+                stage.category === 'won'
+                  ? 'bg-[#10B981]'
+                  : stage.category === 'lost'
+                    ? 'bg-[#E11D48]'
+                    : stage.category === 'active'
+                      ? 'bg-[#2563EB]'
+                      : 'bg-[#475569]';
+
+              const borderClass = isSelected
+                ? 'border-[#2563EB] ring-4 ring-[#2563EB]/20'
+                : isConnectSource
+                  ? 'border-[#2563EB] ring-4 ring-[#60A5FA]/30'
+                  : connectingFromStageId
+                    ? 'border-[#94A3B8] hover:border-[#2563EB] hover:ring-2 hover:ring-[#2563EB]/30'
+                    : 'border-[#CBD5E1] hover:border-[#64748B]';
+
+              return (
+                <div
+                  key={stage.id}
+                  dir="rtl"
+                  style={{
+                    left: `${stage.x}px`,
+                    top: `${stage.y}px`,
+                    width: `${NODE_WIDTH}px`,
+                    height: `${NODE_HEIGHT}px`,
+                  }}
+                  onMouseDown={(e) => handleStageMouseDown(e, stage)}
+                  className={`group absolute z-10 flex flex-col justify-between rounded-xl border-2 bg-white shadow-md transition-shadow select-none cursor-move ${borderClass}`}
+                >
+                  {/* Top colored accent bar */}
+                  <div className={`h-1.5 w-full rounded-t-[10px] ${headerBarClass}`} />
+
+                  {/* Body */}
+                  <div className="flex flex-1 flex-col justify-between px-3.5 py-2">
+                    <div className="flex items-start justify-between gap-1.5">
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-[#0F172A] truncate">{stage.title}</p>
+                        <p className="text-[9px] font-semibold tracking-wider text-[#64748B] truncate uppercase">
+                          {stage.englishSubtitle}
+                        </p>
+                      </div>
+                      <Move className="h-3.5 w-3.5 text-[#CBD5E1] group-hover:text-[#64748B] shrink-0" />
+                    </div>
+
+                    <div className="flex items-center justify-between border-t border-[#F1F5F9] pt-1.5 text-[10px]">
+                      <span className="inline-flex items-center gap-1 font-medium text-[#475569] truncate max-w-[115px]">
+                        <UserCheck className="h-3 w-3 text-[#2563EB] shrink-0" />
+                        <span className="truncate">{stage.ownersLabel}</span>
+                      </span>
+                      <span className="rounded bg-[#F8FAFC] px-1.5 py-0.5 font-semibold text-[#64748B] border border-[#E2E8F0] shrink-0">
+                        {stage.slaBadge}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Output Connection Port ("+" button on right edge of node) */}
+                  <button
+                    type="button"
+                    title="انقر لربط هذه المرحلة بمرحلة أخرى (إنشاء انتقال)"
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (connectingFromStageId === stage.id) {
+                        setConnectingFromStageId(null);
+                        setMouseCanvasPos(null);
+                      } else {
+                        setConnectingFromStageId(stage.id);
+                        showToast(
+                          `انقر الآن على المرحلة المستهدفة لربطها بمرحلة "${stage.title}".`,
+                          'info',
+                        );
+                      }
+                    }}
+                    className={`absolute -right-3.5 top-1/2 -translate-y-1/2 flex h-7 w-7 items-center justify-center rounded-full border-2 shadow-sm transition cursor-pointer ${
+                      isConnectSource
+                        ? 'border-white bg-[#2563EB] text-white scale-110'
+                        : 'border-[#2563EB] bg-white text-[#2563EB] hover:bg-[#2563EB] hover:text-white'
+                    }`}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </main>
+
+        {/* ==================================================================
+            3. LEFT SYNCHRONIZED INSPECTOR PANEL (BEFORE / DURING / AFTER)
+           ================================================================== */}
+        <aside className="flex w-96 shrink-0 flex-col border-r border-[#E2E8F0] bg-white z-10">
+          {/* CASE A: A TRANSITION IS SELECTED */}
+          {selectedTransition ? (
+            <>
+              {/* Inspector Header */}
+              <div className="border-b border-[#E2E8F0] bg-[#F8FAFC] p-4 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="inline-flex items-center gap-1 rounded-md bg-[#EFF6FF] px-2 py-0.5 text-[10px] font-bold text-[#2563EB] border border-[#BFDBFE]">
+                    <Zap className="h-3 w-3" />
+                    <span>إعدادات الانتقال المحدد (Transition)</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteTransition(selectedTransition.id)}
+                    title="حذف هذا الانتقال"
+                    className="inline-flex items-center gap-1 rounded-md border border-[#FECDD3] bg-[#FFF1F2] px-2 py-1 text-[10px] font-bold text-[#E11D48] hover:bg-[#FFE4E6] cursor-pointer"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    <span>حذف</span>
+                  </button>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-[11px] font-bold text-[#475569]">
+                    اسم زر الانتقال (Transition Name)
+                  </label>
+                  <input
+                    type="text"
+                    value={selectedTransition.name}
+                    onChange={(e) =>
+                      updateSelectedTransition((tr) => ({ ...tr, name: e.target.value }))
+                    }
+                    className="h-8 w-full rounded-lg border border-[#CBD5E1] bg-white px-2.5 text-xs font-bold text-[#0F172A] focus:border-[#2563EB] focus:outline-none"
+                  />
+                </div>
+
+                {/* From -> To Stage Pill */}
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-[#E2E8F0] bg-white px-2.5 py-1.5 text-[11px]">
+                  <span className="font-semibold text-[#334155] truncate">
+                    من:{' '}
+                    {activeBlueprint.stages.find((s) => s.id === selectedTransition.fromStageId)
+                      ?.title ?? '—'}
+                  </span>
+                  <ArrowLeft className="h-3.5 w-3.5 text-[#2563EB] shrink-0" />
+                  <span className="font-bold text-[#2563EB] truncate">
+                    إلى:{' '}
+                    {activeBlueprint.stages.find((s) => s.id === selectedTransition.toStageId)
+                      ?.title ?? '—'}
+                  </span>
+                </div>
+
+                {/* Tone & SLA Row */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="mb-0.5 block text-[10px] font-semibold text-[#64748B]">
+                      نوع المسار
+                    </label>
+                    <select
+                      value={selectedTransition.tone}
+                      onChange={(e) =>
+                        updateSelectedTransition((tr) => ({
+                          ...tr,
+                          tone: e.target.value as BlueprintTransitionTone,
+                        }))
+                      }
+                      className="h-7 w-full rounded border border-[#CBD5E1] bg-white px-2 text-[11px] font-semibold text-[#0F172A]"
+                    >
+                      <option value="normal">مسار قياسي (Normal)</option>
+                      <option value="won">إغلاق ناجح (Won)</option>
+                      <option value="lost">إغلاق خاسر (Lost)</option>
+                      <option value="loop">مسار رجوع / مراجعة (Loop)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-0.5 block text-[10px] font-semibold text-[#64748B]">
+                      مهلة التنفيذ (SLA)
+                    </label>
+                    <input
+                      type="text"
+                      value={selectedTransition.slaDurationLabel}
+                      onChange={(e) =>
+                        updateSelectedTransition((tr) => ({
+                          ...tr,
+                          slaDurationLabel: e.target.value,
+                        }))
+                      }
+                      className="h-7 w-full rounded border border-[#CBD5E1] bg-white px-2 text-[11px] text-[#0F172A]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 3 Zoho Tabs: BEFORE / DURING / AFTER */}
+              <div className="grid grid-cols-3 border-b border-[#E2E8F0] bg-[#F8FAFC] text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setInspectorTab('before')}
+                  className={`py-2.5 text-center border-b-2 transition cursor-pointer ${
+                    inspectorTab === 'before'
+                      ? 'border-[#2563EB] bg-white text-[#2563EB]'
+                      : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
+                  }`}
+                >
+                  1. قبل (Before)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInspectorTab('during')}
+                  className={`py-2.5 text-center border-b-2 transition cursor-pointer ${
+                    inspectorTab === 'during'
+                      ? 'border-[#2563EB] bg-white text-[#2563EB]'
+                      : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
+                  }`}
+                >
+                  2. أثناء (During)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInspectorTab('after')}
+                  className={`py-2.5 text-center border-b-2 transition cursor-pointer ${
+                    inspectorTab === 'after'
+                      ? 'border-[#2563EB] bg-white text-[#2563EB]'
+                      : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
+                  }`}
+                >
+                  3. بعد (After)
+                </button>
+              </div>
+
+              {/* Tab Content Body */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-5">
+                {/* ==========================================================
+                    TAB 1: BEFORE (قبل الانتقال)
+                   ========================================================== */}
+                {inspectorTab === 'before' && (
+                  <>
+                    {/* Authorized Roles */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-xs font-bold text-[#0F172A] flex items-center gap-1.5">
+                          <Lock className="h-3.5 w-3.5 text-[#2563EB]" />
+                          <span>الأدوار المصرح لها برؤية زر الانتقال</span>
+                        </h3>
+                        <span className="text-[10px] font-semibold text-[#64748B]">
+                          ({selectedTransition.roles.length} أدوار)
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-[#64748B]">
+                        حدد المسميات الوظيفية التي يحق لها تنفيذ انتقال "{selectedTransition.name}":
+                      </p>
+                      <div className="space-y-1.5 pt-1">
+                        {AVAILABLE_ROLES.map((role) => {
+                          const checked = selectedTransition.roles.includes(role);
+                          return (
+                            <label
+                              key={role}
+                              className={`flex items-center justify-between rounded-lg border px-3 py-2 text-xs transition cursor-pointer ${
+                                checked
+                                  ? 'border-[#BFDBFE] bg-[#EFF6FF]/60 font-bold text-[#1E40AF]'
+                                  : 'border-[#E2E8F0] bg-white text-[#475569] hover:bg-[#F8FAFC]'
+                              }`}
+                            >
+                              <span>{role}</span>
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(e) => {
+                                  const isChecked = e.target.checked;
+                                  updateSelectedTransition((tr) => ({
+                                    ...tr,
+                                    roles: isChecked
+                                      ? [...tr.roles, role]
+                                      : tr.roles.filter((r) => r !== role),
+                                  }));
+                                }}
+                                className="h-4 w-4 rounded border-[#CBD5E1] text-[#2563EB]"
+                              />
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Pre-Conditions */}
+                    <div className="space-y-2.5 border-t border-[#E2E8F0] pt-4">
+                      <h3 className="text-xs font-bold text-[#0F172A] flex items-center gap-1.5">
+                        <ShieldCheck className="h-3.5 w-3.5 text-[#10B981]" />
+                        <span>شروط التحقق المسبقة (Pre-Conditions)</span>
+                      </h3>
+                      <p className="text-[11px] text-[#64748B]">
+                        شروط يجب توفرها في السجل قبل السماح بظهور أو تفعيل هذا الانتقال:
+                      </p>
+
+                      {selectedTransition.beforeConditions.length === 0 ? (
+                        <div className="rounded-lg border border-dashed border-[#CBD5E1] bg-[#F8FAFC] p-3 text-center text-[11px] text-[#64748B]">
+                          لا توجد شروط مسبقة مقيدة حالياً.
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {selectedTransition.beforeConditions.map((cond) => (
+                            <div
+                              key={cond.id}
+                              className="flex items-center justify-between gap-2 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2 text-xs"
+                            >
+                              <label className="flex items-center gap-2 min-w-0 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={cond.enabled}
+                                  onChange={(e) =>
+                                    updateSelectedTransition((tr) => ({
+                                      ...tr,
+                                      beforeConditions: tr.beforeConditions.map((c) =>
+                                        c.id === cond.id
+                                          ? { ...c, enabled: e.target.checked }
+                                          : c,
+                                      ),
+                                    }))
+                                  }
+                                  className="h-3.5 w-3.5 text-[#2563EB]"
+                                />
+                                <span className="truncate font-semibold text-[#0F172A]">
+                                  {cond.fieldLabel}{' '}
+                                  <span className="text-[#2563EB]">{cond.operatorLabel}</span>{' '}
+                                  "{cond.valueLabel}"
+                                </span>
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  updateSelectedTransition((tr) => ({
+                                    ...tr,
+                                    beforeConditions: tr.beforeConditions.filter(
+                                      (c) => c.id !== cond.id,
+                                    ),
+                                  }))
+                                }
+                                className="text-[#94A3B8] hover:text-[#E11D48]"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Add Condition Mini Form */}
+                      <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-2.5 space-y-2">
+                        <p className="text-[11px] font-bold text-[#334155]">+ إضافة شرط تحقق جديد</p>
+                        <input
+                          type="text"
+                          value={newConditionField}
+                          onChange={(e) => setNewConditionField(e.target.value)}
+                          placeholder="اسم الحقل (مثال: الميزانية التقديرية)"
+                          className="h-8 w-full rounded border border-[#CBD5E1] bg-white px-2.5 text-xs"
+                        />
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <select
+                            value={newConditionOp}
+                            onChange={(e) => setNewConditionOp(e.target.value)}
+                            className="h-8 rounded border border-[#CBD5E1] bg-white px-2 text-xs"
+                          >
+                            <option value="غير فارغ">غير فارغ</option>
+                            <option value="يساوي">يساوي</option>
+                            <option value="أكبر من">أكبر من</option>
+                            <option value="أكبر من أو يساوي">أكبر من أو يساوي</option>
+                          </select>
+                          <input
+                            type="text"
+                            value={newConditionVal}
+                            onChange={(e) => setNewConditionVal(e.target.value)}
+                            placeholder="القيمة المطلوبة"
+                            className="h-8 rounded border border-[#CBD5E1] bg-white px-2 text-xs"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!newConditionField.trim()) return;
+                            updateSelectedTransition((tr) => ({
+                              ...tr,
+                              beforeConditions: [
+                                ...tr.beforeConditions,
+                                {
+                                  id: `cond_${Date.now()}`,
+                                  fieldLabel: newConditionField.trim(),
+                                  operatorLabel: newConditionOp,
+                                  valueLabel: newConditionVal.trim() || 'محدد',
+                                  enabled: true,
+                                },
+                              ],
+                            }));
+                            setNewConditionField('');
+                          }}
+                          className="w-full rounded-lg bg-[#2563EB] py-1.5 text-xs font-bold text-white hover:bg-[#1D4ED8] cursor-pointer"
+                        >
+                          + إدراج الشرط
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* ==========================================================
+                    TAB 2: DURING (أثناء الانتقال)
+                   ========================================================== */}
+                {inspectorTab === 'during' && (
+                  <>
+                    {/* Mandatory Fields */}
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-xs font-bold text-[#0F172A] flex items-center gap-1.5">
+                          <FileText className="h-3.5 w-3.5 text-[#2563EB]" />
+                          <span>الحقول الإلزامية (Mandatory Fields)</span>
+                        </h3>
+                        <span className="rounded bg-[#EFF6FF] px-1.5 py-0.5 text-[10px] font-bold text-[#2563EB]">
+                          {selectedTransition.mandatoryFields.length} حقول
+                        </span>
+                      </div>
+
+                      {selectedTransition.mandatoryFields.length === 0 ? (
+                        <div className="rounded-lg border border-dashed border-[#CBD5E1] bg-[#F8FAFC] p-3 text-center text-[11px] text-[#64748B]">
+                          لا توجد حقول إلزامية مضافة لهذا الانتقال.
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {selectedTransition.mandatoryFields.map((mf) => (
+                            <div
+                              key={mf.id}
+                              className="flex items-center justify-between rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2 text-xs"
+                            >
+                              <div className="min-w-0">
+                                <p className="font-bold text-[#0F172A] truncate">{mf.fieldName}</p>
+                                <p className="text-[10px] text-[#64748B]">النوع: {mf.fieldType}</p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  updateSelectedTransition((tr) => ({
+                                    ...tr,
+                                    mandatoryFields: tr.mandatoryFields.filter(
+                                      (f) => f.id !== mf.id,
+                                    ),
+                                  }))
+                                }
+                                className="text-[#94A3B8] hover:text-[#E11D48]"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex gap-1.5">
+                        <input
+                          type="text"
+                          value={newMandatoryFieldName}
+                          onChange={(e) => setNewMandatoryFieldName(e.target.value)}
+                          placeholder="اسم الحقل الإلزامي..."
+                          className="h-8 flex-1 rounded-lg border border-[#CBD5E1] bg-white px-2.5 text-xs"
+                        />
+                        <select
+                          value={newMandatoryFieldType}
+                          onChange={(e) => setNewMandatoryFieldType(e.target.value)}
+                          className="h-8 rounded-lg border border-[#CBD5E1] bg-white px-2 text-xs"
+                        >
+                          <option value="نص">نص</option>
+                          <option value="عملة (SAR)">عملة</option>
+                          <option value="تاريخ">تاريخ</option>
+                          <option value="مرفق PDF">مرفق</option>
+                          <option value="قائمة">قائمة</option>
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!newMandatoryFieldName.trim()) return;
+                            updateSelectedTransition((tr) => ({
+                              ...tr,
+                              mandatoryFields: [
+                                ...tr.mandatoryFields,
+                                {
+                                  id: `mf_${Date.now()}`,
+                                  fieldName: newMandatoryFieldName.trim(),
+                                  fieldType: newMandatoryFieldType,
+                                  required: true,
+                                },
+                              ],
+                            }));
+                            setNewMandatoryFieldName('');
+                          }}
+                          className="h-8 rounded-lg bg-[#2563EB] px-2.5 text-xs font-bold text-white hover:bg-[#1D4ED8] cursor-pointer"
+                        >
+                          + إضافة
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Notes, Attachment & Signature Toggles */}
+                    <div className="space-y-2 border-t border-[#E2E8F0] pt-4">
+                      <h3 className="text-xs font-bold text-[#0F172A]">
+                        متطلبات التوثيق والمرفقات:
+                      </h3>
+
+                      <label className="flex items-center justify-between rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2 text-xs font-semibold text-[#0F172A] cursor-pointer">
+                        <span className="flex items-center gap-2">
+                          <MessageSquare className="h-3.5 w-3.5 text-[#2563EB]" />
+                          <span>إلزامية كتابة ملاحظة عند الانتقال</span>
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={selectedTransition.requireNotes}
+                          onChange={(e) =>
+                            updateSelectedTransition((tr) => ({
+                              ...tr,
+                              requireNotes: e.target.checked,
+                            }))
+                          }
+                          className="h-4 w-4 rounded text-[#2563EB]"
+                        />
+                      </label>
+
+                      <label className="flex items-center justify-between rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2 text-xs font-semibold text-[#0F172A] cursor-pointer">
+                        <span className="flex items-center gap-2">
+                          <Paperclip className="h-3.5 w-3.5 text-[#2563EB]" />
+                          <span>إلزامية إرفاق ملف / مستند رسمي</span>
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={selectedTransition.requireAttachment}
+                          onChange={(e) =>
+                            updateSelectedTransition((tr) => ({
+                              ...tr,
+                              requireAttachment: e.target.checked,
+                            }))
+                          }
+                          className="h-4 w-4 rounded text-[#2563EB]"
+                        />
+                      </label>
+
+                      <label className="flex items-center justify-between rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2 text-xs font-semibold text-[#0F172A] cursor-pointer">
+                        <span className="flex items-center gap-2">
+                          <ShieldCheck className="h-3.5 w-3.5 text-[#10B981]" />
+                          <span>طلب توقيع إلكتروني معتمد</span>
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={selectedTransition.requireDigitalSignature}
+                          onChange={(e) =>
+                            updateSelectedTransition((tr) => ({
+                              ...tr,
+                              requireDigitalSignature: e.target.checked,
+                            }))
+                          }
+                          className="h-4 w-4 rounded text-[#2563EB]"
+                        />
+                      </label>
+                    </div>
+
+                    {/* Checklist */}
+                    <div className="space-y-2.5 border-t border-[#E2E8F0] pt-4">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-xs font-bold text-[#0F172A] flex items-center gap-1.5">
+                          <CheckSquare className="h-3.5 w-3.5 text-[#10B981]" />
+                          <span>قائمة التحقق (Checklist) للمندوب</span>
+                        </h3>
+                        <span className="text-[10px] font-semibold text-[#64748B]">
+                          ({selectedTransition.checklist.length} بنود)
+                        </span>
+                      </div>
+
+                      {selectedTransition.checklist.length === 0 ? (
+                        <div className="rounded-lg border border-dashed border-[#CBD5E1] bg-[#F8FAFC] p-3 text-center text-[11px] text-[#64748B]">
+                          لا توجد بنود تحقق مضافة حالياً.
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {selectedTransition.checklist.map((chk) => (
+                            <div
+                              key={chk.id}
+                              className="flex items-center justify-between gap-2 rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-xs"
+                            >
+                              <span className="font-medium text-[#0F172A]">{chk.title}</span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  updateSelectedTransition((tr) => ({
+                                    ...tr,
+                                    checklist: tr.checklist.filter((c) => c.id !== chk.id),
+                                  }))
+                                }
+                                className="text-[#94A3B8] hover:text-[#E11D48] shrink-0"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex gap-1.5">
+                        <input
+                          type="text"
+                          value={newChecklistText}
+                          onChange={(e) => setNewChecklistText(e.target.value)}
+                          placeholder="أضف بند تحقق يلتزم به المندوب..."
+                          className="h-8 flex-1 rounded-lg border border-[#CBD5E1] bg-white px-2.5 text-xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!newChecklistText.trim()) return;
+                            updateSelectedTransition((tr) => ({
+                              ...tr,
+                              checklist: [
+                                ...tr.checklist,
+                                {
+                                  id: `chk_${Date.now()}`,
+                                  title: newChecklistText.trim(),
+                                  required: true,
+                                },
+                              ],
+                            }));
+                            setNewChecklistText('');
+                          }}
+                          className="h-8 rounded-lg bg-[#2563EB] px-3 text-xs font-bold text-white hover:bg-[#1D4ED8] cursor-pointer"
+                        >
+                          + إضافة
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* ==========================================================
+                    TAB 3: AFTER (بعد الانتقال - الأتمتة)
+                   ========================================================== */}
+                {inspectorTab === 'after' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xs font-bold text-[#0F172A] flex items-center gap-1.5">
+                        <Zap className="h-3.5 w-3.5 text-[#D97706]" />
+                        <span>الأتمتة التلقائية بعد الانتقال (Post Actions)</span>
+                      </h3>
+                      <span className="rounded bg-[#FFFBEB] px-1.5 py-0.5 text-[10px] font-bold text-[#B45309]">
+                        {selectedTransition.afterActions.length} إجراءات
+                      </span>
+                    </div>
+
+                    {selectedTransition.afterActions.length === 0 ? (
+                      <div className="rounded-lg border border-dashed border-[#CBD5E1] bg-[#F8FAFC] p-4 text-center text-[11px] text-[#64748B]">
+                        لا توجد إجراءات تلقائية مضافة بعد هذا الانتقال.
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {selectedTransition.afterActions.map((act) => (
+                          <div
+                            key={act.id}
+                            className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-2.5 space-y-1"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <label className="flex items-center gap-2 text-xs font-bold text-[#0F172A] cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={act.enabled}
+                                  onChange={(e) =>
+                                    updateSelectedTransition((tr) => ({
+                                      ...tr,
+                                      afterActions: tr.afterActions.map((a) =>
+                                        a.id === act.id ? { ...a, enabled: e.target.checked } : a,
+                                      ),
+                                    }))
+                                  }
+                                  className="h-3.5 w-3.5 text-[#2563EB]"
+                                />
+                                <span>{act.label}</span>
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  updateSelectedTransition((tr) => ({
+                                    ...tr,
+                                    afterActions: tr.afterActions.filter((a) => a.id !== act.id),
+                                  }))
+                                }
+                                className="text-[#94A3B8] hover:text-[#E11D48]"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                            <div className="flex items-center justify-between text-[10px] text-[#64748B] pr-5">
+                              <span>{act.targetDetail}</span>
+                              <span className="rounded bg-white px-1.5 py-0.5 font-semibold text-[#2563EB] border border-[#E2E8F0]">
+                                {act.systemTag}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* + Add Automation Action Form */}
+                    <div className="rounded-xl border border-[#CBD5E1] bg-[#F8FAFC] p-3 space-y-2.5">
+                      <p className="text-xs font-bold text-[#0F172A]">+ إضافة إجراء تلقائي جديد</p>
+
+                      <div>
+                        <label className="mb-1 block text-[10px] font-semibold text-[#64748B]">
+                          نوع الإجراء
+                        </label>
+                        <select
+                          value={newActionType}
+                          onChange={(e) =>
+                            setNewActionType(e.target.value as BlueprintAfterActionType)
+                          }
+                          className="h-8 w-full rounded-lg border border-[#CBD5E1] bg-white px-2.5 text-xs font-semibold text-[#0F172A]"
+                        >
+                          <option value="field_update">تحديث حقل تلقائياً (Field Update)</option>
+                          <option value="whatsapp_email">إرسال قالب واتساب / بريد إلكتروني</option>
+                          <option value="create_task">إنشاء مهمة متابعة للفريق</option>
+                          <option value="webhook">إطلاق Webhook لنظام خارجي / ERP</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="mb-1 block text-[10px] font-semibold text-[#64748B]">
+                          وصف الإجراء
+                        </label>
+                        <input
+                          type="text"
+                          value={newActionLabel}
+                          onChange={(e) => setNewActionLabel(e.target.value)}
+                          placeholder={
+                            newActionType === 'field_update'
+                              ? 'مثال: تحديث احتمالية الإغلاق إلى 80%'
+                              : newActionType === 'whatsapp_email'
+                                ? 'مثال: إرسال رسالة واتساب للعميل بتأكيد المرحلة'
+                                : newActionType === 'create_task'
+                                  ? 'مثال: إنشاء مهمة إعداد العقد خلال 24 ساعة'
+                                  : 'مثال: إرسال بيانات الصفقة إلى نظام الفوترة ERP'
+                          }
+                          className="h-8 w-full rounded-lg border border-[#CBD5E1] bg-white px-2.5 text-xs"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-1 block text-[10px] font-semibold text-[#64748B]">
+                          الهدف / القالب / الرابط
+                        </label>
+                        <input
+                          type="text"
+                          value={newActionTarget}
+                          onChange={(e) => setNewActionTarget(e.target.value)}
+                          placeholder="مثال: قالب واتساب الرسمي أو POST /api/webhook"
+                          className="h-8 w-full rounded-lg border border-[#CBD5E1] bg-white px-2.5 text-xs"
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!newActionLabel.trim()) return;
+                          const tagMap: Record<BlueprintAfterActionType, string> = {
+                            field_update: 'Field Update',
+                            whatsapp_email: 'WhatsApp / Email',
+                            create_task: 'Auto Task',
+                            webhook: 'Webhook API',
+                          };
+                          updateSelectedTransition((tr) => ({
+                            ...tr,
+                            afterActions: [
+                              ...tr.afterActions,
+                              {
+                                id: `act_${Date.now()}`,
+                                type: newActionType,
+                                label: newActionLabel.trim(),
+                                targetDetail: newActionTarget.trim() || activeBlueprint.module,
+                                systemTag: tagMap[newActionType],
+                                enabled: true,
+                              },
+                            ],
+                          }));
+                          setNewActionLabel('');
+                          setNewActionTarget('');
+                          showToast('تمت إضافة الإجراء التلقائي إلى مرحلة ما بعد الانتقال.', 'success');
+                        }}
+                        className="w-full rounded-lg bg-[#2563EB] py-2 text-xs font-bold text-white hover:bg-[#1D4ED8] cursor-pointer"
+                      >
+                        + إضافة إجراء
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : selectedStage ? (
+            /* ================================================================
+               CASE B: A STAGE NODE IS SELECTED
+               ================================================================ */
+            <div className="flex flex-1 flex-col overflow-y-auto p-4 space-y-5">
+              <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
+                <span className="inline-flex items-center gap-1.5 rounded-md bg-[#EFF6FF] px-2.5 py-1 text-[11px] font-bold text-[#2563EB] border border-[#BFDBFE]">
+                  <Layers className="h-3.5 w-3.5" />
+                  <span>إعدادات المرحلة المحددة (State)</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveStageFromCanvas(selectedStage.id)}
+                  className="inline-flex items-center gap-1 rounded-md border border-[#FECDD3] bg-[#FFF1F2] px-2.5 py-1 text-[10px] font-bold text-[#E11D48] hover:bg-[#FFE4E6] cursor-pointer"
+                >
+                  <Trash2 className="h-3 w-3" />
+                  <span>إزالة من اللوحة</span>
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-[#0F172A]">
+                    اسم المرحلة (State Title)
+                  </label>
+                  <input
+                    type="text"
+                    value={selectedStage.title}
+                    onChange={(e) =>
+                      updateSelectedStage((st) => ({ ...st, title: e.target.value }))
+                    }
+                    className="h-9 w-full rounded-lg border border-[#CBD5E1] bg-white px-3 text-xs font-bold text-[#0F172A]"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-[#0F172A]">
+                    الرمز الإنجليزي (Subtitle)
+                  </label>
+                  <input
+                    type="text"
+                    value={selectedStage.englishSubtitle}
+                    onChange={(e) =>
+                      updateSelectedStage((st) => ({
+                        ...st,
+                        englishSubtitle: e.target.value.toUpperCase(),
+                      }))
+                    }
+                    className="h-9 w-full rounded-lg border border-[#CBD5E1] bg-white px-3 text-xs text-[#0F172A]"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="mb-1 block text-xs font-bold text-[#0F172A]">
+                      تصنيف المرحلة
+                    </label>
+                    <select
+                      value={selectedStage.category}
+                      onChange={(e) =>
+                        updateSelectedStage((st) => ({
+                          ...st,
+                          category: e.target.value as BlueprintStageCategory,
+                        }))
+                      }
+                      className="h-9 w-full rounded-lg border border-[#CBD5E1] bg-white px-2.5 text-xs font-semibold text-[#0F172A]"
+                    >
+                      <option value="normal">مرحلة قياسية</option>
+                      <option value="active">مرحلة نشطة محورية</option>
+                      <option value="won">مرحلة إغلاق ناجح (Won)</option>
+                      <option value="lost">مرحلة إغلاق خاسر (Lost)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-bold text-[#0F172A]">
+                      مهلة البقاء (SLA)
+                    </label>
+                    <input
+                      type="text"
+                      value={selectedStage.slaBadge}
+                      onChange={(e) =>
+                        updateSelectedStage((st) => ({ ...st, slaBadge: e.target.value }))
+                      }
+                      className="h-9 w-full rounded-lg border border-[#CBD5E1] bg-white px-2.5 text-xs text-[#0F172A]"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-[#0F172A]">
+                    المسؤول الافتراضي عن المرحلة
+                  </label>
+                  <input
+                    type="text"
+                    value={selectedStage.ownersLabel}
+                    onChange={(e) =>
+                      updateSelectedStage((st) => ({ ...st, ownersLabel: e.target.value }))
+                    }
+                    className="h-9 w-full rounded-lg border border-[#CBD5E1] bg-white px-3 text-xs text-[#0F172A]"
+                  />
+                </div>
+              </div>
+
+              {/* Create Outgoing Transition from this Stage */}
+              <div className="rounded-xl border border-[#BFDBFE] bg-[#EFF6FF]/60 p-3.5 space-y-2.5">
+                <p className="text-xs font-bold text-[#1E40AF]">
+                  + إنشاء انتقال جديد يخرج من "{selectedStage.title}":
+                </p>
+                <div className="space-y-1.5">
+                  {canvasStages
+                    .filter((s) => s.id !== selectedStage.id)
+                    .map((targetSt) => (
+                      <button
+                        key={targetSt.id}
+                        type="button"
+                        onClick={() => openQuickTransitionBuilder(selectedStage.id, targetSt.id)}
+                        className="flex w-full items-center justify-between rounded-lg border border-[#CBD5E1] bg-white px-3 py-2 text-xs font-semibold text-[#0F172A] hover:border-[#2563EB] hover:text-[#2563EB] transition cursor-pointer"
+                      >
+                        <span>ربط مع: {targetSt.title}</span>
+                        <Plus className="h-3.5 w-3.5 text-[#2563EB]" />
+                      </button>
+                    ))}
+                </div>
+              </div>
+
+              {/* Outgoing Transitions from this Stage */}
+              <div className="space-y-2 border-t border-[#E2E8F0] pt-4">
+                <p className="text-xs font-bold text-[#0F172A]">
+                  الانتقالات الخارجة من هذه المرحلة:
+                </p>
+                {activeBlueprint.transitions
+                  .filter((t) => t.fromStageId === selectedStage.id)
+                  .map((tr) => (
+                    <button
+                      key={tr.id}
+                      type="button"
+                      onClick={() => setSelectedElement({ type: 'transition', id: tr.id })}
+                      className="flex w-full items-center justify-between rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2 text-xs font-bold text-[#2563EB] hover:bg-[#EFF6FF] cursor-pointer"
+                    >
+                      <span>{tr.name}</span>
+                      <ArrowLeft className="h-3.5 w-3.5" />
+                    </button>
+                  ))}
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-1 flex-col items-center justify-center p-6 text-center text-xs text-[#64748B]">
+              <GitBranch className="h-8 w-8 text-[#94A3B8] mb-2" />
+              <p className="font-bold text-[#0F172A]">لم يتم تحديد عنصر على اللوحة</p>
+              <p className="mt-1">
+                انقر على أي مرحلة (State) أو أي شارة انتقال (Transition) على الأسهم المنحنية لعرض وتعديل إعدادات Before / During / After.
+              </p>
+            </div>
+          )}
+        </aside>
+      </div>
+
+      {/* ====================================================================
+          MODAL: CREATE NEW CUSTOM STAGE
+         ==================================================================== */}
+      {newStageModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+          <div
+            dir="rtl"
+            className="w-full max-w-md rounded-xl border border-[#E2E8F0] bg-white shadow-xl overflow-hidden"
+          >
+            <div className="flex items-center justify-between border-b border-[#E2E8F0] bg-[#F8FAFC] px-5 py-3.5">
+              <h3 className="text-sm font-bold text-[#0F172A]">إضافة مرحلة جديدة (New State)</h3>
+              <button
+                type="button"
+                onClick={() => setNewStageModalOpen(false)}
+                className="text-[#64748B] hover:text-[#0F172A]"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <div className="space-y-2.5 text-[12px]">
-              <div className="rounded-xl border border-[#BFDBFE] bg-[#EFF6FF]/60 p-3 flex items-center justify-between">
+            <form onSubmit={handleCreateCustomStage} className="p-5 space-y-3.5">
+              <div>
+                <label className="mb-1 block text-xs font-bold text-[#0F172A]">
+                  اسم المرحلة بالعربية <span className="text-[#E11D48]">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newStageTitle}
+                  onChange={(e) => setNewStageTitle(e.target.value)}
+                  placeholder="مثال: الفحص الأمني والتقني"
+                  className="h-9 w-full rounded-lg border border-[#CBD5E1] px-3 text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-bold text-[#0F172A]">
+                  الاسم الإنجليزي المختصر
+                </label>
+                <input
+                  type="text"
+                  value={newStageSub}
+                  onChange={(e) => setNewStageSub(e.target.value)}
+                  placeholder="SECURITY REVIEW"
+                  className="h-9 w-full rounded-lg border border-[#CBD5E1] px-3 text-xs"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <p className="font-extrabold text-[#0F172A]">الإصدار v3.2 (الحالي)</p>
-                  <p className="text-[11px] text-[#64748B]">
-                    إضافة التحقق الإلزامي لوثيقة العقد الموقعة وتوقيع نفاذ/DocuSign
-                  </p>
+                  <label className="mb-1 block text-xs font-bold text-[#0F172A]">نوع المرحلة</label>
+                  <select
+                    value={newStageCategory}
+                    onChange={(e) =>
+                      setNewStageCategory(e.target.value as BlueprintStageCategory)
+                    }
+                    className="h-9 w-full rounded-lg border border-[#CBD5E1] bg-white px-2.5 text-xs font-semibold"
+                  >
+                    <option value="normal">مرحلة قياسية</option>
+                    <option value="active">مرحلة محورية</option>
+                    <option value="won">إغلاق ناجح (Won)</option>
+                    <option value="lost">إغلاق خاسر (Lost)</option>
+                  </select>
                 </div>
-                <span className="rounded bg-[#2563EB] px-2 py-0.5 text-[10px] font-bold text-[#FFFFFF]">
-                  نشط
+
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-[#0F172A]">مهلة SLA</label>
+                  <input
+                    type="text"
+                    value={newStageSla}
+                    onChange={(e) => setNewStageSla(e.target.value)}
+                    placeholder="24 ساعة"
+                    className="h-9 w-full rounded-lg border border-[#CBD5E1] px-3 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-bold text-[#0F172A]">
+                  المسؤول عن المرحلة
+                </label>
+                <input
+                  type="text"
+                  value={newStageOwner}
+                  onChange={(e) => setNewStageOwner(e.target.value)}
+                  placeholder="مندوب المبيعات / الفريق التقني"
+                  className="h-9 w-full rounded-lg border border-[#CBD5E1] px-3 text-xs"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 border-t border-[#E2E8F0] pt-3">
+                <button
+                  type="button"
+                  onClick={() => setNewStageModalOpen(false)}
+                  className="h-9 rounded-lg border border-[#CBD5E1] px-4 text-xs font-semibold text-[#475569]"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="h-9 rounded-lg bg-[#2563EB] px-4 text-xs font-bold text-white hover:bg-[#1D4ED8] cursor-pointer"
+                >
+                  إضافة للوحة المخطط
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ====================================================================
+          MODAL: CREATE NEW TRANSITION BETWEEN TWO STAGES
+         ==================================================================== */}
+      {newTransitionModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+          <div
+            dir="rtl"
+            className="w-full max-w-md rounded-xl border border-[#E2E8F0] bg-white shadow-xl overflow-hidden"
+          >
+            <div className="flex items-center justify-between border-b border-[#E2E8F0] bg-[#F8FAFC] px-5 py-3.5">
+              <h3 className="text-sm font-bold text-[#0F172A]">إنشاء انتقال جديد (New Transition)</h3>
+              <button
+                type="button"
+                onClick={() => setNewTransitionModal((p) => ({ ...p, open: false }))}
+                className="text-[#64748B] hover:text-[#0F172A]"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmCreateTransition} className="p-5 space-y-3.5">
+              <div className="flex items-center justify-between rounded-lg border border-[#BFDBFE] bg-[#EFF6FF] px-3 py-2 text-xs font-bold text-[#1E40AF]">
+                <span>
+                  من:{' '}
+                  {activeBlueprint.stages.find((s) => s.id === newTransitionModal.fromStageId)
+                    ?.title ?? ''}
+                </span>
+                <ArrowLeft className="h-4 w-4" />
+                <span>
+                  إلى:{' '}
+                  {activeBlueprint.stages.find((s) => s.id === newTransitionModal.toStageId)
+                    ?.title ?? ''}
                 </span>
               </div>
 
-              <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3 flex items-center justify-between">
-                <div>
-                  <p className="font-bold text-[#0F172A]">الإصدار v3.1</p>
-                  <p className="text-[11px] text-[#64748B]">
-                    ربط أتمتة Meta CAPI وإشعارات فريق المالية بعد الإغلاق
-                  </p>
-                </div>
-                <span className="text-[10px] font-mono text-[#64748B]">قبل أسبوعين</span>
+              <div>
+                <label className="mb-1 block text-xs font-bold text-[#0F172A]">
+                  اسم زر الانتقال <span className="text-[#E11D48]">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newTransitionModal.name}
+                  onChange={(e) =>
+                    setNewTransitionModal((p) => ({ ...p, name: e.target.value }))
+                  }
+                  placeholder="مثال: اعتماد العرض المالي"
+                  className="h-9 w-full rounded-lg border border-[#CBD5E1] px-3 text-xs font-bold"
+                />
               </div>
 
-              <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3 flex items-center justify-between">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <p className="font-bold text-[#0F172A]">الإصدار v3.0</p>
-                  <p className="text-[11px] text-[#64748B]">
-                    تأسيس المراحل الـ 6 الأساسية لمبيعات المؤسسات B2B
-                  </p>
+                  <label className="mb-1 block text-xs font-bold text-[#0F172A]">نوع الانتقال</label>
+                  <select
+                    value={newTransitionModal.tone}
+                    onChange={(e) =>
+                      setNewTransitionModal((p) => ({
+                        ...p,
+                        tone: e.target.value as BlueprintTransitionTone,
+                      }))
+                    }
+                    className="h-9 w-full rounded-lg border border-[#CBD5E1] bg-white px-2.5 text-xs font-semibold"
+                  >
+                    <option value="normal">انتقال قياسي</option>
+                    <option value="won">إغلاق ناجح (Won)</option>
+                    <option value="lost">إغلاق خاسر (Lost)</option>
+                    <option value="loop">مسار رجوع / مراجعة</option>
+                  </select>
                 </div>
-                <span className="text-[10px] font-mono text-[#64748B]">قبل شهر</span>
-              </div>
-            </div>
 
-            <div className="flex justify-end pt-2 border-t border-[#F1F5F9]">
-              <button
-                type="button"
-                onClick={() => setVersionHistoryOpen(false)}
-                className="rounded-xl bg-[#2563EB] px-4 py-2 text-[12px] font-bold text-[#FFFFFF]"
-              >
-                إغلاق
-              </button>
-            </div>
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-[#0F172A]">مهلة SLA</label>
+                  <input
+                    type="text"
+                    value={newTransitionModal.sla}
+                    onChange={(e) =>
+                      setNewTransitionModal((p) => ({ ...p, sla: e.target.value }))
+                    }
+                    className="h-9 w-full rounded-lg border border-[#CBD5E1] px-3 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 border-t border-[#E2E8F0] pt-3">
+                <button
+                  type="button"
+                  onClick={() => setNewTransitionModal((p) => ({ ...p, open: false }))}
+                  className="h-9 rounded-lg border border-[#CBD5E1] px-4 text-xs font-semibold text-[#475569]"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="h-9 rounded-lg bg-[#2563EB] px-4 text-xs font-bold text-white hover:bg-[#1D4ED8] cursor-pointer"
+                >
+                  إنشاء الانتقال وفتح الإعدادات
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
 
-      {/* Transition Rules Editor Modal ("تعديل قواعد الانتقال — إتمام التعاقد والفوز (Close Won)") */}
-      {transitionEditorOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F172A]/60 backdrop-blur-[2px] p-3 sm:p-5 overflow-y-auto"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="transition-rules-editor-title"
-        >
-          <div className="w-full max-w-[1040px] rounded-2xl border border-[#CBD5E1] bg-[#FFFFFF] shadow-2xl overflow-hidden flex flex-col max-h-[92vh] my-auto">
-            {/* 1. MODAL HEADER & STEP PROGRESS BAR */}
-            <div className="border-b border-[#E2E8F0] bg-[#FFFFFF] px-6 pt-4 pb-3 space-y-3 shrink-0">
-              {/* Row 1: Title + Transition ID + Reset & Close */}
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                {/* Right: Shield Icon + Title + Critical Badge + Subtitle */}
-                <div className="flex items-start gap-3.5">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#A7F3D0] bg-[#ECFDF5] text-[#059669]">
-                    <ShieldCheck className="h-5 w-5" />
-                  </div>
+      {/* Simulator Modal */}
+      {simModalOpen && renderSimulatorModal()}
 
-                  <div className="space-y-1">
-                    <div className="flex flex-wrap items-center gap-2.5">
-                      <h2
-                        id="transition-rules-editor-title"
-                        className="text-[17px] sm:text-[19px] font-extrabold text-[#0F172A]"
-                      >
-                        تعديل قواعد الانتقال — {selectedTransition.shortTitle} (
-                        {selectedTransition.englishName})
-                      </h2>
-
-                      <span className="inline-flex items-center gap-1.5 rounded-md border border-[#6EE7B7] bg-[#D1FAE5] px-2.5 py-0.5 text-[10.5px] font-extrabold text-[#065F46]">
-                        <span className="h-1.5 w-1.5 rounded-full bg-[#059669]" />
-                        <span>انتقال حاسم للنظام (Stage 4 → Stage 5)</span>
-                      </span>
-                    </div>
-
-                    <p className="text-[11.5px] text-[#475569]">
-                      معرّف الانتقال:{' '}
-                      <strong className="font-mono font-extrabold text-[#0F172A]">
-                        {selectedTransition.code}-WON
-                      </strong>{' '}
-                      • ينقل مسار الصفقة تلقائياً من{' '}
-                      <strong className="font-bold text-[#0F172A]">
-                        [4. التفاوض ومراجعة العقود]
-                      </strong>{' '}
-                      إلى{' '}
-                      <strong className="font-bold text-[#0F172A]">
-                        [{selectedTransition.toStageBadge}]
-                      </strong>
-                    </p>
-                  </div>
-                </div>
-
-                {/* Left: Reset Rules + Close X */}
-                <div className="flex items-center gap-3 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleResetInspectorDefaults();
-                      setEditorButtonLabel('إتمام التعاقد والفوز (Close Won)');
-                      setEditorButtonStyle('emerald');
-                    }}
-                    className="inline-flex items-center gap-1.5 text-[12px] font-bold text-[#475569] hover:text-[#0F172A] transition-colors"
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" />
-                    <span>إعادة تعيين القواعد</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setTransitionEditorOpen(false)}
-                    aria-label="إغلاق محرر قواعد الانتقال"
-                    className="rounded-lg p-1.5 text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#0F172A] transition-colors"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Row 2: Direct Path Visual Strip */}
-              <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-[11px]">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-bold text-[#64748B]">سير الانتقال المباشر:</span>
-
-                  <span className="inline-flex items-center gap-1.5 rounded-md border border-[#E2E8F0] bg-[#FFFFFF] px-2.5 py-1 font-extrabold text-[#0F172A] shadow-2xs">
-                    <span className="h-2 w-2 rounded-full bg-[#2563EB]" />
-                    <span>4. التفاوض ومراجعة العقود</span>
-                  </span>
-
-                  <span className="text-[#64748B] font-bold">←</span>
-
-                  <span className="inline-flex items-center gap-1.5 rounded-md border border-[#6EE7B7] bg-[#D1FAE5]/80 px-2.5 py-1 font-extrabold text-[#065F46]">
-                    <ShieldCheck className="h-3.5 w-3.5" />
-                    <span>زر: {selectedTransition.shortTitle}</span>
-                  </span>
-
-                  <span className="text-[#64748B] font-bold">←</span>
-
-                  <span className="inline-flex items-center gap-1.5 rounded-md bg-[#047857] px-2.5 py-1 font-extrabold text-[#FFFFFF]">
-                    <span className="h-2 w-2 rounded-full bg-[#FFFFFF]" />
-                    <span>5. إتمام التعاقد والفوز (فوز نهائي)</span>
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-1.5 text-[#475569]">
-                  <span>محرك مطابقة الشروط:</span>
-                  <span className="font-mono font-extrabold text-[#0F172A]" dir="ltr">
-                    Zoho Blueprint Engine v4.2
-                  </span>
-                </div>
-              </div>
-
-              {/* Row 3: Section Jump Tabs */}
-              <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  {/* Tab A: الصلاحيات والمظهر */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditorActiveTab('a');
-                      sectionARef.current?.scrollIntoView({ behavior: 'smooth' });
-                    }}
-                    className={`inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-[11.5px] font-extrabold transition-colors ${
-                      editorActiveTab === 'a'
-                        ? 'border-[#93C5FD] bg-[#EFF6FF] text-[#1D4ED8]'
-                        : 'border-[#E2E8F0] bg-[#FFFFFF] text-[#334155] hover:bg-[#F8FAFC]'
-                    }`}
-                  >
-                    <UserCheck className="h-3.5 w-3.5" />
-                    <span>الصلاحيات والمظهر</span>
-                    <span className="rounded bg-[#DBEAFE] px-1.5 py-0.5 text-[10px] font-extrabold text-[#1E40AF]">
-                      {selectedTransition.roles.length} أدوار
-                    </span>
-                  </button>
-
-                  {/* Tab B: الشروط المسبقة (Before Criteria) */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditorActiveTab('b');
-                      sectionBRef.current?.scrollIntoView({ behavior: 'smooth' });
-                    }}
-                    className={`inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-[11.5px] font-extrabold transition-colors ${
-                      editorActiveTab === 'b'
-                        ? 'border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]'
-                        : 'border-[#E2E8F0] bg-[#FFFFFF] text-[#334155] hover:bg-[#F8FAFC]'
-                    }`}
-                  >
-                    <Sliders className="h-3.5 w-3.5" />
-                    <span>الشروط المسبقة (Before Criteria)</span>
-                    <span className="rounded bg-[#2563EB] px-1.5 py-0.5 text-[10px] font-extrabold text-[#FFFFFF]">
-                      {editorCriteriaRows.length} شروط نشطة
-                    </span>
-                  </button>
-
-                  {/* Tab C: الحقول الإلزامية (During Transition) */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditorActiveTab('c');
-                      sectionCRef.current?.scrollIntoView({ behavior: 'smooth' });
-                    }}
-                    className={`inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-[11.5px] font-extrabold transition-colors ${
-                      editorActiveTab === 'c'
-                        ? 'border-[#059669] bg-[#ECFDF5] text-[#047857]'
-                        : 'border-[#E2E8F0] bg-[#FFFFFF] text-[#334155] hover:bg-[#F8FAFC]'
-                    }`}
-                  >
-                    <FileText className="h-3.5 w-3.5" />
-                    <span>الحقول الإلزامية (During Transition)</span>
-                    <span className="rounded bg-[#047857] px-1.5 py-0.5 text-[10px] font-extrabold text-[#FFFFFF]">
-                      {selectedTransition.duringFields.filter((f) => f.enabled).length + 1} حقول مفروضة
-                    </span>
-                  </button>
-
-                  {/* Tab D: الأتمتة اللاحقة (After Actions) */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditorActiveTab('d');
-                      sectionDRef.current?.scrollIntoView({ behavior: 'smooth' });
-                    }}
-                    className={`inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-[11.5px] font-extrabold transition-colors ${
-                      editorActiveTab === 'd'
-                        ? 'border-[#4F46E5] bg-[#EEF2FF] text-[#4338CA]'
-                        : 'border-[#E2E8F0] bg-[#FFFFFF] text-[#334155] hover:bg-[#F8FAFC]'
-                    }`}
-                  >
-                    <Zap className="h-3.5 w-3.5" />
-                    <span>الأتمتة اللاحقة (After Actions)</span>
-                    <span className="rounded bg-[#4F46E5] px-1.5 py-0.5 text-[10px] font-extrabold text-[#FFFFFF]">
-                      4 مهام تلقائية
-                    </span>
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-1.5 text-[10.5px] text-[#64748B]">
-                  <Info className="h-3.5 w-3.5 shrink-0" />
-                  <span>كل الشروط إلزامية لتفعيل زر الانتقال في شاشة المندوب</span>
-                </div>
-              </div>
-            </div>
-
-            {/* 2. SCROLLABLE 4-SECTION EDITOR BODY */}
-            <div className="flex-1 overflow-y-auto bg-[#F8FAFC] p-6 space-y-5">
-              {/* =================================================================
-                  SECTION A: مظهر زر الانتقال والصلاحيات الوظيفية المسموحة
-                 ================================================================= */}
-              <section
-                ref={sectionARef}
-                className="rounded-2xl border border-[#E2E8F0] bg-[#FFFFFF] p-5 shadow-2xs space-y-4"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#F1F5F9] pb-3">
-                  <div className="flex items-center gap-2.5">
-                    <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[#DBEAFE] font-mono text-[12px] font-extrabold text-[#1E40AF]">
-                      A
-                    </span>
-                    <h3 className="text-[14px] font-extrabold text-[#0F172A]">
-                      مظهر زر الانتقال والصلاحيات الوظيفية المسموحة
-                    </h3>
-                  </div>
-                  <span className="text-[11px] text-[#64748B]">
-                    يحدد شكل الزر في واجهة البائع والأشخاص المخولين بالضغط عليه
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                  {/* Col 1 (Right): Button Label Input */}
-                  <div className="space-y-1.5">
-                    <label className="block text-[11.5px] font-extrabold text-[#334155]">
-                      اسم زر الانتقال المعروض
-                    </label>
-                    <div className="relative flex items-center rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2 focus-within:border-[#2563EB] focus-within:bg-[#FFFFFF]">
-                      <input
-                        type="text"
-                        value={editorButtonLabel}
-                        onChange={(e) => setEditorButtonLabel(e.target.value)}
-                        className="w-full bg-transparent text-[12.5px] font-extrabold text-[#0F172A] focus:outline-none"
-                      />
-                      <Pencil className="h-3.5 w-3.5 text-[#64748B] shrink-0 mr-2" />
-                    </div>
-                    <p className="text-[10.5px] text-[#64748B]">
-                      يظهر هذا الاسم كإجراء أساسي متاح باللون المختار
-                    </p>
-                  </div>
-
-                  {/* Col 2 (Center): Button Color/Style Picker + Live Button Preview */}
-                  <div className="space-y-1.5">
-                    <label className="block text-[11.5px] font-extrabold text-[#334155]">
-                      نمط ولون الزر في مسار العميل
-                    </label>
-                    <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-1.5 flex items-center justify-between gap-2">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setEditorButtonStyle((prev) =>
-                            prev === 'emerald'
-                              ? 'blue'
-                              : prev === 'blue'
-                              ? 'rose'
-                              : 'emerald'
-                          )
-                        }
-                        className="inline-flex items-center gap-2 text-[12px] font-extrabold text-[#0F172A]"
-                      >
-                        <span
-                          className={`h-4 w-4 rounded ${
-                            editorButtonStyle === 'emerald'
-                              ? 'bg-[#047857]'
-                              : editorButtonStyle === 'blue'
-                              ? 'bg-[#2563EB]'
-                              : 'bg-[#E11D48]'
-                          }`}
-                        />
-                        <span>
-                          {editorButtonStyle === 'emerald'
-                            ? 'أخضر زمردي داكن'
-                            : editorButtonStyle === 'blue'
-                            ? 'أزرق ملكي أساسي'
-                            : 'أحمر تحذيري للخسارة'}
-                        </span>
-                      </button>
-
-                      <span
-                        className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[10.5px] font-extrabold text-[#FFFFFF] shadow-2xs ${
-                          editorButtonStyle === 'emerald'
-                            ? 'bg-[#047857]'
-                            : editorButtonStyle === 'blue'
-                            ? 'bg-[#2563EB]'
-                            : 'bg-[#E11D48]'
-                        }`}
-                      >
-                        <ShieldCheck className="h-3 w-3" />
-                        <span>معاينة الزر</span>
-                      </span>
-                    </div>
-                    <p className="text-[10.5px] text-[#64748B]">
-                      أيقونة مرافقة:{' '}
-                      <strong className="font-mono text-[#0F172A]">verified</strong>
-                    </p>
-                  </div>
-
-                  {/* Col 3 (Left): Allowed Roles Multi-select Chips */}
-                  <div className="space-y-1.5">
-                    <label className="block text-[11.5px] font-extrabold text-[#334155]">
-                      الأدوار المسموح لها بتنفيذ الانتقال
-                    </label>
-                    <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-2.5 flex flex-wrap items-center gap-1.5 relative">
-                      {selectedTransition.roles.map((rName) => (
-                        <span
-                          key={rName}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-[#E2E8F0] bg-[#FFFFFF] px-2.5 py-1 text-[11px] font-bold text-[#0F172A] shadow-2xs"
-                        >
-                          <span className="h-1.5 w-1.5 rounded-full bg-[#2563EB]" />
-                          <span>{rName}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveRole(rName)}
-                            className="text-[#64748B] hover:text-[#DC2626]"
-                            aria-label={`إزالة دور ${rName}`}
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </span>
-                      ))}
-
-                      <button
-                        type="button"
-                        onClick={() => setEditorRoleDropdownOpen((prev) => !prev)}
-                        className="px-2 py-1 text-[11px] font-extrabold text-[#2563EB] hover:underline"
-                      >
-                        + إضافة دور وظيفي
-                      </button>
-
-                      {editorRoleDropdownOpen && (
-                        <div className="absolute left-2 top-full mt-1 z-30 w-56 rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] p-1.5 shadow-xl">
-                          {rolePool.map((candidate) => (
-                            <button
-                              key={candidate}
-                              type="button"
-                              onClick={() => {
-                                handleAddRole(candidate);
-                                setEditorRoleDropdownOpen(false);
-                              }}
-                              className="block w-full rounded-lg px-2.5 py-1.5 text-right text-[11px] font-bold text-[#334155] hover:bg-[#EFF6FF] hover:text-[#2563EB]"
-                            >
-                              {candidate}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <p className="text-[10.5px] text-[#64748B]">
-                      لن يظهر الزر للبائعين الذين لا يحملون هذه الرتب الوظيفية
-                    </p>
-                  </div>
-                </div>
-              </section>
-
-              {/* =================================================================
-                  SECTION B: الشروط المسبقة للاستحقاق (Before Transition Criteria)
-                 ================================================================= */}
-              <section
-                ref={sectionBRef}
-                className="rounded-2xl border-2 border-[#93C5FD] bg-[#FFFFFF] p-5 shadow-2xs space-y-4"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#F1F5F9] pb-3">
-                  <div className="flex flex-wrap items-center gap-2.5">
-                    <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[#2563EB] font-mono text-[12px] font-extrabold text-[#FFFFFF]">
-                      B
-                    </span>
-                    <h3 className="text-[14px] font-extrabold text-[#0F172A]">
-                      الشروط المسبقة للاستحقاق (Before Transition Criteria)
-                    </h3>
-                    <span className="rounded bg-[#DBEAFE] px-2 py-0.5 text-[10px] font-extrabold text-[#1E40AF]">
-                      إلزامية ومحققة برمجياً
-                    </span>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleAddEditorCriterionRow}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-[#BFDBFE] bg-[#EFF6FF] hover:bg-[#DBEAFE] px-3 py-1.5 text-[11px] font-extrabold text-[#1D4ED8] transition-colors"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    <span>إضافة شرط استحقاق</span>
-                  </button>
-                </div>
-
-                <div className="space-y-2.5">
-                  {editorCriteriaRows.map((row, idx) => (
-                    <div
-                      key={row.id}
-                      className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3 flex flex-wrap items-center justify-between gap-2.5"
-                    >
-                      <div className="flex flex-wrap items-center gap-2 flex-1">
-                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#E2E8F0] font-mono text-[11px] font-extrabold text-[#334155]">
-                          {idx + 1}
-                        </span>
-
-                        {idx > 0 && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setEditorCriteriaRows((prev) =>
-                                prev.map((r) =>
-                                  r.id === row.id
-                                    ? { ...r, logic: r.logic === 'AND' ? 'OR' : 'AND' }
-                                    : r
-                                )
-                              )
-                            }
-                            className="rounded-md bg-[#2563EB] px-2 py-0.5 font-mono text-[10px] font-extrabold text-[#FFFFFF]"
-                          >
-                            {row.logic}
-                          </button>
-                        )}
-
-                        <input
-                          type="text"
-                          value={row.field}
-                          onChange={(e) =>
-                            setEditorCriteriaRows((prev) =>
-                              prev.map((r) =>
-                                r.id === row.id ? { ...r, field: e.target.value } : r
-                              )
-                            )
-                          }
-                          className="min-w-[210px] flex-1 rounded-lg border border-[#CBD5E1] bg-[#FFFFFF] px-3 py-1.5 text-[11.5px] font-bold text-[#0F172A] focus:border-[#2563EB] focus:outline-none"
-                        />
-
-                        <select
-                          value={row.operator}
-                          onChange={(e) =>
-                            setEditorCriteriaRows((prev) =>
-                              prev.map((r) =>
-                                r.id === row.id ? { ...r, operator: e.target.value } : r
-                              )
-                            )
-                          }
-                          className="rounded-lg border border-[#CBD5E1] bg-[#FFFFFF] px-2.5 py-1.5 text-[11px] font-extrabold text-[#2563EB] focus:border-[#2563EB] focus:outline-none"
-                        >
-                          <option value="== (يساوي)">== (يساوي)</option>
-                          <option value="<= (أقل أو يساوي)">&lt;= (أقل أو يساوي)</option>
-                          <option value=">= (أكبر أو يساوي)">&gt;= (أكبر أو يساوي)</option>
-                          <option value="!= (غير فارغ)">!= (غير فارغ)</option>
-                        </select>
-
-                        <input
-                          type="text"
-                          value={row.value}
-                          onChange={(e) =>
-                            setEditorCriteriaRows((prev) =>
-                              prev.map((r) =>
-                                r.id === row.id ? { ...r, value: e.target.value } : r
-                              )
-                            )
-                          }
-                          className="min-w-[160px] flex-1 rounded-lg border border-[#CBD5E1] bg-[#FFFFFF] px-3 py-1.5 text-[11.5px] font-extrabold text-[#047857] focus:border-[#2563EB] focus:outline-none"
-                        />
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveEditorCriterionRow(row.id)}
-                        aria-label="حذف الشرط"
-                        className="rounded-lg p-1.5 text-[#64748B] hover:bg-[#FEE2E2] hover:text-[#DC2626] transition-colors"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </section>
-
-              {/* =================================================================
-                  SECTION C: الحقول الإلزامية أثناء الانتقال (During Transition Fields)
-                 ================================================================= */}
-              <section
-                ref={sectionCRef}
-                className="rounded-2xl border border-[#E2E8F0] bg-[#FFFFFF] p-5 shadow-2xs space-y-4"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#F1F5F9] pb-3">
-                  <div className="flex flex-wrap items-center gap-2.5">
-                    <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[#047857] font-mono text-[12px] font-extrabold text-[#FFFFFF]">
-                      C
-                    </span>
-                    <h3 className="text-[14px] font-extrabold text-[#0F172A]">
-                      الحقول الإلزامية أثناء الانتقال (During Transition Fields)
-                    </h3>
-                    <span className="rounded bg-[#D1FAE5] px-2 py-0.5 text-[10px] font-extrabold text-[#065F46]">
-                      قابلة لإعادة الترتيب والتحقق الصارم
-                    </span>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setEditorNewFieldOpen((prev) => !prev)}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-[#A7F3D0] bg-[#ECFDF5] hover:bg-[#D1FAE5] px-3 py-1.5 text-[11px] font-extrabold text-[#047857] transition-colors"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    <span>إضافة حقل إلزامي</span>
-                  </button>
-                </div>
-
-                {editorNewFieldOpen && (
-                  <form
-                    onSubmit={handleAddEditorRequiredField}
-                    className="rounded-xl border border-[#A7F3D0] bg-[#ECFDF5]/60 p-3 flex flex-wrap items-center gap-2.5"
-                  >
-                    <input
-                      type="text"
-                      required
-                      value={editorNewFieldName}
-                      onChange={(e) => setEditorNewFieldName(e.target.value)}
-                      placeholder="اسم الحقل الإلزامي (مثال: رقم الضمان البنكي)"
-                      className="flex-1 min-w-[200px] rounded-lg border border-[#CBD5E1] bg-[#FFFFFF] px-3 py-1.5 text-[12px] text-[#0F172A] focus:border-[#059669] focus:outline-none"
-                    />
-                    <select
-                      value={editorNewFieldType}
-                      onChange={(e) => setEditorNewFieldType(e.target.value)}
-                      className="rounded-lg border border-[#CBD5E1] bg-[#FFFFFF] px-3 py-1.5 text-[11.5px] font-bold text-[#0F172A]"
-                    >
-                      <option value="نص إلزامي">نص إلزامي</option>
-                      <option value="مرفق إلزامي PDF">مرفق إلزامي PDF</option>
-                      <option value="تاريخ ميلادي">تاريخ ميلادي</option>
-                      <option value="قائمة منسدلة">قائمة منسدلة</option>
-                    </select>
-                    <button
-                      type="submit"
-                      className="rounded-lg bg-[#059669] px-3.5 py-1.5 text-[11.5px] font-extrabold text-[#FFFFFF]"
-                    >
-                      حفظ الحقل
-                    </button>
-                  </form>
-                )}
-
-                <div className="space-y-2">
-                  {selectedTransition.duringFields.map((fld, idx) => (
-                    <div
-                      key={fld.id}
-                      className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-3"
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="flex flex-col gap-0.5">
-                          <button
-                            type="button"
-                            onClick={() => handleMoveDuringField(idx, 'up')}
-                            disabled={idx === 0}
-                            className="text-[10px] font-bold text-[#64748B] hover:text-[#0F172A] disabled:opacity-30"
-                            title="تحريك لأعلى"
-                          >
-                            ▲
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleMoveDuringField(idx, 'down')}
-                            disabled={idx === selectedTransition.duringFields.length - 1}
-                            className="text-[10px] font-bold text-[#64748B] hover:text-[#0F172A] disabled:opacity-30"
-                            title="تحريك لأسفل"
-                          >
-                            ▼
-                          </button>
-                        </div>
-
-                        <input
-                          type="checkbox"
-                          checked={fld.enabled}
-                          onChange={() => handleToggleDuringField(fld.id)}
-                          className="h-4 w-4 rounded border-[#CBD5E1] text-[#059669] focus:ring-[#059669]"
-                        />
-
-                        <div>
-                          <p className="text-[12.5px] font-extrabold text-[#0F172A]">
-                            {fld.title}
-                          </p>
-                          <p className="text-[10.5px] text-[#64748B]">{fld.subtitle}</p>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2">
-                        {fld.id === 'fld_po_number' && (
-                          <div className="flex items-center gap-1.5 rounded-lg border border-[#CBD5E1] bg-[#FFFFFF] px-2.5 py-1 text-[10.5px]">
-                            <span className="text-[#64748B] font-semibold">Regex:</span>
-                            <input
-                              type="text"
-                              value={editorPoRegex}
-                              onChange={(e) => setEditorPoRegex(e.target.value)}
-                              dir="ltr"
-                              className="w-20 font-mono font-extrabold text-[#2563EB] focus:outline-none"
-                            />
-                          </div>
-                        )}
-
-                        <span
-                          className={`rounded-md px-2.5 py-0.5 text-[10px] font-extrabold ${
-                            fld.badgeTone === 'danger'
-                              ? 'bg-[#FFE4E6] text-[#E11D48]'
-                              : fld.badgeTone === 'info'
-                              ? 'bg-[#DBEAFE] text-[#1E40AF]'
-                              : 'bg-[#E2E8F0] text-[#334155]'
-                          }`}
-                        >
-                          {fld.badgeText}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* Digital Signature Requirement Toggle Bar */}
-                  <div className="rounded-xl border border-[#A7F3D0] bg-[#ECFDF5]/80 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-2.5">
-                      <ShieldCheck className="h-4 w-4 text-[#059669] shrink-0" />
-                      <div>
-                        <p className="text-[12px] font-extrabold text-[#065F46]">
-                          التحقق من التوقيع الرقمي المعتمد (DocuSign / منصة نفاذ الوطنية)
-                        </p>
-                        <p className="text-[10.5px] text-[#047857]">
-                          منع إغلاق الصفقة إلا بعد استلام رمز التصديق الرقمي للوثيقة المرفقة
-                        </p>
-                      </div>
-                    </div>
-
-                    <input
-                      type="checkbox"
-                      checked={selectedTransition.requireDigitalSignature}
-                      onChange={(e) =>
-                        updateSelectedTransition((tr) => ({
-                          ...tr,
-                          requireDigitalSignature: e.target.checked,
-                        }))
-                      }
-                      className="h-4 w-4 rounded border-[#059669] text-[#059669] focus:ring-[#059669]"
-                    />
-                  </div>
-                </div>
-              </section>
-
-              {/* =================================================================
-                  SECTION D: الأتمتة اللاحقة (After Actions)
-                 ================================================================= */}
-              <section
-                ref={sectionDRef}
-                className="rounded-2xl border border-[#E2E8F0] bg-[#FFFFFF] p-5 shadow-2xs space-y-4"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#F1F5F9] pb-3">
-                  <div className="flex items-center gap-2.5">
-                    <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[#4F46E5] font-mono text-[12px] font-extrabold text-[#FFFFFF]">
-                      D
-                    </span>
-                    <h3 className="text-[14px] font-extrabold text-[#0F172A]">
-                      الأتمتة اللاحقة بعد إتمام الانتقال (After Actions)
-                    </h3>
-                  </div>
-                  <span className="text-[11px] text-[#64748B]">
-                    تعمل بالخلفية فور نقر المندوب وحفظ الانتقال
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {/* Toggle 1: WhatsApp & Slack Notifications */}
-                  <label className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3.5 flex items-start justify-between gap-3 cursor-pointer hover:border-[#CBD5E1]">
-                    <div className="space-y-1">
-                      <p className="text-[12.5px] font-extrabold text-[#0F172A]">
-                        إشعارات واتساب وسلاك الفورية (#deals-won)
-                      </p>
-                      <p className="text-[10.5px] text-[#64748B]">
-                        إرسال رسالة تهنئة للفريق وإشعار العميل ببدء إجراءات التعاقد
-                      </p>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={editorAfterToggles.notifications}
-                      onChange={(e) =>
-                        setEditorAfterToggles((prev) => ({
-                          ...prev,
-                          notifications: e.target.checked,
-                        }))
-                      }
-                      className="mt-1 h-4 w-4 rounded border-[#CBD5E1] text-[#2563EB]"
-                    />
-                  </label>
-
-                  {/* Toggle 2: Onboarding Task */}
-                  <label className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3.5 flex items-start justify-between gap-3 cursor-pointer hover:border-[#CBD5E1]">
-                    <div className="space-y-1">
-                      <p className="text-[12.5px] font-extrabold text-[#0F172A]">
-                        توليد مهمة تسليم وتدشين المشروع (Onboarding Task)
-                      </p>
-                      <p className="text-[10.5px] text-[#64748B]">
-                        إنشاء مهمة عمل تلقائية لفريق تسليم المشاريع وإسنادها لمدير التنفيذ
-                      </p>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={editorAfterToggles.onboardingTask}
-                      onChange={(e) =>
-                        setEditorAfterToggles((prev) => ({
-                          ...prev,
-                          onboardingTask: e.target.checked,
-                        }))
-                      }
-                      className="mt-1 h-4 w-4 rounded border-[#CBD5E1] text-[#2563EB]"
-                    />
-                  </label>
-
-                  {/* Toggle 3: Meta CAPI Purchase Event */}
-                  <label className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3.5 flex items-start justify-between gap-3 cursor-pointer hover:border-[#CBD5E1]">
-                    <div className="space-y-1">
-                      <p className="text-[12.5px] font-extrabold text-[#0F172A]">
-                        حدث الشراء في Meta Conversions API (CAPI Purchase)
-                      </p>
-                      <p className="text-[10.5px] text-[#64748B]">
-                        مزامنة قيمة الصفقة الفعلية ومعرف RWQ مع خادم ميتا لتحسين الحملات
-                      </p>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={editorAfterToggles.metaCapiPurchase}
-                      onChange={(e) =>
-                        setEditorAfterToggles((prev) => ({
-                          ...prev,
-                          metaCapiPurchase: e.target.checked,
-                        }))
-                      }
-                      className="mt-1 h-4 w-4 rounded border-[#CBD5E1] text-[#2563EB]"
-                    />
-                  </label>
-
-                  {/* Toggle 4: Sales Order & ERP Generation */}
-                  <label className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3.5 flex items-start justify-between gap-3 cursor-pointer hover:border-[#CBD5E1]">
-                    <div className="space-y-1">
-                      <p className="text-[12.5px] font-extrabold text-[#0F172A]">
-                        توليد أمر بيع ومسودة فاتورة ضريبية (Sales Order &amp; ERP)
-                      </p>
-                      <p className="text-[10.5px] text-[#64748B]">
-                        إنشاء أمر البيع تلقائياً ومزامنة الفاتورة مع نظام المحاسبة وزاتكا
-                      </p>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={editorAfterToggles.salesOrderGeneration}
-                      onChange={(e) =>
-                        setEditorAfterToggles((prev) => ({
-                          ...prev,
-                          salesOrderGeneration: e.target.checked,
-                        }))
-                      }
-                      className="mt-1 h-4 w-4 rounded border-[#CBD5E1] text-[#2563EB]"
-                    />
-                  </label>
-                </div>
-              </section>
-            </div>
-
-            {/* 3. STICKY FOOTER */}
-            <div className="border-t border-[#E2E8F0] bg-[#FFFFFF] px-6 py-3.5 flex flex-wrap items-center justify-between gap-3 shrink-0">
-              {/* Right: Live Schema Validation Badge */}
-              <div className="inline-flex items-center gap-2 rounded-xl border border-[#A7F3D0] bg-[#ECFDF5] px-3.5 py-1.5 text-[11.5px] font-extrabold text-[#065F46]">
-                <CheckCircle2 className="h-4 w-4 text-[#059669] shrink-0" />
-                <span>Valid Schema ✓ — بنية القواعد متوافقة وجاهزة للتطبيق</span>
-              </div>
-
-              {/* Left: Seller Preview + Save & Apply to Firestore */}
-              <div className="flex flex-wrap items-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setSellerPreviewOpen(true)}
-                  className="inline-flex items-center gap-2 rounded-xl border border-[#CBD5E1] bg-[#F8FAFC] hover:bg-[#F1F5F9] px-4 py-2 text-[12px] font-extrabold text-[#0F172A] transition-colors"
-                >
-                  <Eye className="h-4 w-4 text-[#475569]" />
-                  <span>معاينة شاشة البائع</span>
-                </button>
-
-                <button
-                  type="button"
-                  disabled={savingToFirestore}
-                  onClick={() => void handleSaveTransitionEditorRules()}
-                  className="inline-flex items-center gap-2 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] px-5 py-2 text-[12px] font-extrabold text-[#FFFFFF] shadow-sm transition-colors disabled:opacity-50"
-                >
-                  <Save className="h-4 w-4" />
-                  <span>
-                    {savingToFirestore
-                      ? 'جاري الحفظ في Firestore...'
-                      : 'حفظ وتطبيق القواعد'}
-                  </span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {toastMsg && (
-        <div
-          role="status"
-          className="fixed bottom-5 left-5 z-50 flex items-center gap-2 rounded-xl bg-[#0F172A] px-4 py-2.5 text-[12px] font-semibold text-[#FFFFFF] shadow-xl"
-        >
-          <CheckCircle2 className="h-4 w-4 text-[#10B981] shrink-0" />
-          <span>{toastMsg}</span>
-          <button
-            type="button"
-            onClick={() => setToastMsg(null)}
-            aria-label="إغلاق التنبيه"
-            className="text-[#94A3B8] hover:text-[#FFFFFF]"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
+      {/* Toast Notification */}
+      {toastBanner && (
+        <div className="fixed bottom-5 left-5 z-50 flex items-center gap-2.5 rounded-xl border border-[#E2E8F0] bg-[#0F172A] px-4 py-3 text-xs font-bold text-white shadow-xl">
+          <CheckCircle2
+            className={`h-4 w-4 shrink-0 ${
+              toastBanner.tone === 'error'
+                ? 'text-[#F43F5E]'
+                : toastBanner.tone === 'info'
+                  ? 'text-[#60A5FA]'
+                  : 'text-[#10B981]'
+            }`}
+          />
+          <span>{toastBanner.message}</span>
         </div>
       )}
     </div>
   );
 };
+export default BlueprintBuilderPage;

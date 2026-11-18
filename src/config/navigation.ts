@@ -76,6 +76,7 @@ export const SIDEBAR_MODULES: NavModuleItem[] = [
       { id: 'quotes', label: 'عروض الأسعار', path: '/quotes' },
       { id: 'sales_orders', label: 'أوامر المبيعات', path: '/sales-orders' },
       { id: 'invoices', label: 'الفواتير', path: '/invoices' },
+      { id: 'purchase_orders', label: 'أوامر الشراء للموردين', path: '/purchase-orders' },
     ],
   },
   {
@@ -163,6 +164,11 @@ export const ROUTE_METADATA: Record<string, RouteMeta> = {
     title: 'الفواتير',
     section: 'عروض الأسعار والفواتير',
     description: 'إدارة الفواتير المصدرة والتحصيل المالي وحالات الاستحقاق.',
+  },
+  '/purchase-orders': {
+    title: 'أوامر الشراء للموردين (Purchase Orders)',
+    section: 'عروض الأسعار والفواتير',
+    description: 'إدارة أوامر الشراء الموجهة للموردين، تتبع التوريد والاستلام، وحساب ضريبة القيمة المضافة.',
   },
   '/tasks': {
     title: 'المهام والأنشطة',

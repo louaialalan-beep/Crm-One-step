@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   Activity,
@@ -29,10 +29,20 @@ import { StatusBadge } from '../components/ui/StatusBadge';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
-export function AssignmentRulesPage() {
+export function AssignmentRulesPage({
+  defaultTab = 'assignment',
+}: {
+  defaultTab?: 'assignment' | 'scoring';
+}) {
   const { currentOrgId, leads } = useCrm();
 
-  const [activeTab, setActiveTab] = useState<'rules' | 'scoring' | 'escalation' | 'audit'>('rules');
+  const [activeTab, setActiveTab] = useState<'rules' | 'scoring' | 'escalation' | 'audit'>(
+    defaultTab === 'scoring' ? 'scoring' : 'rules'
+  );
+
+  useEffect(() => {
+    setActiveTab(defaultTab === 'scoring' ? 'scoring' : 'rules');
+  }, [defaultTab]);
   const [autoPriority, setAutoPriority] = useState(true);
   const [skipOffHours, setSkipOffHours] = useState(true);
   const [dailyCap, setDailyCap] = useState(true);

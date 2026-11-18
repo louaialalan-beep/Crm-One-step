@@ -143,7 +143,30 @@ export const ContactDetailPage: React.FC = () => {
     sendInboxReply,
     openInboxForContact,
     softDeleteContacts,
+    users,
+    quickReplies,
   } = useCrm();
+
+  const activeContactOwners = useMemo(() => {
+    const fromUsers = users
+      .filter((u) => u.status === 'active')
+      .map((u) => u.fullName)
+      .filter(Boolean);
+    return fromUsers.length > 0 ? Array.from(new Set(fromUsers)) : CONTACT_OWNERS;
+  }, [users]);
+
+  const activeQuickReplies = useMemo(() => {
+    if (quickReplies && quickReplies.length > 0) {
+      return quickReplies
+        .filter((qr) => !qr.module || qr.module === 'contacts' || qr.module === 'all')
+        .map((qr) => ({
+          command: qr.command.startsWith('/') ? qr.command : `/${qr.command}`,
+          label: qr.label,
+          template: qr.template,
+        }));
+    }
+    return QUICK_REPLIES;
+  }, [quickReplies]);
 
   const contact = useMemo(
     () => contacts.find((c) => c.id === id || c.leadUniqueId === id) ?? null,
@@ -895,7 +918,9 @@ export const ContactDetailPage: React.FC = () => {
                       onChange={(e) => void commitPatch({ assignedToName: e.target.value })}
                       className="w-full bg-transparent text-[13px] font-semibold text-[#0F172A] focus:outline-none disabled:opacity-75"
                     >
-                      {CONTACT_OWNERS.map((o) => (
+                      {Array.from(
+                        new Set([getContactOwnerName(contact), ...activeContactOwners].filter(Boolean))
+                      ).map((o) => (
                         <option key={o} value={o}>
                           {o}
                         </option>
@@ -1632,7 +1657,7 @@ export const ContactDetailPage: React.FC = () => {
             <div className="shrink-0 border-t border-[#E2E8F0] bg-[#FFFFFF] p-3 space-y-2">
               {showSlashPalette && (
                 <div className="rounded-lg border border-[#E2E8F0] bg-[#FFFFFF] p-1.5 shadow-md space-y-1">
-                  {QUICK_REPLIES.map((qr) => (
+                  {activeQuickReplies.map((qr) => (
                     <button
                       key={qr.command}
                       type="button"
@@ -1650,7 +1675,7 @@ export const ContactDetailPage: React.FC = () => {
                 <span className="text-[10px] font-semibold text-[#64748B] whitespace-nowrap shrink-0">
                   ردود سريعة:
                 </span>
-                {QUICK_REPLIES.map((qr) => (
+                {activeQuickReplies.map((qr) => (
                   <button
                     key={qr.command}
                     type="button"

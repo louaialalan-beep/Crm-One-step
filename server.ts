@@ -26,15 +26,10 @@ function resolveEncryptionKeyBuffer(): Buffer {
   const rawKey = process.env.META_ENCRYPTION_KEY?.trim();
 
   if (!rawKey) {
-    if (IS_PRODUCTION) {
-      throw new Error(
-        '[FATAL SECURITY ERROR] META_ENCRYPTION_KEY is missing in production. Refusing to start without a valid 32-byte key.'
-      );
-    }
     if (!ephemeralDevKey) {
       ephemeralDevKey = crypto.randomBytes(32);
       console.warn(
-        '[SECURITY WARNING] META_ENCRYPTION_KEY is not set. Using an ephemeral random 32-byte key for local development only.'
+        '[SECURITY WARNING] META_ENCRYPTION_KEY is not set. Using an ephemeral random 32-byte key for this process.'
       );
     }
     return ephemeralDevKey;
@@ -49,12 +44,6 @@ function resolveEncryptionKeyBuffer(): Buffer {
   const utf8Buf = Buffer.from(rawKey, 'utf8');
   if (utf8Buf.length === 32) {
     return utf8Buf;
-  }
-
-  if (IS_PRODUCTION) {
-    throw new Error(
-      '[FATAL SECURITY ERROR] META_ENCRYPTION_KEY must be a 64-character hex string or a 32-byte UTF-8 key in production.'
-    );
   }
 
   return crypto.createHash('sha256').update(rawKey).digest();

@@ -288,6 +288,7 @@ export function LeadsContactsProvider({ children }: { children: React.ReactNode 
       setSignals((prev) => [
         {
           id: `sig_${Date.now()}`,
+          org_id: currentOrgId,
           title: `عميل محتمل جديد (${newLead.unique_id}): ${newLead.fullName}`,
           description: `${newLead.city || newLead.source || 'عميل محتمل'} · ${newLead.phone || newLead.unique_id}`,
           category: 'lead',
@@ -948,6 +949,15 @@ export function LeadsContactsProvider({ children }: { children: React.ReactNode 
       let newDeal: Deal | null = null;
       if (input.createDeal) {
         resolvedDealId = `deal_conv_${Date.now()}`;
+        const targetStage = input.dealStage || 'تأهيل مبدئي';
+        const stageProbMap: Record<DealStage, number> = {
+          'تأهيل مبدئي': 20,
+          'تحديد الاحتياج': 20,
+          'عرض سعر': 50,
+          'تفاوض': 80,
+          'مكتملة': 100,
+          'خسارة': 0,
+        };
         newDeal = {
           id: resolvedDealId,
           ownerId,
@@ -958,8 +968,8 @@ export function LeadsContactsProvider({ children }: { children: React.ReactNode 
           amount:
             input.dealAmount && input.dealAmount > 0 ? input.dealAmount : lead.estimatedValue || 100000,
           currency: 'SAR',
-          stage: input.dealStage || 'تحديد الاحتياج',
-          probability: 50,
+          stage: targetStage,
+          probability: stageProbMap[targetStage] ?? 20,
           closeDate: input.dealCloseDate || '2026-12-25',
           ownerName: input.dealOwnerName?.trim() || lead.assignedToName || currentUser.fullName,
           nextStep: `متابعة العميل المحول (${lead.unique_id})`,
@@ -984,6 +994,7 @@ export function LeadsContactsProvider({ children }: { children: React.ReactNode 
       setSignals((prev) => [
         {
           id: `sig_conv_${Date.now()}`,
+          org_id: currentOrgId,
           title: `تم تحويل العميل (${lead.unique_id}) بنجاح`,
           description: newDeal
             ? `تم إنشاء جهة اتصال وصفقة بقيمة ${newDeal.amount.toLocaleString('en-US')} ر.س مع الحفاظ على نقاط التماس.`
@@ -1186,6 +1197,7 @@ export function LeadsContactsProvider({ children }: { children: React.ReactNode 
       setSignals((prev) => [
         {
           id: `sig_con_${Date.now()}`,
+          org_id: currentOrgId,
           title: `جهة اتصال جديدة (${leadUniqueId}): ${newContact.fullName}`,
           description: `${resolvedAccountName} · ${newContact.phone || leadUniqueId}`,
           category: 'lead',
@@ -1820,6 +1832,7 @@ export function LeadsContactsProvider({ children }: { children: React.ReactNode 
       setSignals((prev) => [
         {
           id: `sig_acc_${Date.now()}`,
+          org_id: currentOrgId,
           title: `تم تسجيل منشأة جديدة: ${newAcc.name}`,
           description: `التصنيف: ${newAcc.tier} · القطاع: ${newAcc.industry}`,
           category: 'deal',

@@ -28,6 +28,9 @@ import { LeadsSplitView } from '../components/leads/LeadsSplitView';
 import { LeadsTableView } from '../components/leads/LeadsTableView';
 import { MergeDuplicatesDrawer } from '../components/leads/MergeDuplicatesDrawer';
 
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { db } from '../firebase';
+
 const DEFAULT_VISIBLE_COLUMNS: LeadTableColumnKey[] = [
   'unique_id',
   'channel',
@@ -41,7 +44,10 @@ export const LeadsPage: React.FC = () => {
   const {
     leads,
     touchpoints,
+    firebaseUser,
+    isPreviewMode,
     currentUser,
+    syncStatus,
     activeProfile,
     openInboxForLead,
     updateLeadFields,
@@ -61,6 +67,33 @@ export const LeadsPage: React.FC = () => {
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [splitLeadId, setSplitLeadId] = useState<string>(leads[0]?.id ?? '');
+
+  // Auto-select leads[0].id once async Firestore leads finish loading if splitLeadId is empty
+  useEffect(() => {
+    if (!splitLeadId && leads.length > 0) {
+      setSplitLeadId(leads[0].id);
+    }
+  }, [leads, splitLeadId]);
+
+  // Load & sync visibleColumns preference from Firestore users/{uid}/preferences/leads_columns
+  const prefUid = firebaseUser?.uid || currentUser?.uid;
+  useEffect(() => {
+    if (!prefUid || !firebaseUser || isPreviewMode || syncStatus === 'preview') return;
+    const prefRef = doc(db, 'users', prefUid, 'preferences', 'leads_columns');
+    const unsub = onSnapshot(
+      prefRef,
+      (snap) => {
+        if (snap.exists()) {
+          const cols = snap.data()?.visibleColumns;
+          if (Array.isArray(cols) && cols.length > 0) {
+            setVisibleColumns(cols as LeadTableColumnKey[]);
+          }
+        }
+      },
+      () => {}
+    );
+    return () => unsub();
+  }, [prefUid, firebaseUser, isPreviewMode, syncStatus]);
 
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createInitialTab, setCreateInitialTab] = useState<'manual' | 'csv'>('manual');
@@ -175,9 +208,17 @@ export const LeadsPage: React.FC = () => {
   };
 
   const handleToggleColumn = (col: LeadTableColumnKey) => {
-    setVisibleColumns((prev) =>
-      prev.includes(col) ? prev.filter((c) => c !== col) : [...prev, col]
-    );
+    setVisibleColumns((prev) => {
+      const next = prev.includes(col) ? prev.filter((c) => c !== col) : [...prev, col];
+      if (prefUid && syncStatus !== 'preview') {
+        setDoc(
+          doc(db, 'users', prefUid, 'preferences', 'leads_columns'),
+          { visibleColumns: next, updatedAt: new Date().toISOString() },
+          { merge: true }
+        ).catch(() => {});
+      }
+      return next;
+    });
   };
 
   const handleExportCsv = () => {

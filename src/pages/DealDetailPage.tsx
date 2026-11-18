@@ -38,6 +38,7 @@ import { useCrm } from '../context/CrmContext';
 import type {
   CrmTask,
   DealStage,
+  FinancialLineItem,
   InboxMessage,
   TouchpointChannel,
 } from '../types/crm';
@@ -221,7 +222,49 @@ export const DealDetailPage: React.FC = () => {
     toggleTaskStatus,
     sendInboxReply,
     openInboxForContact,
+    users,
+    quickReplies,
+    createQuote,
+    createSalesOrder,
+    currentOrgId,
+    baseCurrency,
   } = useCrm();
+
+  const activeDealOwners = useMemo(() => {
+    const fromUsers = users
+      .filter((u) => u.status === 'active')
+      .map((u) => u.fullName)
+      .filter(Boolean);
+    return fromUsers.length > 0 ? Array.from(new Set(fromUsers)) : DEAL_OWNERS;
+  }, [users]);
+
+  const activeBlueprintSteps = useMemo(() => {
+    const dealsBp = blueprints.find((b) => (b.module === 'deals' || b.module === 'الصفقات') && b.active);
+    if (!dealsBp || !dealsBp.stageSteps || dealsBp.stageSteps.length === 0) {
+      return BLUEPRINT_STEPS;
+    }
+    const stageSet = new Set<string>(dealsBp.stageSteps);
+    const matched = BLUEPRINT_STEPS.filter(
+      (step) =>
+        stageSet.has(step.label) ||
+        stageSet.has(step.targetStage) ||
+        step.matchStages.some((st) => stageSet.has(st))
+    );
+    return matched.length > 0 ? matched : BLUEPRINT_STEPS;
+  }, [blueprints]);
+
+  const activeQuickReplies = useMemo(() => {
+    if (quickReplies && quickReplies.length > 0) {
+      return quickReplies
+        .filter((qr) => !qr.module || qr.module === 'deals' || qr.module === 'all')
+        .map((qr) => ({
+          command: qr.command.startsWith('/') ? qr.command : `/${qr.command}`,
+          label: qr.label,
+          template: qr.template,
+        }));
+    }
+    return DEAL_QUICK_REPLIES;
+  }, [quickReplies]);
 
   const deal = useMemo(() => deals.find((d) => d.id === id) ?? null, [deals, id]);
   const contact = useMemo(
@@ -442,7 +485,7 @@ export const DealDetailPage: React.FC = () => {
   }
 
   const currentCol = getDealColumnForStage(deal.stage);
-  const currentStepIndex = BLUEPRINT_STEPS.findIndex((s) => s.matchStages.includes(deal.stage));
+  const currentStepIndex = activeBlueprintSteps.findIndex((s) => s.matchStages.includes(deal.stage));
   const attribution = resolveDealLastTouchAttribution(deal, contacts, touchpoints);
   const firstTouchSource =
     dealTouchpoints[dealTouchpoints.length - 1]?.campaign ||
@@ -656,78 +699,111 @@ export const DealDetailPage: React.FC = () => {
     if (submittingQuoteOrder) return;
     setSubmittingQuoteOrder(true);
     setErrorMsg(null);
-    const ts = Date.now();
     const effectiveTotal = quoteTotals.netTotal > 0 ? quoteTotals.netTotal : deal.amount;
+    const todayIso = new Date().toISOString().slice(0, 10);
+
+    const mappedFinancialLineItems: FinancialLineItem[] =
+      lineItems.length > 0
+        ? lineItems.map((li, idx) => ({
+            id: li.id || `li_${idx + 1}`,
+            productName: li.name || deal.title,
+            description: li.description || li.licenseType || '',
+            unit: 'اشتراك',
+            quantity: Math.max(1, Number(li.quantity) || 1),
+            unitPrice: Math.max(0, Number(li.unitPrice) || 0),
+            discountType: 'percentage',
+            discountValue: Math.min(100, Math.max(0, Number(li.discountPercent) || 0)),
+            vatRate: 15,
+          }))
+        : [
+            {
+              id: 'li_1',
+              productName: deal.title,
+              description: `بنود صفقة ${deal.accountName}`,
+              unit: 'مشروع',
+              quantity: 1,
+              unitPrice: Math.round(effectiveTotal / 1.15),
+              discountType: 'percentage',
+              discountValue: 0,
+              vatRate: 15,
+            },
+          ];
 
     try {
       if (mode === 'quote') {
-        const qId = `qt_deal_${ts}`;
-        const qNum = `QT-2026-${String(ts).slice(-4)}`;
-        const quotePayload = {
-          ownerId: firebaseUser?.uid ?? 'preview-user',
-          quoteNumber: qNum,
+        const createdQuote = await createQuote({
+          org_id: currentOrgId,
           subject: deal.title.slice(0, 160),
           dealId: deal.id,
+          dealTitle: deal.title,
+          accountId: deal.accountId,
           accountName: deal.accountName.slice(0, 150),
+          contactId: contact?.id || deal.contactId,
+          contactName: contact?.fullName,
+          leadUniqueId: permanentRwq,
+          ownerName: deal.ownerName || currentUser.fullName,
+          currency: deal.currency || baseCurrency.code || 'SAR',
+          exchangeRate: deal.exchangeRate || 1,
+          taxMode: 'exclusive',
+          subtotalAmount: quoteTotals.subtotal,
+          discountTotal: quoteTotals.totalDiscount,
+          taxableAmount: quoteTotals.taxable,
+          vatAmount: quoteTotals.vatAmount,
           totalAmount: effectiveTotal,
-          status: 'مرسل' as const,
+          status: 'مرسل',
+          issueDate: todayIso,
           validUntil: deal.closeDate || '2026-12-30',
-        };
+          lineItems: mappedFinancialLineItems,
+          notes: `تم إنشاؤه من داخل بطاقة الصفقة (${deal.title})`,
+        });
 
-        if (firebaseUser) {
-          try {
-            await setDoc(doc(db, 'quotes', qId), {
-              ...quotePayload,
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-            });
-          } catch (err) {
-            handleFirestoreError(err, OperationType.CREATE, `quotes/${qId}`);
-          }
-        }
-        setLocalCreatedQuoteNumber(qNum);
+        setLocalCreatedQuoteNumber(createdQuote.quoteNumber);
         await addDealTouchpoint(deal.id, {
           channel: 'بريد إلكتروني',
-          summary: `إنشاء وإرسال عرض السعر (${qNum}) بقيمة ${effectiveTotal.toLocaleString('en-US')} ر.س`,
+          summary: `إنشاء وإرسال عرض السعر (${createdQuote.quoteNumber}) بقيمة ${effectiveTotal.toLocaleString('en-US')} ${deal.currency || baseCurrency.symbol || 'ر.س'}`,
           eventType: 'إصدار عرض سعر',
           campaign: attribution,
         });
-        setToastMsg(`تم إنشاء عرض السعر ${qNum} وربطه بالصفقة`);
+        setToastMsg(`تم إنشاء وحفظ عرض السعر (${createdQuote.quoteNumber}) في قائمة عروض الأسعار`);
       } else {
-        const soId = `so_deal_${ts}`;
-        const soNum = `SO-2026-${String(ts).slice(-4)}`;
-        const soPayload = {
-          ownerId: firebaseUser?.uid ?? 'preview-user',
-          orderNumber: soNum,
+        const createdOrder = await createSalesOrder({
+          org_id: currentOrgId,
           quoteId: dealQuotes[0]?.id || activeQuoteNumber,
+          quoteNumber: dealQuotes[0]?.quoteNumber || activeQuoteNumber,
+          dealId: deal.id,
+          dealTitle: deal.title,
+          accountId: deal.accountId,
           accountName: deal.accountName.slice(0, 150),
+          contactId: contact?.id || deal.contactId,
+          contactName: contact?.fullName,
+          leadUniqueId: permanentRwq,
+          ownerName: deal.ownerName || currentUser.fullName,
+          currency: deal.currency || baseCurrency.code || 'SAR',
+          exchangeRate: deal.exchangeRate || 1,
+          taxMode: 'exclusive',
+          subtotalAmount: quoteTotals.subtotal,
+          discountTotal: quoteTotals.totalDiscount,
+          taxableAmount: quoteTotals.taxable,
+          vatAmount: quoteTotals.vatAmount,
           totalAmount: effectiveTotal,
-          status: 'قيد التجهيز' as const,
+          status: 'قيد التجهيز',
+          issueDate: todayIso,
           deliveryDate: deal.closeDate || '2026-12-15',
-        };
+          lineItems: mappedFinancialLineItems,
+          notes: `أمر بيع صادر من بطاقة الصفقة (${deal.title})`,
+        });
 
-        if (firebaseUser) {
-          try {
-            await setDoc(doc(db, 'sales_orders', soId), {
-              ...soPayload,
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-            });
-          } catch (err) {
-            handleFirestoreError(err, OperationType.CREATE, `sales_orders/${soId}`);
-          }
-        }
-        setLocalCreatedOrderNumber(soNum);
+        setLocalCreatedOrderNumber(createdOrder.orderNumber);
         await addDealTouchpoint(deal.id, {
           channel: 'حدث',
-          summary: `تحويل الصفقة إلى أمر بيع رسمي (${soNum}) بقيمة ${effectiveTotal.toLocaleString('en-US')} ر.س`,
+          summary: `تحويل الصفقة إلى أمر بيع رسمي (${createdOrder.orderNumber}) بقيمة ${effectiveTotal.toLocaleString('en-US')} ${deal.currency || baseCurrency.symbol || 'ر.س'}`,
           eventType: 'تحويل لأمر بيع',
           campaign: attribution,
         });
-        setToastMsg(`تم التحويل إلى أمر بيع رسمي (${soNum})`);
+        setToastMsg(`تم إنشاء وحفظ أمر البيع (${createdOrder.orderNumber}) في قائمة أوامر المبيعات`);
       }
     } catch {
-      setErrorMsg('تعذر إتمام العملية في Firestore، يرجى المحاولة مرة أخرى.');
+      setErrorMsg('تعذر إتمام العملية، يرجى المحاولة مرة أخرى.');
     } finally {
       setSubmittingQuoteOrder(false);
     }
@@ -1076,7 +1152,7 @@ export const DealDetailPage: React.FC = () => {
           {/* Bottom Strip: Interactive Blueprint Stage Bar */}
           <div className="border-t border-[#F1F5F9] pt-3 flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-              {BLUEPRINT_STEPS.map((step, idx) => {
+              {activeBlueprintSteps.map((step, idx) => {
                 const isActive = step.matchStages.includes(deal.stage);
                 const isPast =
                   !isActive &&
@@ -1106,7 +1182,7 @@ export const DealDetailPage: React.FC = () => {
                         </span>
                       )}
                     </button>
-                    {idx < BLUEPRINT_STEPS.length - 1 && (
+                    {idx < activeBlueprintSteps.length - 1 && (
                       <ChevronLeft className="h-3.5 w-3.5 text-[#CBD5E1] shrink-0" />
                     )}
                   </React.Fragment>
@@ -1337,7 +1413,9 @@ export const DealDetailPage: React.FC = () => {
                       }}
                       className="w-full bg-transparent text-[12px] font-bold text-[#0F172A] focus:outline-none disabled:opacity-75"
                     >
-                      {Array.from(new Set([currentUser.fullName, ...DEAL_OWNERS])).map((owner) => (
+                      {Array.from(
+                        new Set([currentUser.fullName, ownerDraft, ...activeDealOwners].filter(Boolean))
+                      ).map((owner) => (
                         <option key={owner} value={owner}>
                           {owner}
                         </option>
@@ -2168,7 +2246,7 @@ export const DealDetailPage: React.FC = () => {
             <div className="shrink-0 border-t border-[#E2E8F0] bg-[#FFFFFF] p-3 space-y-2">
               {showSlashPalette && (
                 <div className="rounded-lg border border-[#E2E8F0] bg-[#FFFFFF] p-1.5 shadow-md space-y-1">
-                  {DEAL_QUICK_REPLIES.map((qr) => (
+                  {activeQuickReplies.map((qr) => (
                     <button
                       key={qr.command}
                       type="button"
@@ -2183,7 +2261,7 @@ export const DealDetailPage: React.FC = () => {
               )}
 
               <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
-                {DEAL_QUICK_REPLIES.map((qr) => (
+                {activeQuickReplies.map((qr) => (
                   <button
                     key={qr.command}
                     type="button"
@@ -2266,7 +2344,9 @@ export const DealDetailPage: React.FC = () => {
             setLocalCreatedOrderNumber(payload.createdOrderNumber);
           }
           setToastMsg(
-            `تم اعتماد انتقال البلوبرينت إلى «${payload.targetStage}» وتنفيذ إجراءات الأتمتة`
+            payload.targetStage === 'خسارة'
+              ? 'تم إغلاق الصفقة بـ «خسارة» وتوثيق سبب الخسارة والملاحظات'
+              : `تم اعتماد انتقال البلوبرينت إلى «${payload.targetStage}» وتنفيذ إجراءات الأتمتة`
           );
         }}
       />

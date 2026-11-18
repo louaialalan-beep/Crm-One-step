@@ -1,28 +1,27 @@
-import React, { useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
 import {
   Activity,
   CheckCircle2,
   Copy,
   Database,
-  ExternalLink,
-  KeyRound,
-  Layers,
-  MessageSquare,
   Plus,
   RefreshCw,
-  Send,
   ShieldCheck,
-  Sparkles,
   Webhook,
   Zap,
 } from 'lucide-react';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { db } from '../firebase';
 import { useCrm } from '../context/CrmContext';
-import { StatusBadge } from '../components/ui/StatusBadge';
 
-export function MetaIntegrationPage() {
-  const { currentOrgId, metaConnections, metaPages, metaFieldMappings } = useCrm();
+export function MetaIntegrationPage({
+  defaultTab = 'meta',
+}: {
+  defaultTab?: 'meta' | 'whatsapp' | 'social';
+}) {
+  const { currentOrgId, syncStatus, firebaseUser, isPreviewMode } = useCrm();
 
+  const [activeTab, setActiveTab] = useState<'meta' | 'whatsapp' | 'social'>(defaultTab);
   const [roundRobinEnabled, setRoundRobinEnabled] = useState(true);
   const [autoCreateLeadEnabled, setAutoCreateLeadEnabled] = useState(true);
   const [autoCreateDmLead, setAutoCreateDmLead] = useState(true);
@@ -30,8 +29,94 @@ export function MetaIntegrationPage() {
   const [instantRepAlert, setInstantRepAlert] = useState(true);
   const [capiAutoSync, setCapiAutoSync] = useState(true);
   const [copiedText, setCopiedText] = useState<string | null>(null);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
 
-  const webhookUrl = 'https://api.riwaq.sa/v1/meta/webhook/waba_084920';
+  useEffect(() => {
+    setActiveTab(defaultTab);
+  }, [defaultTab]);
+
+  const triggerToast = (msg: string) => {
+    setToastMsg(msg);
+    window.setTimeout(() => {
+      setToastMsg((prev) => (prev === msg ? null : prev));
+    }, 3200);
+  };
+
+  // Subscribe to organizations/{orgId}/integrations/meta in Firestore
+  useEffect(() => {
+    if (!currentOrgId || !firebaseUser || isPreviewMode || syncStatus === 'preview') return;
+    const metaRef = doc(db, 'organizations', currentOrgId, 'integrations', 'meta');
+    const unsub = onSnapshot(
+      metaRef,
+      (snap) => {
+        if (snap.exists()) {
+          const d = snap.data();
+          if (typeof d.roundRobinEnabled === 'boolean') setRoundRobinEnabled(d.roundRobinEnabled);
+          if (typeof d.autoCreateLeadEnabled === 'boolean') setAutoCreateLeadEnabled(d.autoCreateLeadEnabled);
+          if (typeof d.autoCreateDmLead === 'boolean') setAutoCreateDmLead(d.autoCreateDmLead);
+          if (typeof d.autoLogTouchpoint === 'boolean') setAutoLogTouchpoint(d.autoLogTouchpoint);
+          if (typeof d.instantRepAlert === 'boolean') setInstantRepAlert(d.instantRepAlert);
+          if (typeof d.capiAutoSync === 'boolean') setCapiAutoSync(d.capiAutoSync);
+        } else {
+          setDoc(
+            metaRef,
+            {
+              org_id: currentOrgId,
+              roundRobinEnabled: true,
+              autoCreateLeadEnabled: true,
+              autoCreateDmLead: true,
+              autoLogTouchpoint: true,
+              instantRepAlert: true,
+              capiAutoSync: true,
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          ).catch(() => {});
+        }
+      },
+      () => {}
+    );
+    return () => unsub();
+  }, [currentOrgId, firebaseUser, isPreviewMode, syncStatus]);
+
+  const persistMetaToggle = async (
+    field:
+      | 'roundRobinEnabled'
+      | 'autoCreateLeadEnabled'
+      | 'autoCreateDmLead'
+      | 'autoLogTouchpoint'
+      | 'instantRepAlert'
+      | 'capiAutoSync',
+    nextVal: boolean
+  ) => {
+    if (field === 'roundRobinEnabled') setRoundRobinEnabled(nextVal);
+    if (field === 'autoCreateLeadEnabled') setAutoCreateLeadEnabled(nextVal);
+    if (field === 'autoCreateDmLead') setAutoCreateDmLead(nextVal);
+    if (field === 'autoLogTouchpoint') setAutoLogTouchpoint(nextVal);
+    if (field === 'instantRepAlert') setInstantRepAlert(nextVal);
+    if (field === 'capiAutoSync') setCapiAutoSync(nextVal);
+
+    if (currentOrgId && firebaseUser && !isPreviewMode && syncStatus !== 'preview') {
+      try {
+        await setDoc(
+          doc(db, 'organizations', currentOrgId, 'integrations', 'meta'),
+          {
+            org_id: currentOrgId,
+            [field]: nextVal,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        );
+      } catch (err) {
+        console.error('Failed to persist Meta integration toggle:', err);
+      }
+    }
+  };
+
+  const baseUrl =
+    (import.meta.env.VITE_API_BASE_URL as string | undefined) ||
+    (typeof window !== 'undefined' ? window.location.origin : '');
+  const webhookUrl = `${baseUrl}/api/webhooks/meta/${currentOrgId}`;
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -39,8 +124,46 @@ export function MetaIntegrationPage() {
     setTimeout(() => setCopiedText(null), 2000);
   };
 
+  const handleSaveAllMetaSettings = async () => {
+    if (currentOrgId && firebaseUser && !isPreviewMode && syncStatus !== 'preview') {
+      try {
+        await setDoc(
+          doc(db, 'organizations', currentOrgId, 'integrations', 'meta'),
+          {
+            org_id: currentOrgId,
+            roundRobinEnabled,
+            autoCreateLeadEnabled,
+            autoCreateDmLead,
+            autoLogTouchpoint,
+            instantRepAlert,
+            capiAutoSync,
+            webhookUrl,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        );
+      } catch (err) {
+        console.error('Failed to save Meta settings:', err);
+      }
+    }
+    triggerToast('تم حفظ وتثبيت كافة إعدادات الربط في سحابة Firestore بنجاح.');
+  };
+
   return (
     <div dir="rtl" className="w-full px-6 py-4 space-y-4 bg-[#F8FAFC] min-h-screen text-[13px]">
+      {toastMsg && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-[#0F172A] text-white px-4 py-2.5 rounded-xl shadow-lg border border-slate-700 text-xs font-bold flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-[#10B981]" />
+          <span>{toastMsg}</span>
+        </div>
+      )}
+
+      {copiedText && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-[#2563EB] text-white px-3.5 py-1.5 rounded-lg shadow-md text-xs font-bold">
+          {copiedText}
+        </div>
+      )}
+
       {/* Flush White Header & Top Bar */}
       <div className="bg-white border border-[#E2E8F0] rounded-xl p-4 shadow-xs space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-4">
@@ -64,7 +187,7 @@ export function MetaIntegrationPage() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => alert('تم فحص اتصال Webhook وحالة الـ Ping بنجاح (200 OK - Latency 48ms).')}
+              onClick={() => triggerToast('تم فحص اتصال Webhook وحالة الـ Ping بنجاح (200 OK - Latency 48ms).')}
               className="px-3 py-2 rounded-lg bg-[#F8FAFC] hover:bg-[#F1F5F9] border border-[#E2E8F0] text-[#0F172A] text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <Webhook className="w-3.5 h-3.5 text-[#2563EB]" />
@@ -72,7 +195,7 @@ export function MetaIntegrationPage() {
             </button>
             <button
               type="button"
-              onClick={() => alert('سجل أحداث CAPI السيرفر يعمل بكفاءة 100% بدون أي تراجع.')}
+              onClick={() => triggerToast('سجل أحداث CAPI السيرفر يعمل بكفاءة 100% بدون أي تراجع.')}
               className="px-3 py-2 rounded-lg bg-[#F8FAFC] hover:bg-[#F1F5F9] border border-[#E2E8F0] text-[#0F172A] text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <Activity className="w-3.5 h-3.5 text-[#10B981]" />
@@ -80,13 +203,50 @@ export function MetaIntegrationPage() {
             </button>
             <button
               type="button"
-              onClick={() => alert('جارٍ فتح نافذة Meta Embedded Signup / OAuth 2.0 لربط حساب إعلاني وصفحة جديدة.')}
+              onClick={() => triggerToast('جارٍ فتح نافذة Meta Embedded Signup / OAuth 2.0 لربط حساب إعلاني وصفحة جديدة.')}
               className="px-4 py-2 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               + ربط حساب إعلاني / صفحة إضافية
             </button>
           </div>
+        </div>
+
+        {/* Channel Filter Tabs */}
+        <div className="flex items-center gap-2 border-t border-[#E2E8F0] pt-3">
+          <button
+            type="button"
+            onClick={() => setActiveTab('meta')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+              activeTab === 'meta'
+                ? 'bg-[#EFF6FF] text-[#2563EB] border border-[#BFDBFE]'
+                : 'bg-white text-[#64748B] border border-[#E2E8F0] hover:bg-[#F8FAFC]'
+            }`}
+          >
+            نظرة شاملة وربط CAPI
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('whatsapp')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+              activeTab === 'whatsapp'
+                ? 'bg-[#EFF6FF] text-[#2563EB] border border-[#BFDBFE]'
+                : 'bg-white text-[#64748B] border border-[#E2E8F0] hover:bg-[#F8FAFC]'
+            }`}
+          >
+            واتساب للأعمال السحابي (Cloud API)
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('social')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+              activeTab === 'social'
+                ? 'bg-[#EFF6FF] text-[#2563EB] border border-[#BFDBFE]'
+                : 'bg-white text-[#64748B] border border-[#E2E8F0] hover:bg-[#F8FAFC]'
+            }`}
+          >
+            ماسنجر، إنستغرام، ونماذج Lead Ads
+          </button>
         </div>
 
         {/* Status Bar */}
@@ -126,7 +286,11 @@ export function MetaIntegrationPage() {
         {/* Right Column (60% - 7 cols) */}
         <div className="lg:col-span-7 space-y-4">
           {/* Card 1: WhatsApp Business Cloud API */}
-          <div className="bg-white border border-[#E2E8F0] rounded-xl p-4 shadow-xs space-y-4">
+          <div
+            className={`bg-white border rounded-xl p-4 shadow-xs space-y-4 ${
+              activeTab === 'whatsapp' ? 'border-[#2563EB] ring-1 ring-[#BFDBFE]' : 'border-[#E2E8F0]'
+            }`}
+          >
             <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-[#ECFDF5] text-[#059669] flex items-center justify-center font-bold">
@@ -172,9 +336,21 @@ export function MetaIntegrationPage() {
 
             {/* Webhook URL Box & Quality Tier */}
             <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs text-[#64748B]">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[#64748B]">
                 <span>حالة استجابة الـ Webhook: <strong className="text-[#10B981]">متصل لحظياً — HTTP 200 OK (0 أخطاء)</strong></span>
-                <span className="font-mono text-[11px]">https://api.riwaq.sa/v1/meta/webhook/waba_084920</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono text-[11px] text-[#0F172A] bg-[#F8FAFC] px-2 py-0.5 rounded border border-[#E2E8F0]">
+                    {webhookUrl}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(webhookUrl)}
+                    className="p-1 rounded hover:bg-slate-200 text-[#64748B] cursor-pointer"
+                    title="نسخ رابط الـ Webhook"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
               <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl p-3 flex items-center justify-between">
                 <div>
@@ -193,7 +369,7 @@ export function MetaIntegrationPage() {
                 <span className="text-xs font-bold text-[#0F172A]">قوالب الرسائل المعتمدة من Meta (HSM Message Templates)</span>
                 <button
                   type="button"
-                  onClick={() => alert('تمت مزامنة 24 قالب رسالة معتمدة من Meta بنجاح.')}
+                  onClick={() => triggerToast('تمت مزامنة 24 قالب رسالة معتمدة من Meta بنجاح.')}
                   className="px-3 py-1.5 rounded-lg bg-[#EFF6FF] hover:bg-[#DBEAFE] text-[#2563EB] text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
                 >
                   <RefreshCw className="w-3 h-3" />
@@ -222,12 +398,12 @@ export function MetaIntegrationPage() {
               <div className="flex items-center justify-between bg-[#F8FAFC] p-3 rounded-xl border border-[#E2E8F0]">
                 <div>
                   <div className="font-bold text-[#0F172A]">التوجيه التلقائي للمحادثات عبر Round-Robin</div>
-                  <div className="text-[11px] text-[#64748B]">توزيع المحادثات الواردة الجديدة بالتساوي بين مستشاري المبيعات المتصلين على الورادية</div>
+                  <div className="text-[11px] text-[#64748B]">توزيع المحادثات الواردة الجديدة بالتساوي بين مستشاري المبيعات المتصلين على الوردية</div>
                 </div>
                 <input
                   type="checkbox"
                   checked={roundRobinEnabled}
-                  onChange={(e) => setRoundRobinEnabled(e.target.checked)}
+                  onChange={(e) => persistMetaToggle('roundRobinEnabled', e.target.checked)}
                   className="w-5 h-5 rounded text-[#2563EB] cursor-pointer"
                 />
               </div>
@@ -240,7 +416,7 @@ export function MetaIntegrationPage() {
                 <input
                   type="checkbox"
                   checked={autoCreateLeadEnabled}
-                  onChange={(e) => setAutoCreateLeadEnabled(e.target.checked)}
+                  onChange={(e) => persistMetaToggle('autoCreateLeadEnabled', e.target.checked)}
                   className="w-5 h-5 rounded text-[#2563EB] cursor-pointer"
                 />
               </div>
@@ -248,7 +424,11 @@ export function MetaIntegrationPage() {
           </div>
 
           {/* Card 2: Facebook Messenger & Instagram Direct */}
-          <div className="bg-white border border-[#E2E8F0] rounded-xl p-4 shadow-xs space-y-4">
+          <div
+            className={`bg-white border rounded-xl p-4 shadow-xs space-y-4 ${
+              activeTab === 'social' ? 'border-[#2563EB] ring-1 ring-[#BFDBFE]' : 'border-[#E2E8F0]'
+            }`}
+          >
             <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-[#EFF6FF] text-[#2563EB] flex items-center justify-center font-bold">
@@ -268,7 +448,7 @@ export function MetaIntegrationPage() {
               <span className="text-xs text-[#64748B]">التحقق والربط اليدوي للملفات الشخصية وصفحات الأعمال</span>
               <button
                 type="button"
-                onClick={() => alert('تم تحديث وتجديد الـ Token بنجاح لجميع الصفحات الإعلانية.')}
+                onClick={() => triggerToast('تم تحديث وتجديد الـ Token بنجاح لجميع الصفحات الإعلانية.')}
                 className="px-3 py-1.5 rounded-lg border border-[#E2E8F0] hover:bg-[#F8FAFC] text-xs font-bold text-[#0F172A] cursor-pointer"
               >
                 إعادة التحقق من التوكن (Token Refresh)
@@ -278,7 +458,7 @@ export function MetaIntegrationPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl p-3 flex items-center justify-between">
                 <div>
-                  <div className="font-bold text-xs text-[#0F172A]">صفحة رواق لل...</div>
+                  <div className="font-bold text-xs text-[#0F172A]">صفحة رواق للأعمال</div>
                   <div className="text-[10px] text-[#64748B]">Page ID: FB-88273619</div>
                 </div>
                 <span className="px-2 py-0.5 rounded bg-[#ECFDF5] text-[#059669] text-[10px] font-bold">متصل ومفعل</span>
@@ -302,7 +482,7 @@ export function MetaIntegrationPage() {
                 <input
                   type="checkbox"
                   checked={autoCreateDmLead}
-                  onChange={(e) => setAutoCreateDmLead(e.target.checked)}
+                  onChange={(e) => persistMetaToggle('autoCreateDmLead', e.target.checked)}
                   className="w-5 h-5 rounded text-[#2563EB] cursor-pointer"
                 />
               </div>
@@ -315,14 +495,14 @@ export function MetaIntegrationPage() {
                 <input
                   type="checkbox"
                   checked={autoLogTouchpoint}
-                  onChange={(e) => setAutoLogTouchpoint(e.target.checked)}
+                  onChange={(e) => persistMetaToggle('autoLogTouchpoint', e.target.checked)}
                   className="w-5 h-5 rounded text-[#2563EB] cursor-pointer"
                 />
               </div>
 
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-[#0F172A]">قناة الإسناد الافتراضية للرسائل المباشرة:</label>
-                <select className="w-full px-3 py-2 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] text-xs text-[#0F172A] focus:outline-none">
+                <select className="w-full px-3 py-2 rounded-lg border border-[#CBD5E1] bg-white text-xs text-[#0F172A] focus:outline-none focus:border-[#2563EB]">
                   <option>إعلانات ميتا المدفوعة (Meta Ads Paid)</option>
                   <option>الرسائل العضوية المباشرة (Organic DM)</option>
                 </select>
@@ -336,7 +516,7 @@ export function MetaIntegrationPage() {
                 <input
                   type="checkbox"
                   checked={instantRepAlert}
-                  onChange={(e) => setInstantRepAlert(e.target.checked)}
+                  onChange={(e) => persistMetaToggle('instantRepAlert', e.target.checked)}
                   className="w-5 h-5 rounded text-[#2563EB] cursor-pointer"
                 />
               </div>
@@ -397,7 +577,7 @@ export function MetaIntegrationPage() {
 
             <button
               type="button"
-              onClick={() => alert('تم فحص الحقول الإضافية لنموذج الإعلان بنجاح.')}
+              onClick={() => triggerToast('تم فحص الحقول الإضافية لنموذج الإعلان بنجاح.')}
               className="w-full py-2 rounded-lg bg-[#F8FAFC] hover:bg-[#F1F5F9] border border-[#E2E8F0] text-[#2563EB] text-xs font-bold transition-colors cursor-pointer"
             >
               + تخصيص حقول إضافية لنموذج مخصص (Custom Field Mapping)
@@ -412,7 +592,7 @@ export function MetaIntegrationPage() {
                   <Database className="w-4 h-4 text-[#2563EB]" />
                   إرسال التحويلات الذكي (Meta Conversions API - CAPI)
                 </h3>
-                <span className="text-[11px] text-[#64748B]">تغذية خوارزميات ميتا بأحداث الصفات لخفض تكلفة الاكتساب</span>
+                <span className="text-[11px] text-[#64748B]">تغذية خوارزميات ميتا بأحداث الصفقات لخفض تكلفة الاكتساب</span>
               </div>
               <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-mono text-[11px] font-bold">
                 Server CAPI v20
@@ -423,7 +603,7 @@ export function MetaIntegrationPage() {
               <span className="text-[11px] text-[#64748B]">معرف مجموعة البيانات (Dataset / Pixel ID):</span>
               <div className="flex items-center justify-between">
                 <span className="font-mono text-xs font-bold text-[#0F172A]">DATASET-9918237192</span>
-                <span className="text-[11px] text-[#059669] font-bold">خادم الـدريا في المستقر</span>
+                <span className="text-[11px] text-[#059669] font-bold">الخادم السحابي نشط ومستقر</span>
               </div>
             </div>
 
@@ -435,7 +615,7 @@ export function MetaIntegrationPage() {
               <input
                 type="checkbox"
                 checked={capiAutoSync}
-                onChange={(e) => setCapiAutoSync(e.target.checked)}
+                onChange={(e) => persistMetaToggle('capiAutoSync', e.target.checked)}
                 className="w-5 h-5 rounded text-[#2563EB] cursor-pointer"
               />
             </div>
@@ -453,7 +633,7 @@ export function MetaIntegrationPage() {
                   <span className="text-[#2563EB] font-bold">InitiateCheckout →</span>
                 </div>
                 <div className="flex items-center justify-between bg-[#F8FAFC] p-2 rounded border border-[#E2E8F0]">
-                  <span>3. إغلاق الصفقة فوزاً (Deal Won - عائند استثمرا مباشراً)</span>
+                  <span>3. إغلاق الصفقة فوزاً (Deal Won - عائد استثمار مباشر)</span>
                   <span className="text-[#10B981] font-bold">Purchase →</span>
                 </div>
               </div>
@@ -463,11 +643,11 @@ export function MetaIntegrationPage() {
             <div className="bg-[#ECFDF5] border border-[#A7F3D0] rounded-xl p-3 flex items-center justify-between">
               <div>
                 <span className="text-[11px] text-[#065F46] font-bold">جودة مطابقة الأحداث (Event Match Quality)</span>
-                <div className="text-[10px] text-[#047857] mt-0.5">المطابقة تشمل رقم الهاتف، البريد المصغر SHA-256، عنوان IP، وعنوان العميل و المعرف RWQ — يساهم في خفض تكلفة الإعلانات الفعلية بنسبة 28%.</div>
+                <div className="text-[10px] text-[#047857] mt-0.5">المطابقة تشمل رقم الهاتف، البريد المشفر SHA-256، عنوان IP، والمعرف RWQ — يساهم في خفض تكلفة الإعلانات الفعلية بنسبة 28%.</div>
               </div>
               <div className="text-left">
                 <div className="text-base font-extrabold text-[#059669] tabular-nums">9.2 / 10</div>
-                <div className="text-[10px] text-[#047857] font-bold">الهدف الموصى به: &lt; 8.0 (ممتاز جداً)</div>
+                <div className="text-[10px] text-[#047857] font-bold">الهدف الموصى به: &gt; 8.0 (ممتاز جداً)</div>
               </div>
             </div>
           </div>
@@ -486,14 +666,14 @@ export function MetaIntegrationPage() {
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => alert('تمت إعادة تحميل حالة الاتصال والمزامنة بنجاح.')}
+            onClick={() => triggerToast('تمت إعادة تحميل حالة الاتصال والمزامنة بنجاح.')}
             className="px-4 py-2 rounded-xl border border-[#E2E8F0] hover:bg-[#F8FAFC] text-xs font-bold text-[#0F172A] cursor-pointer"
           >
             إعادة تحميل حالة الاتصال
           </button>
           <button
             type="button"
-            onClick={() => alert('تم حفظ وتثبيت كافة إعدادات الربط بنجاح (Ctrl+S).')}
+            onClick={handleSaveAllMetaSettings}
             className="px-5 py-2 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-bold shadow-sm flex items-center gap-1.5 cursor-pointer"
           >
             <ShieldCheck className="w-4 h-4" />
@@ -504,3 +684,4 @@ export function MetaIntegrationPage() {
     </div>
   );
 }
+

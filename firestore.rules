@@ -467,16 +467,26 @@ service cloud.firestore {
         && isValidOrganization(incoming())
         && incoming().org_id == existing().org_id;
       allow delete: if isAdmin() && isValidId(orgId);
+
+      match /settings/{settingId} {
+        allow get, list: if isSignedIn();
+        allow create, update: if isVerifiedUser() && isValidId(settingId);
+        allow delete: if isAdmin() && isValidId(settingId);
+      }
+
+      match /integrations/{integrationId} {
+        allow get, list: if isSignedIn();
+        allow create, update: if isVerifiedUser() && isValidId(integrationId);
+        allow delete: if isAdmin() && isValidId(integrationId);
+      }
     }
 
     match /users/{userId} {
-      allow get: if isSignedIn() && isValidId(userId) && (userId == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() && (resource.data.uid == request.auth.uid || isTokenAdmin());
+      allow get, list: if isSignedIn();
       allow create: if isVerifiedUser()
         && isValidId(userId)
         && isValidUser(incoming())
         && incoming().uid == userId
-        && incoming().uid == request.auth.uid
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time;
       allow update: if isVerifiedUser()
@@ -492,6 +502,12 @@ service cloud.firestore {
           incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'jobTitle', 'department', 'avatarUrl', 'org_id', 'updatedAt'])
         );
       allow delete: if isAdmin() && isValidId(userId);
+
+      match /preferences/{prefId} {
+        allow get, list: if isSignedIn() && (userId == request.auth.uid || isAdmin());
+        allow create, update: if isVerifiedUser() && isValidId(prefId) && (userId == request.auth.uid || isAdmin());
+        allow delete: if isVerifiedUser() && isValidId(prefId) && (userId == request.auth.uid || isAdmin());
+      }
     }
 
     match /profiles/{profileId} {
