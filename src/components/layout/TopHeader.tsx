@@ -124,9 +124,9 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
   return (
     <>
-      <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-2 sm:gap-3 border-b border-[#E2E8F0] bg-[#FFFFFF] px-3 sm:px-4 lg:px-6 overflow-visible">
-        {/* Right Side (RTL start): Mobile menu + Organization Switcher + Breadcrumb / Search trigger */}
-        <div className="flex items-center gap-2 min-w-0 flex-1 overflow-visible">
+      <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-3 sm:gap-4 border-b border-[#E2E8F0] bg-[#FFFFFF] px-3 sm:px-4 lg:px-6 overflow-visible">
+        {/* Right Side (RTL start): Mobile menu + Crm-One-step Identity + Organization Switcher + Breadcrumb / Search trigger */}
+        <div className="flex items-center gap-2.5 min-w-0 flex-1 overflow-visible">
           <button
             type="button"
             onClick={onOpenMobileSidebar}
@@ -135,6 +135,15 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           >
             <Menu className="h-4 w-4" />
           </button>
+
+          {/* System Name Identity Pill */}
+          <span
+            dir="ltr"
+            className="hidden xl:inline-flex h-8 items-center gap-1.5 rounded-md border border-[#BFDBFE] bg-[#EFF6FF] px-2.5 text-[11px] font-extrabold text-[#1D4ED8] shrink-0"
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-[#2563EB]" />
+            <span>Crm-One-step</span>
+          </span>
 
           {/* Multi-Tenant Organization Switcher Dropdown */}
           <div className="relative shrink-0" ref={orgMenuRef}>
@@ -266,33 +275,33 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             <span className="font-semibold text-[#0F172A] max-w-[140px] truncate">{routeMeta.title}</span>
           </div>
 
-          {/* Ctrl+K Command Palette Trigger */}
+          {/* Ctrl+K Command Palette Trigger — Bounded width with left margin so it never overlaps + صفقة سريعة */}
           <button
             type="button"
             onClick={onOpenCommandPalette}
-            aria-label="فتح البحث الشامل ولوحة الأوامر"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[#CBD5E1] bg-[#F8FAFC] text-[#64748B] hover:border-[#94A3B8] hover:bg-[#FFFFFF] transition-colors md:w-auto md:flex-1 md:max-w-[190px] lg:max-w-[230px] xl:max-w-[260px] md:justify-between md:gap-2 md:px-2.5 text-[12px] min-w-[36px]"
+            aria-label="فتح البحث الشامل ولوحة الأوامر في Crm-One-step"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[#CBD5E1] bg-[#F8FAFC] text-[#64748B] hover:border-[#94A3B8] hover:bg-[#FFFFFF] transition-colors md:w-48 lg:w-56 xl:w-64 md:justify-between md:gap-2 md:px-2.5 text-[12px] ml-2"
           >
             <span className="flex items-center gap-1.5 min-w-0">
               <Search className="h-3.5 w-3.5 shrink-0 text-[#64748B]" />
               <span className="hidden md:inline truncate">
-                ابحث في العملاء والصفقات...
+                بحث في Crm-One-step...
               </span>
             </span>
-            <kbd className="hidden xl:inline-flex items-center rounded border border-[#E2E8F0] bg-[#FFFFFF] px-1.5 py-0.5 text-[10px] font-semibold text-[#64748B] tabular-nums shrink-0">
+            <kbd className="hidden lg:inline-flex items-center rounded border border-[#E2E8F0] bg-[#FFFFFF] px-1.5 py-0.5 text-[10px] font-semibold text-[#64748B] tabular-nums shrink-0" dir="ltr">
               Ctrl+K
             </kbd>
           </button>
         </div>
 
         {/* Left Side (RTL end): Actions, Sync, Inbox, Signals, Employee Menu */}
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 pr-1">
           {/* + صفقة سريعة */}
           <button
             type="button"
             onClick={onOpenQuickDeal}
             aria-label="إضافة صفقة سريعة"
-            className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[#2563EB] px-2.5 sm:px-3 text-[12px] font-bold text-[#FFFFFF] hover:bg-[#1D4ED8] active:bg-[#1E40AF] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[#2563EB] px-3 text-[12px] font-bold text-[#FFFFFF] hover:bg-[#1D4ED8] active:bg-[#1E40AF] transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-2xs"
           >
             <Plus className="h-3.5 w-3.5 shrink-0" />
             <span className="hidden sm:inline">صفقة سريعة</span>

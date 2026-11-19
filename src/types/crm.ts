@@ -108,6 +108,7 @@ export interface Lead {
   ownerId: string;
   org_id?: string;
   unique_id: string; // RWQ-xxxxx
+  leadUniqueId?: string;
   fullName: string;
   company?: string;
   jobTitle?: string;
@@ -141,6 +142,9 @@ export interface Lead {
   customValues?: Record<string, string | number | boolean>;
   opt_out?: boolean;
   last_campaign_sent_at?: string;
+  leadScore?: number;
+  ownerName?: string;
+  createdAt?: string;
 }
 
 export type ContactStatus =
@@ -173,6 +177,10 @@ export interface Contact {
   customValues?: Record<string, string | number | boolean>;
   opt_out?: boolean;
   last_campaign_sent_at?: string;
+  repeatOrderCount?: number;
+  lifetimeRevenue?: number;
+  lastTouchSource?: string;
+  ownerName?: string;
 }
 
 export interface Account {
@@ -188,6 +196,7 @@ export interface Account {
   website?: string;
   accountManager: string;
   leadUniqueId?: string;
+  ownerName?: string;
 }
 
 export type DealStage =
@@ -239,18 +248,20 @@ export type TaxMode = 'exclusive' | 'inclusive';
 
 export type LineItemUnit = 'حبة' | 'ساعة' | 'اشتراك' | 'مشروع';
 
-export type DiscountType = 'percentage' | 'fixed';
+export type DiscountType = 'percentage' | 'fixed' | 'amount';
 
 export interface FinancialLineItem {
   id: string;
-  productName: string;
+  productName?: string;
+  name?: string;
   description?: string;
-  unit: LineItemUnit;
+  unit?: LineItemUnit;
   quantity: number;
   unitPrice: number;
   discountType: DiscountType;
   discountValue: number;
-  taxRate: 15 | 0;
+  taxRate?: 15 | 0 | number;
+  vatRate?: number;
   // Quantity tracking for Sales Orders
   deliveredQuantity?: number;
   invoicedQuantity?: number;
@@ -273,7 +284,9 @@ export interface Quote {
   subject: string;
   dealId: string;
   dealTitle?: string;
+  accountId?: string;
   accountName: string;
+  contactId?: string;
   contactName?: string;
   leadUniqueId?: string;
   ownerName?: string;
@@ -285,6 +298,7 @@ export interface Quote {
   deliveryDuration?: string;
   termsAndConditions?: string;
   customerNotes?: string;
+  notes?: string;
   taxMode?: TaxMode;
   lineItems?: FinancialLineItem[];
   subtotalAmount?: number;
@@ -305,11 +319,14 @@ export interface SalesOrder {
   customerPoNumber?: string;
   dealId?: string;
   dealTitle?: string;
+  accountId?: string;
   accountName: string;
+  contactId?: string;
   contactName?: string;
   leadUniqueId?: string;
   ownerName?: string;
   orderDate?: string;
+  issueDate?: string;
   deliveryDate: string;
   billingAddress?: string;
   shippingAddress?: string;
@@ -317,6 +334,7 @@ export interface SalesOrder {
   currency?: string;
   exchangeRate?: number;
   paymentTerms?: string;
+  notes?: string;
   taxMode?: TaxMode;
   lineItems?: FinancialLineItem[];
   subtotalAmount?: number;
@@ -335,11 +353,14 @@ export interface Invoice {
   invoiceType?: 'فاتورة ضريبية (B2B)' | 'فاتورة ضريبية مبسطة (B2C)' | 'إشعار دائن';
   salesOrderId?: string;
   salesOrderNumber?: string;
+  orderId?: string;
   quoteId?: string;
   quoteNumber?: string;
   dealId?: string;
   dealTitle?: string;
+  accountId?: string;
   accountName: string;
+  contactId?: string;
   contactName?: string;
   leadUniqueId?: string;
   ownerName?: string;
@@ -363,9 +384,46 @@ export interface Invoice {
   taxableAmount?: number;
   vatAmount?: number;
   totalAmount: number;
+  totalWithVat?: number;
   paidAmount: number;
+  zatcaQrBase64?: string;
+  notes?: string;
   payments?: InvoicePaymentRecord[];
   status: 'مكتملة' | 'مدفوعة' | 'مدفوعة جزئياً' | 'غير مدفوعة' | 'مؤجلة' | 'متأخرة' | 'مسودة';
+}
+
+export interface PurchaseOrder {
+  id: string;
+  ownerId: string;
+  org_id?: string;
+  poNumber: string;
+  vendorName: string;
+  vendorContact?: string;
+  vendorEmail?: string;
+  vendorPhone?: string;
+  vendorVatNumber?: string;
+  subject?: string;
+  dealId?: string;
+  dealTitle?: string;
+  salesOrderId?: string;
+  salesOrderNumber?: string;
+  ownerName?: string;
+  issueDate?: string;
+  expectedDeliveryDate: string;
+  deliveryAddress?: string;
+  shippingAddress?: string;
+  paymentTerms?: string;
+  notes?: string;
+  currency?: string;
+  exchangeRate?: number;
+  taxMode?: TaxMode;
+  lineItems?: FinancialLineItem[];
+  subtotalAmount?: number;
+  discountTotal?: number;
+  taxableAmount?: number;
+  vatAmount?: number;
+  totalAmount: number;
+  status: 'مسودة' | 'مرسل للمورد' | 'مؤكد' | 'مستلم جزئياً' | 'مستلم بالكامل' | 'ملغي';
 }
 
 export type TouchpointChannel =
@@ -387,6 +445,7 @@ export interface Touchpoint {
   relatedEntityId: string;
   relatedEntityName: string;
   occurredAt: string;
+  timestamp?: string;
   leadId?: string;
   leadUniqueId?: string;
   campaign?: string;
@@ -422,6 +481,7 @@ export interface CrmTask {
   dueDate: string;
   relatedTo: string;
   assignedToName: string;
+  dealId?: string;
   leadId?: string;
   leadUniqueId?: string;
 }
@@ -656,4 +716,10 @@ export interface FunctionExecutionLog {
   consoleLogs: string[];
   executedAt: string;
 }
+
+export type BlueprintProcess = Blueprint;
+export type CustomFieldDefinition = CustomField;
+export type PermissionProfile = CrmProfile;
+export type RoleHierarchyNode = CrmRole;
+
 

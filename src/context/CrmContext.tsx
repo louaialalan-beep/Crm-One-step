@@ -72,6 +72,7 @@ function CrmFacadeBridge({ children }: { children: React.ReactNode }) {
       firebaseUser: auth.firebaseUser,
       currentUser: auth.currentUser,
       users: auth.users,
+      setUsers: auth.setUsers,
       syncStatus: auth.syncStatus,
       authError: auth.authError,
       isPreviewMode: auth.isPreviewMode,

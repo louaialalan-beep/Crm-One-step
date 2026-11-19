@@ -641,7 +641,7 @@ export function FinancialModulePage({
       ...it,
       id: it.id || `line_${Date.now()}_${idx}`,
       productName:
-        it.productName.trim() ||
+        it.productName?.trim() ||
         newSubject.trim() ||
         'ترخيص وتنفيذ منظومة رواق السحابية',
       quantity: Math.max(1, Number(it.quantity) || 1),

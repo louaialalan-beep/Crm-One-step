@@ -26,15 +26,18 @@ import {
   Paperclip,
   Pencil,
   Plus,
+  QrCode,
   Send,
   ShieldCheck,
   Trash2,
   User,
   X,
+  Zap,
 } from 'lucide-react';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useCrm } from '../context/CrmContext';
+import { encodeZatcaPhase1TlvBase64 } from '../services/quotesInvoicesService';
 import type {
   CrmTask,
   DealStage,
@@ -226,7 +229,10 @@ export const DealDetailPage: React.FC = () => {
     quickReplies,
     createQuote,
     createSalesOrder,
+    createInvoice,
+    invoices,
     currentOrgId,
+    currentOrganization,
     baseCurrency,
   } = useCrm();
 
@@ -344,6 +350,8 @@ export const DealDetailPage: React.FC = () => {
   const [submittingQuoteOrder, setSubmittingQuoteOrder] = useState(false);
   const [localCreatedOrderNumber, setLocalCreatedOrderNumber] = useState<string | null>(null);
   const [localCreatedQuoteNumber, setLocalCreatedQuoteNumber] = useState<string | null>(null);
+  const [localCreatedInvoiceNumber, setLocalCreatedInvoiceNumber] = useState<string | null>(null);
+  const [zatcaQrBase64Preview, setZatcaQrBase64Preview] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -404,6 +412,11 @@ export const DealDetailPage: React.FC = () => {
     if (!deal) return [];
     return quotes.filter((q) => q.dealId === deal.id);
   }, [deal, quotes]);
+
+  const dealInvoices = useMemo(() => {
+    if (!deal) return [];
+    return invoices.filter((inv) => inv.dealId === deal.id);
+  }, [deal, invoices]);
 
   const dealTouchpoints = useMemo(() => {
     if (!deal) return [];
@@ -491,10 +504,15 @@ export const DealDetailPage: React.FC = () => {
     dealTouchpoints[dealTouchpoints.length - 1]?.campaign ||
     contact?.primarySource ||
     attribution;
-  const permanentRwq = deal.leadUniqueId || contact?.leadUniqueId;
+  const permanentRwq =
+    deal.leadUniqueId ||
+    contact?.leadUniqueId ||
+    `RWQ-${deal.id.replace(/\D/g, '').padStart(5, '8').slice(-5)}`;
   const dealCodeLabel = `DEAL-${deal.id.replace(/\D/g, '').padStart(5, '8').slice(-5)}`;
   const activeQuoteNumber =
     localCreatedQuoteNumber || dealQuotes[0]?.quoteNumber || `QUO-2026-${dealCodeLabel.slice(-4)}`;
+  const activeInvoiceNumber =
+    localCreatedInvoiceNumber || dealInvoices[0]?.invoiceNumber || null;
   const openTasksCount = dealTasks.filter((t) => t.status !== 'مكتملة').length;
   const closeCountdown = computeDaysRemainingLabel(deal.closeDate);
   const isB2C = deal.accountId === 'unassigned' || deal.accountName === 'عميل فردي B2C';
@@ -695,7 +713,9 @@ export const DealDetailPage: React.FC = () => {
     setToastMsg(`تم تجهيز مسودة عرض السعر (${activeQuoteNumber})`);
   };
 
-  const handleCreateQuoteOrSalesOrder = async (mode: 'quote' | 'sales_order') => {
+  const handleCreateQuoteOrSalesOrder = async (
+    mode: 'quote' | 'sales_order' | 'tax_invoice'
+  ) => {
     if (submittingQuoteOrder) return;
     setSubmittingQuoteOrder(true);
     setErrorMsg(null);
@@ -754,17 +774,68 @@ export const DealDetailPage: React.FC = () => {
           issueDate: todayIso,
           validUntil: deal.closeDate || '2026-12-30',
           lineItems: mappedFinancialLineItems,
-          notes: `تم إنشاؤه من داخل بطاقة الصفقة (${deal.title})`,
+          notes: `عرض سعر صادر بضغطة واحدة من بطاقة الصفقة (${deal.title}) — المعرف الموحد ${permanentRwq}`,
         });
 
         setLocalCreatedQuoteNumber(createdQuote.quoteNumber);
         await addDealTouchpoint(deal.id, {
           channel: 'بريد إلكتروني',
-          summary: `إنشاء وإرسال عرض السعر (${createdQuote.quoteNumber}) بقيمة ${effectiveTotal.toLocaleString('en-US')} ${deal.currency || baseCurrency.symbol || 'ر.س'}`,
+          summary: `إنشاء عرض سعر بضغطة واحدة (${createdQuote.quoteNumber}) بقيمة ${effectiveTotal.toLocaleString('en-US')} ${deal.currency || baseCurrency.symbol || 'ر.س'} — معرف العميل الموحد ${permanentRwq}`,
           eventType: 'إصدار عرض سعر',
           campaign: attribution,
         });
-        setToastMsg(`تم إنشاء وحفظ عرض السعر (${createdQuote.quoteNumber}) في قائمة عروض الأسعار`);
+        setToastMsg(
+          `تم إنشاء وحفظ عرض السعر (${createdQuote.quoteNumber}) بضغطة واحدة مع توريث المعرف الموحد (${permanentRwq})`
+        );
+      } else if (mode === 'tax_invoice') {
+        const zatcaQrBase64 = encodeZatcaPhase1TlvBase64({
+          sellerName: currentOrganization?.name || 'Crm-One-step',
+          vatNumber: '310122393500003',
+          timestampIso: new Date().toISOString(),
+          totalWithVat: effectiveTotal,
+          vatAmount: quoteTotals.vatAmount,
+        });
+
+        const createdInvoice = await createInvoice({
+          org_id: currentOrgId,
+          quoteId: dealQuotes[0]?.id || activeQuoteNumber,
+          quoteNumber: dealQuotes[0]?.quoteNumber || activeQuoteNumber,
+          dealId: deal.id,
+          dealTitle: deal.title,
+          accountId: deal.accountId,
+          accountName: deal.accountName.slice(0, 150),
+          contactId: contact?.id || deal.contactId,
+          contactName: contact?.fullName,
+          leadUniqueId: permanentRwq,
+          ownerName: deal.ownerName || currentUser.fullName,
+          currency: deal.currency || baseCurrency.code || 'SAR',
+          exchangeRate: deal.exchangeRate || 1,
+          taxMode: 'exclusive',
+          subtotalAmount: quoteTotals.subtotal,
+          discountTotal: quoteTotals.totalDiscount,
+          taxableAmount: quoteTotals.taxable,
+          vatAmount: quoteTotals.vatAmount,
+          totalAmount: effectiveTotal,
+          paidAmount: 0,
+          status: 'غير مدفوعة',
+          issueDate: todayIso,
+          dueDate: deal.closeDate || '2026-12-30',
+          zatcaQrBase64,
+          lineItems: mappedFinancialLineItems,
+          notes: `فاتورة ضريبية (ZATCA المرحلة الأولى - ضريبة 15% + TLV QR) صادرة بضغطة واحدة — المعرف الموحد ${permanentRwq}`,
+        });
+
+        setLocalCreatedInvoiceNumber(createdInvoice.invoiceNumber);
+        setZatcaQrBase64Preview(createdInvoice.zatcaQrBase64 || zatcaQrBase64);
+        await addDealTouchpoint(deal.id, {
+          channel: 'حدث',
+          summary: `إصدار فاتورة ضريبية ZATCA المرحلة الأولى (${createdInvoice.invoiceNumber}) شاملة ضريبة 15% (${quoteTotals.vatAmount.toLocaleString('en-US')} ر.س) ورمز QR TLV — معرف العميل ${permanentRwq}`,
+          eventType: 'إصدار فاتورة ضريبية',
+          campaign: attribution,
+        });
+        setToastMsg(
+          `تم إصدار الفاتورة الضريبية (${createdInvoice.invoiceNumber}) متضمنة ضريبة 15% ورمز ZATCA QR TLV مع توريث (${permanentRwq})`
+        );
       } else {
         const createdOrder = await createSalesOrder({
           org_id: currentOrgId,
@@ -1228,6 +1299,92 @@ export const DealDetailPage: React.FC = () => {
           </div>
         </div>
       </header>
+
+      {/* شريط الخطوة التالية المطلوبة (Crm-One-step Action Strip) */}
+      <section className="rounded-xl border border-[#BFDBFE] bg-gradient-to-l from-[#EFF6FF] via-[#FFFFFF] to-[#ECFDF5]/60 p-4 shadow-2xs">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#2563EB] px-3 py-1.5 text-[12px] font-extrabold text-[#FFFFFF] shadow-2xs">
+              <Zap className="h-3.5 w-3.5" />
+              <span>الخطوة التالية المطلوبة</span>
+            </span>
+
+            <div className="flex flex-wrap items-center gap-2 text-[12px]">
+              <span className="font-extrabold text-[#0F172A]">
+                {deal.nextStep || `استكمال ${nextTargetLabel} وإصدار المستندات المالية`}
+              </span>
+              <span className="text-[#CBD5E1]">•</span>
+              <span className="inline-flex items-center gap-1 rounded-md border border-[#CBD5E1] bg-[#FFFFFF] px-2 py-0.5 font-mono text-[11px] font-bold text-[#1E40AF]">
+                <span>معرّف العميل الموحد:</span>
+                <span>{permanentRwq}</span>
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-md border border-[#A7F3D0] bg-[#ECFDF5] px-2 py-0.5 text-[11px] font-bold text-[#047857]">
+                <span>ZATCA المرحلة الأولى: ضريبة 15% ({quoteTotals.vatAmount.toLocaleString('en-US')} ر.س) + QR TLV</span>
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={submittingQuoteOrder}
+              onClick={() => void handleCreateQuoteOrSalesOrder('quote')}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#2563EB] px-3.5 text-[12px] font-extrabold text-[#FFFFFF] shadow-2xs transition hover:bg-[#1D4ED8] disabled:opacity-60 cursor-pointer"
+            >
+              <FileText className="h-3.5 w-3.5" />
+              <span>إنشاء عرض سعر بضغطة واحدة</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={submittingQuoteOrder}
+              onClick={() => void handleCreateQuoteOrSalesOrder('tax_invoice')}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#059669] px-3.5 text-[12px] font-extrabold text-[#FFFFFF] shadow-2xs transition hover:bg-[#047857] disabled:opacity-60 cursor-pointer"
+            >
+              <QrCode className="h-3.5 w-3.5" />
+              <span>إصدار فاتورة ضريبية بضغطة واحدة</span>
+            </button>
+          </div>
+        </div>
+
+        {(localCreatedQuoteNumber || activeInvoiceNumber || zatcaQrBase64Preview) && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[#DBEAFE] pt-2.5 text-[11px]">
+            <div className="flex flex-wrap items-center gap-2">
+              {localCreatedQuoteNumber && (
+                <Link
+                  to="/quotes"
+                  className="inline-flex items-center gap-1 rounded-md border border-[#BFDBFE] bg-[#FFFFFF] px-2.5 py-1 font-bold text-[#1D4ED8] hover:bg-[#EFF6FF]"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5 text-[#2563EB]" />
+                  <span>عرض السعر المعتمد: {localCreatedQuoteNumber}</span>
+                  <span className="font-mono text-[10px] text-[#64748B]">({permanentRwq})</span>
+                </Link>
+              )}
+
+              {activeInvoiceNumber && (
+                <Link
+                  to="/invoices"
+                  className="inline-flex items-center gap-1 rounded-md border border-[#A7F3D0] bg-[#ECFDF5] px-2.5 py-1 font-bold text-[#065F46] hover:bg-[#D1FAE5]"
+                >
+                  <QrCode className="h-3.5 w-3.5 text-[#059669]" />
+                  <span>الفاتورة الضريبية ZATCA: {activeInvoiceNumber}</span>
+                  <span className="font-mono text-[10px] text-[#047857]">({permanentRwq})</span>
+                </Link>
+              )}
+            </div>
+
+            {(zatcaQrBase64Preview || dealInvoices[0]?.zatcaQrBase64) && (
+              <div className="inline-flex items-center gap-1.5 rounded-md border border-[#CBD5E1] bg-[#FFFFFF] px-2.5 py-1 font-mono text-[10px] text-[#334155]">
+                <QrCode className="h-3.5 w-3.5 text-[#059669]" />
+                <span>رمز QR TLV (ZATCA Phase 1):</span>
+                <span className="max-w-[220px] truncate font-bold text-[#0F172A]" dir="ltr">
+                  {zatcaQrBase64Preview || dealInvoices[0]?.zatcaQrBase64}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
 
       {/* 2. MAIN 2-COLUMN WORKSPACE: Right Main Column (65%) + Left Action Column (35%) */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,65fr)_minmax(0,35fr)] items-stretch">

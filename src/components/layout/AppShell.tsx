@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { TopHeader } from './TopHeader';
 import { CommandPalette } from '../overlays/CommandPalette';
@@ -7,13 +8,29 @@ import { InboxDrawer } from '../overlays/InboxDrawer';
 import { SignalsDrawer } from '../overlays/SignalsDrawer';
 import { useCrm } from '../../context/CrmContext';
 
+const AUTO_COLLAPSE_EDITOR_ROUTES = new Set([
+  '/settings/blueprints',
+  '/settings/workflows',
+  '/settings/custom-fields',
+  '/settings/functions',
+  '/settings/webforms',
+]);
+
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const location = useLocation();
   const { inboxOpen, openInboxForLead, closeInbox } = useCrm();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [quickDealOpen, setQuickDealOpen] = useState(false);
   const [signalsOpen, setSignalsOpen] = useState(false);
+
+  useEffect(() => {
+    const cleanPath = location.pathname.replace(/\/+$/, '') || '/';
+    if (AUTO_COLLAPSE_EDITOR_ROUTES.has(cleanPath)) {
+      setSidebarCollapsed(true);
+    }
+  }, [location.pathname]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

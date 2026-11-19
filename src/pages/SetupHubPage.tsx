@@ -420,8 +420,22 @@ const RECENT_SETUP_CHANGES = [
   },
 ];
 
+const HIDDEN_INCOMPLETE_SETTING_IDS = new Set([
+  'fiscal-year',
+  'territories',
+  'review-processes',
+  'backups',
+  'sandbox',
+  'erp',
+  'api-logs',
+  'ai-forecasting',
+  'ai-best-time',
+  'ai-sentiment',
+  'ai-anomaly',
+]);
+
 export const SetupHubPage: React.FC = () => {
-  const { profiles } = useCrm();
+  const { profiles, users, workflows, currentOrganization, currencies } = useCrm();
   const [searchQuery, setSearchQuery] = useState('');
   const [sandboxActive, setSandboxActive] = useState(true);
   const [recentLogOpen, setRecentLogOpen] = useState(false);
@@ -452,22 +466,67 @@ export const SetupHubPage: React.FC = () => {
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
 
-  // Filter items across all 9 cards in real time
+  // Filter items across all 9 cards in real time while hiding the 11 incomplete links
   const filteredCategories = useMemo(() => {
+    const activeCurrenciesLabel =
+      currencies && currencies.length > 0
+        ? currencies
+            .filter((c) => c.isActive)
+            .slice(0, 3)
+            .map((c) => c.code)
+            .join(', ')
+        : 'SAR, USD, AED';
+
     const dynamicCategories = SETUP_CATEGORIES.map((cat) => {
-      if (cat.id !== 'security') return cat;
+      const visibleItems = cat.items
+        .filter(
+          (item) =>
+            !HIDDEN_INCOMPLETE_SETTING_IDS.has(item.id) &&
+            !Array.from(HIDDEN_INCOMPLETE_SETTING_IDS).some((slug) =>
+              item.path.endsWith(`/${slug}`)
+            )
+        )
+        .map((item) => {
+          if (item.id === 'profiles') {
+            return {
+              ...item,
+              badgeText: `${profiles.length} ملفات`,
+            };
+          }
+          if (item.id === 'users') {
+            return {
+              ...item,
+              badgeText: `${users.length} مستخدم`,
+            };
+          }
+          if (item.id === 'company') {
+            return {
+              ...item,
+              badgeText: currentOrganization.plan,
+            };
+          }
+          if (item.id === 'currencies') {
+            return {
+              ...item,
+              badgeText: activeCurrenciesLabel,
+            };
+          }
+          if (item.id === 'workflows') {
+            const activeWfCount = workflows.filter((w) => w.active).length;
+            return {
+              ...item,
+              badgeText: `${Math.max(1, activeWfCount)} قاعدة نشطة`,
+            };
+          }
+          return item;
+        });
+
       return {
         ...cat,
-        items: cat.items.map((item) =>
-          item.id === 'profiles'
-            ? {
-                ...item,
-                badgeText: `${Math.max(5, profiles.length)} ملفات`,
-              }
-            : item
-        ),
+        countLabel: `${visibleItems.length} إعدادات`,
+        items: visibleItems,
       };
-    });
+    }).filter((cat) => cat.items.length > 0);
 
     if (!normalizedQuery) return dynamicCategories;
 
@@ -495,7 +554,14 @@ export const SetupHubPage: React.FC = () => {
         };
       })
       .filter((cat) => cat.items.length > 0);
-  }, [normalizedQuery, profiles.length]);
+  }, [
+    normalizedQuery,
+    profiles.length,
+    users.length,
+    currentOrganization.plan,
+    currencies,
+    workflows,
+  ]);
 
   const usedStorageGb = 18.4;
   const usedPercentage = Number(
@@ -577,7 +643,7 @@ export const SetupHubPage: React.FC = () => {
               </div>
 
               <p className="text-[11px] sm:text-[12px] text-[#64748B] leading-relaxed max-w-[340px]">
-                التهيئة المركزية وتخصيص بيئة عمل رواق CRM وربط قنوات ميتا والأتمتة
+                التهيئة المركزية وتخصيص بيئة عمل Crm-One-step وربط قنوات ميتا والأتمتة
               </p>
             </div>
           </div>

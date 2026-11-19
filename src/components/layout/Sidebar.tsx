@@ -96,12 +96,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
             onClick={isMobileDrawer ? onCloseMobile : undefined}
             className="flex items-center gap-2.5 overflow-hidden whitespace-nowrap"
           >
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#2563EB] text-white font-bold text-base">
-              ر
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#2563EB] text-white font-extrabold text-xs">
+              C1
             </div>
             {!isRail && (
-              <span className="text-[16px] font-bold tracking-tight text-[#0F172A] whitespace-nowrap">
-                رواق CRM
+              <span className="text-[15px] font-extrabold tracking-tight text-[#0F172A] whitespace-nowrap" dir="ltr">
+                Crm-One-step
               </span>
             )}
           </NavLink>

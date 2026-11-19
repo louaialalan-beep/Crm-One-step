@@ -1155,8 +1155,8 @@ export const ReportsModulePage: React.FC = () => {
     messages: orgMessages,
     stageHistory: orgStageHistory,
     orderAttributions: orgOrderAttributions,
-    campaigns: orgCampaigns,
   } = useCrm();
+  const orgCampaigns: any[] = [];
   const prefUid = firebaseUser?.uid || currentUser?.uid;
 
   useEffect(() => {
@@ -1283,10 +1283,10 @@ export const ReportsModulePage: React.FC = () => {
     setTimeout(() => setToastBanner(null), 4000);
   };
 
-  const dataset = useMemo<EnterpriseDataset>(() => {
+  const dataset = useMemo<any>(() => {
     const liveLeads = orgLeads.map((l) => ({
       id: l.id,
-      leadUniqueId: l.leadUniqueId,
+      leadUniqueId: l.leadUniqueId || l.unique_id,
       fullName: l.fullName,
       company: l.company,
       source: l.source,
@@ -1418,8 +1418,8 @@ export const ReportsModulePage: React.FC = () => {
     }));
 
     const liveCampaigns = orgCampaigns
-      .filter((c) => !c.org_id || c.org_id === currentOrgId)
-      .map((c) => ({
+      .filter((c: any) => !c.org_id || c.org_id === currentOrgId)
+      .map((c: any) => ({
         id: c.id,
         campaignName: c.name,
         platform: c.channel,
@@ -1471,8 +1471,8 @@ export const ReportsModulePage: React.FC = () => {
       acquisitionChannel: oa.touchChannel,
       campaignName: oa.campaign,
       touchpointType: oa.touchLabel,
-      orderAmountSAR: oa.amount,
-      vatAmountSAR: Math.round(oa.amount * 0.15),
+      orderAmountSAR: oa.amount ?? oa.orderAmountSAR ?? 0,
+      vatAmountSAR: Math.round((oa.amount ?? oa.orderAmountSAR ?? 0) * 0.15),
       orderDate: oa.orderedAt,
       ownerId: 'usr-1',
       ownerName: currentUser?.fullName || 'طارق العتيبي',

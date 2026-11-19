@@ -66,11 +66,11 @@ function LoginPage() {
     >
       <div className="w-full max-w-md bg-white border border-[#E2E8F0] rounded-2xl p-8 shadow-sm space-y-6">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-[#2563EB] text-white flex items-center justify-center font-bold text-lg shadow-xs">
-            ر
+          <div className="w-11 h-11 rounded-xl bg-[#2563EB] text-white flex items-center justify-center font-extrabold text-sm shadow-xs" dir="ltr">
+            C1
           </div>
           <div>
-            <h1 className="text-lg font-bold text-[#0F172A]">رواق CRM — بوابة المؤسسات</h1>
+            <h1 className="text-lg font-bold text-[#0F172A]">Crm-One-step — بوابة المؤسسات</h1>
             <p className="text-xs text-[#64748B]">منصة المبيعات والأتمتة السحابية المتكاملة</p>
           </div>
         </div>

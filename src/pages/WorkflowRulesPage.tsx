@@ -227,16 +227,117 @@ const OPERATOR_OPTIONS = [
   'لا يساوي (≠)',
 ];
 
+import { settingsService } from '../services/settingsService';
+import type { WorkflowRule } from '../types/crm';
+
+interface WorkflowCatalogEntry {
+  id: string;
+  code: string;
+  name: string;
+  moduleKey: ModuleTargetKey;
+  moduleLabel: string;
+  triggerMode: TriggerMode;
+  triggerLabel: string;
+  actionSummary: string;
+  active: boolean;
+  executionsCount: number;
+  updatedAtLabel: string;
+}
+
+const DEFAULT_WORKFLOW_CATALOG: WorkflowCatalogEntry[] = [
+  {
+    id: 'wf_ent_won_1',
+    code: 'WFR-DEAL-8821',
+    name: 'إغلاق صفقة كبرى وتصعيد الاعتماد (Enterprise Deal Won & High-Value Alert)',
+    moduleKey: 'deals',
+    moduleLabel: 'الصفقات',
+    triggerMode: 'create_or_edit',
+    triggerLabel: 'عند إنشاء أو تعديل السجل (مرحلة الصفقة = مكتملة)',
+    actionSummary: 'إشعار واتساب فوري + تحديث تصنيف الحساب VIP + إنشاء مهمة Onboarding + إطلاق Webhook ERP',
+    active: true,
+    executionsCount: 2840,
+    updatedAtLabel: 'منذ 15 دقيقة',
+  },
+  {
+    id: 'wf_lead_auto_2',
+    code: 'WFR-LEAD-4102',
+    name: 'تأهيل وتوزيع العملاء المحتملين من حملات ميتا (Meta Lead Ads Auto-Assign)',
+    moduleKey: 'leads',
+    moduleLabel: 'العملاء المحتملين',
+    triggerMode: 'create_only',
+    triggerLabel: 'عند إنشاء السجل لأول مرة (المصدر = Meta Lead Ads)',
+    actionSummary: 'رسالة ترحيب واتساب تلقائية + تعيين مندوب SDR + جدولة مهمة اتصال خلال ساعتين',
+    active: true,
+    executionsCount: 1490,
+    updatedAtLabel: 'أمس',
+  },
+  {
+    id: 'wf_deal_stalled_3',
+    code: 'WFR-DEAL-3094',
+    name: 'تنبيه الصفقات الراكدة في مرحلة التفاوض لأكثر من 7 أيام',
+    moduleKey: 'deals',
+    moduleLabel: 'الصفقات',
+    triggerMode: 'scheduled',
+    triggerLabel: 'بشكل مجدول وزمني (بعد 7 أيام بدون تحديث مرحلة)',
+    actionSummary: 'تنبيه مدير المبيعات الإقليمي + إنشاء مهمة مراجعة عاجلة',
+    active: true,
+    executionsCount: 412,
+    updatedAtLabel: 'قبل يومين',
+  },
+  {
+    id: 'wf_contact_vip_4',
+    code: 'WFR-CONT-2190',
+    name: 'ترقية جهة الاتصال إلى عميل نشط وإرسال استبيان الرضا الأولي',
+    moduleKey: 'contacts',
+    moduleLabel: 'جهات الاتصال',
+    triggerMode: 'create_or_edit',
+    triggerLabel: 'عند تعديل حالة جهة الاتصال إلى (عميل نشط)',
+    actionSummary: 'إرسال قالب بريد وواتساب ترحيبي + تحديث وسم العميل',
+    active: false,
+    executionsCount: 185,
+    updatedAtLabel: 'قبل 4 أيام',
+  },
+];
+
 export function WorkflowRulesPage() {
-  const { workflows, deals, firebaseUser } = useCrm();
+  const { workflows, deals, firebaseUser, isPreviewMode, currentOrgId } = useCrm();
+
+  // View Mode: 'list' (Main Table View) or 'editor' (Rule Visual Builder)
+  const [viewMode, setViewMode] = useState<'list' | 'editor'>('list');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [moduleFilter, setModuleFilter] = useState<'ALL' | ModuleTargetKey>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
+
+  const [rulesCatalog, setRulesCatalog] = useState<WorkflowCatalogEntry[]>(() => {
+    try {
+      const saved = localStorage.getItem(`crm_one_step_workflows_${currentOrgId}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // ignore storage errors
+    }
+    return DEFAULT_WORKFLOW_CATALOG;
+  });
+
+  const persistCatalogLocally = (next: WorkflowCatalogEntry[]) => {
+    setRulesCatalog(next);
+    try {
+      localStorage.setItem(`crm_one_step_workflows_${currentOrgId}`, JSON.stringify(next));
+    } catch {
+      // ignore
+    }
+  };
 
   // Rule Header & Configuration State
+  const [editingRuleId, setEditingRuleId] = useState<string>('wf_ent_won_1');
   const [selectedRuleCode, setSelectedRuleCode] = useState<string>('WFR-DEAL-8821');
   const [ruleTitleFull, setRuleTitleFull] = useState<string>(
     'إغلاق صفقة كبرى وتصعيد الاعتماد (Enterprise Deal Won & High-Value Alert)'
   );
   const [ruleNameInput, setRuleNameInput] = useState<string>(
-    'إغلاق صفقة كبرى وتصعيد الاعتماد (Enterprise Deal Won'
+    'إغلاق صفقة كبرى وتصعيد الاعتماد (Enterprise Deal Won & High-Value Alert)'
   );
   const [isRuleActive, setIsRuleActive] = useState<boolean>(true);
   const [targetModule, setTargetModule] = useState<ModuleTargetKey>('deals');
@@ -303,6 +404,71 @@ export function WorkflowRulesPage() {
     }, 3500);
   };
 
+  const filteredCatalog = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return rulesCatalog.filter((item) => {
+      if (moduleFilter !== 'ALL' && item.moduleKey !== moduleFilter) return false;
+      if (statusFilter === 'ACTIVE' && !item.active) return false;
+      if (statusFilter === 'INACTIVE' && item.active) return false;
+      if (!q) return true;
+      return (
+        item.name.toLowerCase().includes(q) ||
+        item.code.toLowerCase().includes(q) ||
+        item.moduleLabel.toLowerCase().includes(q) ||
+        item.triggerLabel.toLowerCase().includes(q) ||
+        item.actionSummary.toLowerCase().includes(q)
+      );
+    });
+  }, [rulesCatalog, searchQuery, moduleFilter, statusFilter]);
+
+  const handleOpenRuleInEditor = (entry: WorkflowCatalogEntry) => {
+    setEditingRuleId(entry.id);
+    setSelectedRuleCode(entry.code);
+    setRuleTitleFull(entry.name);
+    setRuleNameInput(entry.name);
+    setTargetModule(entry.moduleKey);
+    setTriggerMode(entry.triggerMode);
+    setIsRuleActive(entry.active);
+    setViewMode('editor');
+  };
+
+  const handleToggleRuleInTable = async (entry: WorkflowCatalogEntry) => {
+    const nextActive = !entry.active;
+    const updated = rulesCatalog.map((r) =>
+      r.id === entry.id ? { ...r, active: nextActive, updatedAtLabel: 'الآن' } : r
+    );
+    persistCatalogLocally(updated);
+    if (editingRuleId === entry.id) {
+      setIsRuleActive(nextActive);
+    }
+
+    await settingsService.toggleWorkflowActive({
+      orgId: currentOrgId,
+      isCloudMode: Boolean(firebaseUser && !isPreviewMode),
+      workflowId: entry.id,
+      active: nextActive,
+    });
+
+    triggerToast(
+      nextActive
+        ? `تم تفعيل قاعدة "${entry.name}" بنجاح`
+        : `تم إيقاف قاعدة "${entry.name}" مؤقتاً`
+    );
+  };
+
+  const handleDeleteRuleInTable = async (entry: WorkflowCatalogEntry) => {
+    const updated = rulesCatalog.filter((r) => r.id !== entry.id);
+    persistCatalogLocally(updated);
+
+    await settingsService.deleteWorkflowRule({
+      orgId: currentOrgId,
+      isCloudMode: Boolean(firebaseUser && !isPreviewMode),
+      workflowId: entry.id,
+    });
+
+    triggerToast(`تم حذف قاعدة الورك فلو "${entry.name}" من النظام`);
+  };
+
   const immediateActions = useMemo(
     () => actionsList.filter((a) => a.timing === 'immediate'),
     [actionsList]
@@ -357,7 +523,7 @@ export function WorkflowRulesPage() {
     triggerToast('تم حذف الشرط من مصفوفة المعايير');
   };
 
-  // Save / Deploy Rule to Firestore `workflows` collection
+  // Save / Deploy Rule via settingsService
   const handlePersistWorkflow = async (deployActive: boolean) => {
     setIsSaving(true);
     setIsRuleActive(deployActive);
@@ -380,51 +546,76 @@ export function WorkflowRulesPage() {
     const cleanModule = moduleArabicMap[targetModule].slice(0, 60);
     const cleanTrigger = triggerArabicMap[triggerMode].slice(0, 120);
     const cleanSummary = `${immediateActions.length} إجراءات فورية + ${scheduledActions.length} مجدولة (${
-       immediateActions.map((a) => a.title.split(' ')[0]).join('، ')
+      immediateActions.map((a) => a.title.split(' ')[0]).join('، ')
     })`.slice(0, 200);
 
+    const updatedCatalog = rulesCatalog.some((r) => r.id === editingRuleId)
+      ? rulesCatalog.map((r) =>
+          r.id === editingRuleId
+            ? {
+                ...r,
+                name: cleanName,
+                moduleKey: targetModule,
+                moduleLabel: cleanModule,
+                triggerMode,
+                triggerLabel: cleanTrigger,
+                actionSummary: cleanSummary,
+                active: deployActive,
+                updatedAtLabel: 'الآن',
+              }
+            : r
+        )
+      : [
+          {
+            id: editingRuleId || `wf_${Date.now()}`,
+            code: selectedRuleCode,
+            name: cleanName,
+            moduleKey: targetModule,
+            moduleLabel: cleanModule,
+            triggerMode,
+            triggerLabel: cleanTrigger,
+            actionSummary: cleanSummary,
+            active: deployActive,
+            executionsCount: 1,
+            updatedAtLabel: 'الآن',
+          },
+          ...rulesCatalog,
+        ];
+
+    persistCatalogLocally(updatedCatalog);
+
     try {
-      if (firebaseUser) {
-        const existingWf = workflows[0];
-        if (existingWf) {
-          await updateDoc(doc(db, 'workflows', existingWf.id), {
-            name: cleanName,
-            trigger: cleanTrigger,
-            actionSummary: cleanSummary,
-            active: deployActive,
-            updatedAt: serverTimestamp(),
-          });
-        } else {
-          const newId = `${firebaseUser.uid.slice(0, 8)}_wf_${Date.now()}`;
-          await setDoc(doc(db, 'workflows', newId), {
-            ownerId: firebaseUser.uid,
-            name: cleanName,
-            module: cleanModule,
-            trigger: cleanTrigger,
-            actionSummary: cleanSummary,
-            active: deployActive,
-            executionsCount: 2840,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-        }
-      }
+      const targetWfId = workflows[0]?.id || editingRuleId || `wf_${Date.now()}`;
+      const wfPayload: WorkflowRule = {
+        id: targetWfId,
+        ownerId: firebaseUser?.uid || 'usr_preview_admin',
+        org_id: currentOrgId,
+        name: cleanName,
+        module: cleanModule,
+        trigger: cleanTrigger,
+        actionSummary: cleanSummary,
+        active: deployActive,
+        executionsCount: 2840,
+      };
+      await settingsService.saveWorkflowRule({
+        orgId: currentOrgId,
+        isCloudMode: Boolean(firebaseUser && !isPreviewMode),
+        rule: wfPayload,
+        isUpdate: Boolean(workflows[0]),
+      });
+
       setLastSavedLabel('الآن');
       triggerToast(
         deployActive
-          ? 'تم حفظ ونشر القاعدة في محرك الأتمتة (Firestore Workflows) بنجاح ✓'
+          ? 'تم حفظ ونشر القاعدة في محرك الأتمتة بنجاح ✓'
           : 'تم حفظ القاعدة كمسودة معلقة بنجاح'
       );
-    } catch (err) {
-      if (firebaseUser) {
-        handleFirestoreError(err, OperationType.WRITE, 'workflows');
-      }
     } finally {
       setIsSaving(false);
     }
   };
 
-  // Create a brand new Workflow Rule in Firestore
+  // Create a brand new Workflow Rule and open in Editor
   const handleCreateNewWorkflowRule = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newRuleName.trim()) return;
@@ -432,6 +623,37 @@ export function WorkflowRulesPage() {
     const generatedCode = `WFR-${newRuleModule.toUpperCase().slice(0, 4)}-${Math.floor(
       1000 + Math.random() * 8999
     )}`;
+    const newId = `wf_${Date.now()}`;
+    const moduleArabicMap: Record<ModuleTargetKey, string> = {
+      deals: 'الصفقات',
+      leads: 'العملاء المحتملين',
+      contacts: 'جهات الاتصال',
+      accounts: 'الحسابات',
+    };
+    const triggerArabicMap: Record<TriggerMode, string> = {
+      create_or_edit: 'عند إنشاء أو تعديل السجل',
+      create_only: 'عند إنشاء السجل لأول مرة',
+      scheduled: 'بشكل مجدول وزمني',
+      on_delete: 'عند حذف السجل',
+    };
+
+    const newCatalogItem: WorkflowCatalogEntry = {
+      id: newId,
+      code: generatedCode,
+      name: newRuleName.trim().slice(0, 120),
+      moduleKey: newRuleModule,
+      moduleLabel: moduleArabicMap[newRuleModule],
+      triggerMode: newRuleTrigger,
+      triggerLabel: triggerArabicMap[newRuleTrigger],
+      actionSummary: 'إشعار واتساب + تحديث حقل + مهمة متابعة',
+      active: true,
+      executionsCount: 0,
+      updatedAtLabel: 'الآن',
+    };
+
+    persistCatalogLocally([newCatalogItem, ...rulesCatalog]);
+
+    setEditingRuleId(newId);
     setSelectedRuleCode(generatedCode);
     setRuleTitleFull(newRuleName.trim());
     setRuleNameInput(newRuleName.trim());
@@ -439,35 +661,27 @@ export function WorkflowRulesPage() {
     setTriggerMode(newRuleTrigger);
     setIsRuleActive(true);
 
-    const moduleArabicMap: Record<ModuleTargetKey, string> = {
-      deals: 'الصفقات',
-      leads: 'العملاء المحتملين',
-      contacts: 'جهات الاتصال',
-      accounts: 'الحسابات',
-    };
-
-    if (firebaseUser) {
-      const docId = `${firebaseUser.uid.slice(0, 8)}_wf_${Date.now()}`;
-      try {
-        await setDoc(doc(db, 'workflows', docId), {
-          ownerId: firebaseUser.uid,
-          name: newRuleName.trim().slice(0, 120),
-          module: moduleArabicMap[newRuleModule].slice(0, 60),
-          trigger: 'عند إنشاء أو تعديل السجل'.slice(0, 120),
-          actionSummary: 'إشعار واتساب + تحديث حقل + مهمة متابعة'.slice(0, 200),
-          active: true,
-          executionsCount: 0,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-      } catch (err) {
-        handleFirestoreError(err, OperationType.CREATE, `workflows/${docId}`);
-      }
-    }
+    await settingsService.saveWorkflowRule({
+      orgId: currentOrgId,
+      isCloudMode: Boolean(firebaseUser && !isPreviewMode),
+      rule: {
+        id: newId,
+        ownerId: firebaseUser?.uid || 'usr_preview_admin',
+        org_id: currentOrgId,
+        name: newCatalogItem.name,
+        module: newCatalogItem.moduleLabel,
+        trigger: newCatalogItem.triggerLabel,
+        actionSummary: newCatalogItem.actionSummary,
+        active: true,
+        executionsCount: 0,
+      },
+      isUpdate: false,
+    });
 
     setShowCreateRuleModal(false);
     setNewRuleName('');
-    triggerToast(`تم إنشاء القاعدة الجديدة (${generatedCode}) وتجهيز مسار الأتمتة`);
+    setViewMode('editor');
+    triggerToast(`تم إنشاء القاعدة الجديدة (${generatedCode}) وفتح محرر الأتمتة`);
   };
 
   // Open Add Action Modal

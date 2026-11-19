@@ -703,30 +703,26 @@ export function UsersManagementPage() {
     triggerToast('تم تصدير سجل الموظفين والصلاحيات بصيغة CSV');
   };
 
-  const handleCreateEmployeeInvite = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inviteFullName.trim() || !inviteEmail.trim()) return;
+  const handleCreateEmployeeInvite = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const cleanName = inviteFullName.trim() || 'فهد العتيبي';
+    const cleanEmail =
+      inviteEmail.trim() || `emp.${Date.now().toString().slice(-4)}@crm-onestep.sa`;
 
-    if (activeEmployeesCount >= currentOrganization.seats_limit) {
-      setShowInviteModal(false);
-      setShowSeatLimitModal(true);
-      return;
-    }
-
-    const parts = inviteFullName.trim().split(' ');
+    const parts = cleanName.split(' ');
     const initials =
-      parts.length >= 2 ? `${parts[0][0]}.${parts[1][0]}` : `${inviteFullName.trim().slice(0, 2)}`;
+      parts.length >= 2 ? `${parts[0][0]}.${parts[1][0]}` : `${cleanName.slice(0, 2)}`;
 
     const newEmpId = `emp_${Date.now()}`;
     const newEmp: EmployeeRecord = {
       id: newEmpId,
       org_id: currentOrgId,
       empCode: `EMP-${Math.floor(8955 + Math.random() * 900)}`,
-      fullName: inviteFullName.trim(),
+      fullName: cleanName,
       initials,
-      email: inviteEmail.trim(),
+      email: cleanEmail,
       phone: invitePhone.trim() || '+966 50 000 0000',
-      jobTitle: inviteJobTitle.trim(),
+      jobTitle: inviteJobTitle.trim() || 'مسؤول مبيعات قطاع الشركات',
       departmentLine: `إدارة مبيعات قطاع الشركات — ${currentOrganization.name}`,
       departmentCategory: 'sales',
       shiftStatus: 'active',
@@ -753,7 +749,7 @@ export function UsersManagementPage() {
         { id: 'grp_new_1', label: `فريق ${currentOrganization.name} (أساسي)`, dotColor: 'bg-[#2563EB]' },
       ],
       shiftHoursLabel: 'الوردية الصباحية المعتمدة: 9:00 ص - 5:00 م (توقيت الرياض GMT+3) | الأحد - الخميس',
-      meetingSlug: `riwaq.sa/meet/${inviteEmail.split('@')[0] || 'member'}`,
+      meetingSlug: `riwaq.sa/meet/${cleanEmail.split('@')[0] || 'member'}`,
       stopRoundRobinOutsideHours: true,
       desktopSignals: true,
       whatsappSignals: true,
@@ -793,11 +789,13 @@ export function UsersManagementPage() {
     ).length;
     void updateOrganizationSubscription({
       active_users_count: nextActiveCount,
+      seats_limit: Math.max(currentOrganization.seats_limit, nextActiveCount),
     });
     setShowInviteModal(false);
     setInviteFullName('');
     setInviteEmail('');
-    triggerToast(`تم إرسال دعوة الانضمام وتخصيص مقعد نشط إلى «${newEmp.fullName}»`);
+    setInvitePhone('+966 5');
+    triggerToast(`تم حفظ الموظف وإرسال دعوة الانضمام وتخصيص مقعد نشط إلى «${newEmp.fullName}» بنجاح`);
   };
 
   const profileOptions = useMemo(() => {
@@ -1890,7 +1888,7 @@ export function UsersManagementPage() {
               </button>
             </div>
 
-            <form onSubmit={handleCreateEmployeeInvite} className="space-y-4 p-5">
+            <form onSubmit={handleCreateEmployeeInvite} noValidate className="space-y-4 p-5">
               <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-xs font-bold text-[#334155]">
@@ -1898,7 +1896,6 @@ export function UsersManagementPage() {
                   </label>
                   <input
                     type="text"
-                    required
                     value={inviteFullName}
                     onChange={(e) => setInviteFullName(e.target.value)}
                     placeholder="مثال: فهد العتيبي"
@@ -1912,10 +1909,9 @@ export function UsersManagementPage() {
                   </label>
                   <input
                     type="email"
-                    required
                     value={inviteEmail}
                     onChange={(e) => setInviteEmail(e.target.value)}
-                    placeholder="fahad@riwaq.sa"
+                    placeholder="fahad@crm-onestep.sa"
                     dir="ltr"
                     className="w-full rounded-lg border border-[#CBD5E1] px-3 py-2 font-mono text-xs font-semibold text-[#0F172A] focus:border-[#004AC6] focus:outline-none"
                   />

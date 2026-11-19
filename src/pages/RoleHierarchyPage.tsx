@@ -785,7 +785,7 @@ export const RoleHierarchyPage: React.FC = () => {
             >
               <span>ملفات الصلاحيات (Profiles)</span>
               <span className="rounded-full bg-[#E2E8F0]/80 px-2 py-0.5 font-mono text-[10px] font-extrabold text-[#475569] tabular-nums">
-                {Math.max(5, profiles.length)}
+                {profiles.length}
               </span>
             </button>
 

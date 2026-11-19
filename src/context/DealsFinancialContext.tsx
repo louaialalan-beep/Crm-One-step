@@ -12,6 +12,7 @@ import type {
   Deal,
   DealStage,
   Invoice,
+  PurchaseOrder,
   Quote,
   RecycleBinItem,
   SalesOrder,
@@ -59,10 +60,12 @@ export interface CreateDealInput {
 export interface StageHistoryEntry {
   id: string;
   dealId: string;
+  leadUniqueId?: string;
   dealTitle: string;
   fromStage: string;
   toStage: string;
   dwellDays: number;
+  durationDays?: number;
   changedBy: string;
   changedAt: string;
   org_id?: string;
@@ -80,13 +83,33 @@ export interface OrderAttributionEntry {
   roasMultiplier: number;
   orderedAt: string;
   org_id?: string;
+  orderNumber?: string;
+  contactName?: string;
+  accountName?: string;
+  touchChannel?: string;
+  campaign?: string;
+  touchLabel?: string;
+  amount?: number;
 }
+
+export type CreateQuotePayload = Omit<Quote, 'id' | 'ownerId' | 'quoteNumber'> &
+  Partial<Pick<Quote, 'id' | 'ownerId' | 'quoteNumber'>>;
+
+export type CreateSalesOrderPayload = Omit<SalesOrder, 'id' | 'ownerId' | 'orderNumber'> &
+  Partial<Pick<SalesOrder, 'id' | 'ownerId' | 'orderNumber'>>;
+
+export type CreateInvoicePayload = Omit<Invoice, 'id' | 'ownerId' | 'invoiceNumber'> &
+  Partial<Pick<Invoice, 'id' | 'ownerId' | 'invoiceNumber'>>;
+
+export type CreatePurchaseOrderPayload = Omit<PurchaseOrder, 'id' | 'ownerId' | 'poNumber'> &
+  Partial<Pick<PurchaseOrder, 'id' | 'ownerId' | 'poNumber'>>;
 
 export interface DealsFinancialContextValue {
   deals: Deal[];
   quotes: Quote[];
   salesOrders: SalesOrder[];
   invoices: Invoice[];
+  purchaseOrders: PurchaseOrder[];
   stageHistory: StageHistoryEntry[];
   orderAttributions: OrderAttributionEntry[];
 
@@ -118,12 +141,14 @@ export interface DealsFinancialContextValue {
       assignedToName?: string;
     }
   ) => Promise<void>;
-  createQuote: (quote: Quote) => Promise<Quote>;
+  createQuote: (quote: CreateQuotePayload) => Promise<Quote>;
   updateQuote: (quoteId: string, patch: Partial<Quote>) => Promise<void>;
-  createSalesOrder: (order: SalesOrder) => Promise<SalesOrder>;
+  createSalesOrder: (order: CreateSalesOrderPayload) => Promise<SalesOrder>;
   updateSalesOrder: (orderId: string, patch: Partial<SalesOrder>) => Promise<void>;
-  createInvoice: (invoice: Invoice) => Promise<Invoice>;
+  createInvoice: (invoice: CreateInvoicePayload) => Promise<Invoice>;
   updateInvoice: (invoiceId: string, patch: Partial<Invoice>) => Promise<void>;
+  createPurchaseOrder: (po: CreatePurchaseOrderPayload) => Promise<PurchaseOrder>;
+  updatePurchaseOrder: (poId: string, patch: Partial<PurchaseOrder>) => Promise<void>;
   recordInvoicePayment: (
     invoiceId: string,
     payment: {
@@ -687,10 +712,16 @@ export function DealsFinancialProvider({ children }: { children: React.ReactNode
     [currentOrgId, currentUser.fullName, data.deals, firebaseUser, setData]
   );
 
+  const [purchaseOrdersList, setPurchaseOrdersList] = useState<PurchaseOrder[]>([]);
+
   const createQuote = useCallback(
-    async (quote: Quote): Promise<Quote> => {
+    async (quote: CreateQuotePayload): Promise<Quote> => {
       const normalizedQuote: Quote = {
         ...quote,
+        id: quote.id || `quo_${Date.now()}`,
+        ownerId: quote.ownerId || firebaseUser?.uid || PREVIEW_OWNER_ID,
+        quoteNumber:
+          quote.quoteNumber || `QUO-2026-${String(Math.floor(1000 + Math.random() * 9000))}`,
         org_id: quote.org_id || currentOrgId,
       };
       setData((prev) => ({
@@ -715,9 +746,13 @@ export function DealsFinancialProvider({ children }: { children: React.ReactNode
   );
 
   const createSalesOrder = useCallback(
-    async (order: SalesOrder): Promise<SalesOrder> => {
+    async (order: CreateSalesOrderPayload): Promise<SalesOrder> => {
       const normalizedOrder: SalesOrder = {
         ...order,
+        id: order.id || `so_${Date.now()}`,
+        ownerId: order.ownerId || firebaseUser?.uid || PREVIEW_OWNER_ID,
+        orderNumber:
+          order.orderNumber || `SO-2026-${String(Math.floor(1000 + Math.random() * 9000))}`,
         org_id: order.org_id || currentOrgId,
       };
       setData((prev) => ({
@@ -745,9 +780,13 @@ export function DealsFinancialProvider({ children }: { children: React.ReactNode
   );
 
   const createInvoice = useCallback(
-    async (invoice: Invoice): Promise<Invoice> => {
+    async (invoice: CreateInvoicePayload): Promise<Invoice> => {
       const normalizedInvoice: Invoice = {
         ...invoice,
+        id: invoice.id || `inv_${Date.now()}`,
+        ownerId: invoice.ownerId || firebaseUser?.uid || PREVIEW_OWNER_ID,
+        invoiceNumber:
+          invoice.invoiceNumber || `INV-2026-${String(Math.floor(1000 + Math.random() * 9000))}`,
         org_id: invoice.org_id || currentOrgId,
       };
       setData((prev) => ({
@@ -772,6 +811,33 @@ export function DealsFinancialProvider({ children }: { children: React.ReactNode
       return normalizedInvoice;
     },
     [currentOrgId, firebaseUser, isPreviewMode, setData]
+  );
+
+  const createPurchaseOrder = useCallback(
+    async (po: CreatePurchaseOrderPayload): Promise<PurchaseOrder> => {
+      const normalizedPo: PurchaseOrder = {
+        ...po,
+        id: po.id || `po_${Date.now()}`,
+        ownerId: po.ownerId || firebaseUser?.uid || PREVIEW_OWNER_ID,
+        poNumber: po.poNumber || `PO-2026-${String(Math.floor(1000 + Math.random() * 9000))}`,
+        org_id: po.org_id || currentOrgId,
+      };
+      setPurchaseOrdersList((prev) => [
+        normalizedPo,
+        ...prev.filter((item) => item.id !== normalizedPo.id),
+      ]);
+      return normalizedPo;
+    },
+    [currentOrgId, firebaseUser]
+  );
+
+  const updatePurchaseOrder = useCallback(
+    async (poId: string, patch: Partial<PurchaseOrder>): Promise<void> => {
+      setPurchaseOrdersList((prev) =>
+        prev.map((item) => (item.id === poId ? { ...item, ...patch } : item))
+      );
+    },
+    []
   );
 
   const convertQuoteToSalesOrder = useCallback(
@@ -1001,12 +1067,18 @@ export function DealsFinancialProvider({ children }: { children: React.ReactNode
     }));
   }, [belongsToCurrentOrg, currentOrgId, orderAttributions, scopedSalesOrders]);
 
+  const scopedPurchaseOrders = useMemo(
+    () => purchaseOrdersList.filter((po) => belongsToCurrentOrg(po.org_id)),
+    [belongsToCurrentOrg, purchaseOrdersList]
+  );
+
   const value = useMemo<DealsFinancialContextValue>(
     () => ({
       deals: scopedDeals,
       quotes: scopedQuotes,
       salesOrders: scopedSalesOrders,
       invoices: scopedInvoices,
+      purchaseOrders: scopedPurchaseOrders,
       stageHistory: scopedStageHistory,
       orderAttributions: scopedOrderAttributions,
       createQuickDeal,
@@ -1023,6 +1095,8 @@ export function DealsFinancialProvider({ children }: { children: React.ReactNode
       updateSalesOrder,
       createInvoice,
       updateInvoice,
+      createPurchaseOrder,
+      updatePurchaseOrder,
       recordInvoicePayment,
       convertQuoteToSalesOrder,
       convertSalesOrderToInvoice,
@@ -1032,6 +1106,7 @@ export function DealsFinancialProvider({ children }: { children: React.ReactNode
       scopedQuotes,
       scopedSalesOrders,
       scopedInvoices,
+      scopedPurchaseOrders,
       scopedStageHistory,
       scopedOrderAttributions,
       createQuickDeal,
@@ -1048,6 +1123,8 @@ export function DealsFinancialProvider({ children }: { children: React.ReactNode
       updateSalesOrder,
       createInvoice,
       updateInvoice,
+      createPurchaseOrder,
+      updatePurchaseOrder,
       recordInvoicePayment,
       convertQuoteToSalesOrder,
       convertSalesOrderToInvoice,

@@ -168,14 +168,14 @@ export const SubscriptionPage: React.FC<{ defaultTab?: 'subscription' | 'company
           <div className="flex items-center gap-2 pt-2">
             <button
               type="button"
-              onClick={() => alert('تم توجيهك لصفقة ترقية وتغيير الباقة.')}
+              onClick={() => triggerToast('تم توجيهك لصفحة ترقية وتغيير الباقة.')}
               className="flex-1 py-2 rounded-lg bg-[#2563EB] text-white font-bold text-xs hover:bg-[#1D4ED8] cursor-pointer"
             >
               ترقية الباقة أو تغيير الدورة
             </button>
             <button
               type="button"
-              onClick={() => alert('إيصالات الفوترة الضريبية جاهزة للتحميل.')}
+              onClick={() => triggerToast('إيصالات الفوترة الضريبية جاهزة للتحميل.')}
               className="px-3 py-2 rounded-lg border border-[#E2E8F0] hover:bg-[#F8FAFC] font-bold text-xs cursor-pointer"
             >
               بيانات الفوترة
@@ -187,7 +187,9 @@ export const SubscriptionPage: React.FC<{ defaultTab?: 'subscription' | 'company
         <div className="bg-white border border-[#E2E8F0] rounded-xl p-4 shadow-xs space-y-4">
           <div className="flex items-center justify-between">
             <span className="text-xs text-[#64748B]">مقاعد المستخدمين والتراخيص النشطة</span>
-            <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-bold">7 مقاعد شاغرة</span>
+            <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-bold tabular-nums">
+              {Math.max(0, currentOrganization.seats_limit - currentOrganization.active_users_count)} مقاعد شاغرة
+            </span>
           </div>
 
           <div>
@@ -203,15 +205,21 @@ export const SubscriptionPage: React.FC<{ defaultTab?: 'subscription' | 'company
 
           <div className="grid grid-cols-3 gap-2 text-center text-xs bg-[#F8FAFC] p-2.5 rounded-xl border border-[#E2E8F0]">
             <div>
-              <div className="font-bold text-[#0F172A]">12</div>
+              <div className="font-bold text-[#0F172A] tabular-nums">
+                {Math.max(0, currentOrganization.active_users_count - Math.min(currentOrganization.active_users_count, 1) - (currentOrganization.active_users_count > 3 ? Math.floor(currentOrganization.active_users_count * 0.22) : 0))}
+              </div>
               <div className="text-[10px] text-[#64748B]">فريق المبيعات</div>
             </div>
             <div>
-              <div className="font-bold text-[#0F172A]">4</div>
+              <div className="font-bold text-[#0F172A] tabular-nums">
+                {currentOrganization.active_users_count > 3 ? Math.floor(currentOrganization.active_users_count * 0.22) : 0}
+              </div>
               <div className="text-[10px] text-[#64748B]">دعم ومحادثات</div>
             </div>
             <div>
-              <div className="font-bold text-[#0F172A]">2</div>
+              <div className="font-bold text-[#0F172A] tabular-nums">
+                {Math.min(currentOrganization.active_users_count, currentOrganization.active_users_count > 5 ? 2 : 1)}
+              </div>
               <div className="text-[10px] text-[#64748B]">مدراء نظام</div>
             </div>
           </div>
@@ -229,7 +237,7 @@ export const SubscriptionPage: React.FC<{ defaultTab?: 'subscription' | 'company
             </button>
             <button
               type="button"
-              onClick={() => alert('تم فتح نافذة إدارة وتخصيص المقاعد للمستخدمين.')}
+              onClick={() => triggerToast('تم تحديث إعدادات وتخصيص مقاعد المستخدمين.')}
               className="px-3 py-2 rounded-lg border border-[#E2E8F0] hover:bg-[#F8FAFC] font-bold text-xs cursor-pointer"
             >
               إدارة التخصيص

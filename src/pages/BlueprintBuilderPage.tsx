@@ -1808,45 +1808,6 @@ export const BlueprintBuilderPage: React.FC = () => {
           </div>
         </div>
 
-        {/* KPI Strip */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-2xs">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-[#64748B]">إجمالي المخططات (Blueprints)</span>
-              <Layers className="h-4 w-4 text-[#2563EB]" />
-            </div>
-            <p className="mt-2 text-2xl font-bold text-[#0F172A] tabular-nums">{blueprints.length}</p>
-            <p className="mt-1 text-[11px] text-[#64748B]">عدد غير محدود من المسارات للمؤسسة</p>
-          </div>
-
-          <div className="rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-2xs">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-[#64748B]">المخططات النشطة حالياً</span>
-              <CheckCircle2 className="h-4 w-4 text-[#10B981]" />
-            </div>
-            <p className="mt-2 text-2xl font-bold text-[#10B981] tabular-nums">{activeCount}</p>
-            <p className="mt-1 text-[11px] text-[#64748B]">تطبق الحوكمة الإلزامية على السجلات</p>
-          </div>
-
-          <div className="rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-2xs">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-[#64748B]">إجمالي المراحل المفعلة (States)</span>
-              <LayoutGrid className="h-4 w-4 text-[#0284C7]" />
-            </div>
-            <p className="mt-2 text-2xl font-bold text-[#0F172A] tabular-nums">{totalStagesCount}</p>
-            <p className="mt-1 text-[11px] text-[#64748B]">مراحل موزعة على لوحات التدفق البصري</p>
-          </div>
-
-          <div className="rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-2xs">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-[#64748B]">إجمالي الانتقالات (Transitions)</span>
-              <Zap className="h-4 w-4 text-[#D97706]" />
-            </div>
-            <p className="mt-2 text-2xl font-bold text-[#0F172A] tabular-nums">{totalTransitionsCount}</p>
-            <p className="mt-1 text-[11px] text-[#64748B]">بوابات تحقق Before / During / After</p>
-          </div>
-        </div>
-
         {/* Search & Filter Bar */}
         <div className="flex flex-col gap-3 rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-2xs md:flex-row md:items-center md:justify-between">
           <div className="relative flex-1 max-w-md">

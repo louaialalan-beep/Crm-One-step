@@ -26,6 +26,9 @@ import type { ParsedCsvContactDraft } from '../utils/contactsLogic';
 import type { ParsedCsvLeadDraft } from '../utils/leadsLogic';
 import { PREVIEW_OWNER_ID, stripUndefined, useAuth } from './AuthContext';
 import { useSetup } from './SetupContext';
+import { leadsService } from '../services/leadsService';
+import { contactsService } from '../services/contactsService';
+import { accountsService } from '../services/accountsService';
 
 export interface CreateLeadInput {
   fullName: string;
@@ -1007,93 +1010,51 @@ export function LeadsContactsProvider({ children }: { children: React.ReactNode 
         ...prev,
       ]);
 
-      if (!firebaseUser) {
-        setData((prev) => ({
-          ...prev,
-          accounts: newAccount ? [newAccount, ...prev.accounts] : prev.accounts,
-          contacts: newContact ? [newContact, ...prev.contacts] : prev.contacts,
-          deals: newDeal ? [newDeal, ...prev.deals] : prev.deals,
-          leads: prev.leads.map((l) => (l.id === lead.id ? { ...l, ...leadPatch } : l)),
-          touchpoints: prev.touchpoints.map((tp) =>
-            tp.leadId === lead.id || tp.leadUniqueId === lead.unique_id
-              ? {
-                  ...tp,
-                  leadUniqueId: lead.unique_id,
-                  relatedEntityType: targetEntityType,
-                  relatedEntityId: targetEntityId,
-                  relatedEntityName: targetEntityName,
-                }
-              : tp
-          ),
-          messages: prev.messages.map((msg) =>
-            msg.leadId === lead.id || msg.leadUniqueId === lead.unique_id
-              ? { ...msg, leadUniqueId: lead.unique_id }
-              : msg
-          ),
-        }));
+      const touchpointsToMigrate = data.touchpoints.filter(
+        (tp) => tp.leadId === lead.id || tp.leadUniqueId === lead.unique_id
+      );
 
-        return {
-          contactId: resolvedContactId,
-          accountId: resolvedAccountId || undefined,
-          dealId: resolvedDealId,
-        };
-      }
-
-      try {
-        const batch = writeBatch(db);
-        if (newAccount) {
-          const { id: accId, ...accRest } = newAccount;
-          batch.set(doc(db, 'accounts', accId), {
-            ...stripUndefined(accRest),
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-        }
-        if (newContact) {
-          const { id: conId, ...conRest } = newContact;
-          batch.set(doc(db, 'contacts', conId), {
-            ...stripUndefined(conRest),
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-        }
-        if (newDeal) {
-          const { id: dId, ...dRest } = newDeal;
-          batch.set(doc(db, 'deals', dId), {
-            ...stripUndefined(dRest),
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-        }
-
-        batch.update(doc(db, 'leads', lead.id), {
-          ...stripUndefined(leadPatch),
-          updatedAt: serverTimestamp(),
-        });
-
-        for (const tp of data.touchpoints) {
-          if (tp.leadId === lead.id || tp.leadUniqueId === lead.unique_id) {
-            batch.update(doc(db, 'touchpoints', tp.id), {
-              relatedEntityType: targetEntityType,
-              relatedEntityId: targetEntityId,
-              relatedEntityName: targetEntityName,
-              leadId: lead.id,
-              leadUniqueId: lead.unique_id,
-              updatedAt: serverTimestamp(),
-            });
-          }
-        }
-
-        await batch.commit();
-      } catch (err) {
-        handleFirestoreError(err, OperationType.WRITE, `leads_convert/${lead.id}`);
-      }
-
-      return {
-        contactId: resolvedContactId,
-        accountId: resolvedAccountId || undefined,
-        dealId: resolvedDealId,
-      };
+      return leadsService.convertLeadAtomic({
+        orgId: currentOrgId,
+        isCloudMode: Boolean(firebaseUser),
+        lead,
+        leadPatch,
+        newAccount,
+        newContact,
+        newDeal,
+        touchpointsToMigrate,
+        targetEntityType,
+        targetEntityId,
+        targetEntityName,
+        resolvedContactId,
+        resolvedAccountId: resolvedAccountId || undefined,
+        resolvedDealId,
+        onPreviewApply: () => {
+          setData((prev) => ({
+            ...prev,
+            accounts: newAccount ? [newAccount, ...prev.accounts] : prev.accounts,
+            contacts: newContact ? [newContact, ...prev.contacts] : prev.contacts,
+            deals: newDeal ? [newDeal, ...prev.deals] : prev.deals,
+            leads: prev.leads.map((l) => (l.id === lead.id ? { ...l, ...leadPatch } : l)),
+            touchpoints: prev.touchpoints.map((tp) =>
+              tp.leadId === lead.id || tp.leadUniqueId === lead.unique_id
+                ? {
+                    ...tp,
+                    leadUniqueId: lead.unique_id,
+                    relatedEntityType: targetEntityType,
+                    relatedEntityId: targetEntityId,
+                    relatedEntityName: targetEntityName,
+                  }
+                : tp
+            ),
+            messages: prev.messages.map((msg) =>
+              msg.leadId === lead.id || msg.leadUniqueId === lead.unique_id
+                ? { ...msg, leadUniqueId: lead.unique_id }
+                : msg
+            ),
+          }));
+        },
+      });
     },
     [
       currentOrgId,
@@ -1208,44 +1169,21 @@ export function LeadsContactsProvider({ children }: { children: React.ReactNode 
         ...prev,
       ]);
 
-      if (!firebaseUser) {
-        setData((prev) => ({
-          ...prev,
-          accounts: newAccount ? [newAccount, ...prev.accounts] : prev.accounts,
-          contacts: [newContact, ...prev.contacts],
-          touchpoints: [initialTp, ...prev.touchpoints],
-        }));
-        return newContact;
-      }
-
-      try {
-        const batch = writeBatch(db);
-        if (newAccount) {
-          const { id: _aId, ...accRest } = newAccount;
-          batch.set(doc(db, 'accounts', resolvedAccountId), {
-            ...stripUndefined(accRest),
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-        }
-        const { id: _cId, ...conRest } = newContact;
-        batch.set(doc(db, 'contacts', newContactId), {
-          ...stripUndefined(conRest),
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-        const { id: tpId, ...tpRest } = initialTp;
-        batch.set(doc(db, 'touchpoints', tpId), {
-          ...stripUndefined(tpRest),
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-        await batch.commit();
-      } catch (err) {
-        handleFirestoreError(err, OperationType.CREATE, `contacts/${newContactId}`);
-      }
-
-      return newContact;
+      return contactsService.createContactWithTouchpoint({
+        orgId: currentOrgId,
+        isCloudMode: Boolean(firebaseUser),
+        contact: newContact,
+        newAccount,
+        initialTouchpoint: initialTp,
+        onPreviewApply: () => {
+          setData((prev) => ({
+            ...prev,
+            accounts: newAccount ? [newAccount, ...prev.accounts] : prev.accounts,
+            contacts: [newContact, ...prev.contacts],
+            touchpoints: [initialTp, ...prev.touchpoints],
+          }));
+        },
+      });
     },
     [
       currentOrgId,
@@ -1824,11 +1762,6 @@ export function LeadsContactsProvider({ children }: { children: React.ReactNode 
         leadUniqueId: input.leadUniqueId?.trim().slice(0, 16) || undefined,
       };
 
-      setData((prev) => ({
-        ...prev,
-        accounts: [newAcc, ...prev.accounts],
-      }));
-
       setSignals((prev) => [
         {
           id: `sig_acc_${Date.now()}`,
@@ -1843,38 +1776,24 @@ export function LeadsContactsProvider({ children }: { children: React.ReactNode 
         ...prev,
       ]);
 
-      if (firebaseUser) {
-        try {
-          const { id: _id, ...rest } = newAcc;
-          await setDoc(doc(db, 'accounts', newId), {
-            ...stripUndefined(rest),
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-        } catch (err) {
-          handleFirestoreError(err, OperationType.CREATE, `accounts/${newId}`);
-        }
-      }
-
-      return newAcc;
+      return accountsService.createAccount({
+        orgId: currentOrgId,
+        isCloudMode: Boolean(firebaseUser),
+        account: newAcc,
+        onPreviewApply: () => {
+          setData((prev) => ({
+            ...prev,
+            accounts: [newAcc, ...prev.accounts],
+          }));
+        },
+      });
     },
     [currentOrgId, currentUser.fullName, firebaseUser, setData, setSignals]
   );
 
   const updateAccountFields = useCallback(
     async (accountId: string, patch: Partial<Account>) => {
-      setData((prev) => ({
-        ...prev,
-        accounts: prev.accounts.map((a) =>
-          a.id === accountId ? { ...a, ...patch } : a
-        ),
-      }));
-
-      if (!firebaseUser) return;
-      const target = data.accounts.find((a) => a.id === accountId);
-      if (!target) return;
-
-      const allowedPatch: Record<string, unknown> = {};
+      const allowedPatch: Partial<Account> = {};
       if (patch.name !== undefined) allowedPatch.name = patch.name.trim().slice(0, 150);
       if (patch.industry !== undefined) allowedPatch.industry = patch.industry.trim().slice(0, 100);
       if (patch.city !== undefined) allowedPatch.city = patch.city.trim().slice(0, 80);
@@ -1887,16 +1806,22 @@ export function LeadsContactsProvider({ children }: { children: React.ReactNode 
       if (patch.accountManager !== undefined)
         allowedPatch.accountManager = patch.accountManager.trim().slice(0, 120);
 
-      try {
-        await updateDoc(doc(db, 'accounts', target.id), {
-          ...stripUndefined(allowedPatch),
-          updatedAt: serverTimestamp(),
-        });
-      } catch (err) {
-        handleFirestoreError(err, OperationType.UPDATE, `accounts/${target.id}`);
-      }
+      await accountsService.updateAccountFields({
+        orgId: currentOrgId,
+        isCloudMode: Boolean(firebaseUser),
+        accountId,
+        patch: allowedPatch,
+        onPreviewApply: () => {
+          setData((prev) => ({
+            ...prev,
+            accounts: prev.accounts.map((a) =>
+              a.id === accountId ? { ...a, ...patch } : a
+            ),
+          }));
+        },
+      });
     },
-    [data.accounts, firebaseUser, setData]
+    [currentOrgId, firebaseUser, setData]
   );
 
   const scopedLeads = useMemo(
