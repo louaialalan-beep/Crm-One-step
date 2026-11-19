@@ -28,6 +28,7 @@ import {
   PlusCircle,
   RefreshCw,
   Save,
+  Search,
   Settings,
   Share2,
   ShieldCheck,
@@ -877,6 +878,16 @@ export function WorkflowRulesPage() {
 
           {/* Left Buttons Group */}
           <div className="flex flex-wrap items-center gap-2">
+            {viewMode === 'editor' && (
+              <button
+                type="button"
+                onClick={() => setViewMode('list')}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[#2563EB] bg-[#EFF6FF] px-3.5 py-2 text-xs font-extrabold text-[#1D4ED8] transition hover:bg-[#DBEAFE]"
+              >
+                <span>← العودة لقائمة القواعد</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={() => setShowExecutionLogsModal(true)}
@@ -904,7 +915,7 @@ export function WorkflowRulesPage() {
               className="inline-flex items-center gap-1.5 rounded-lg bg-[#004AC6] px-4 py-2 text-xs font-extrabold text-white shadow-xs transition hover:bg-[#003999]"
             >
               <Plus className="h-4 w-4" />
-              <span>إنشاء قاعدة جديدة</span>
+              <span>+ قاعدة جديدة</span>
             </button>
 
             <div className="relative">
@@ -1002,14 +1013,196 @@ export function WorkflowRulesPage() {
 
       {/* Main Content Container */}
       <div className="w-full space-y-4 px-6 py-5">
-        {/* 2. Rule Configuration Card */}
-        <div className="rounded-2xl border border-[#E2E8F0] bg-white p-6 shadow-2xs">
-          {/* Card Header */}
-          <div className="flex flex-col justify-between gap-4 border-b border-[#F1F5F9] pb-5 lg:flex-row lg:items-center">
-            <div className="flex items-start gap-3.5">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#EFF6FF] text-[#004AC6]">
-                <SlidersHorizontal className="h-5 w-5" />
+        {viewMode === 'list' ? (
+          <div className="rounded-2xl border border-[#E2E8F0] bg-white shadow-2xs overflow-hidden">
+            {/* List View Filter & Search Toolbar */}
+            <div className="flex flex-col gap-3 border-b border-[#E2E8F0] bg-[#F8FAFC]/60 p-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-wrap items-center gap-2.5 flex-1">
+                <div className="relative w-full sm:max-w-xs">
+                  <Search className="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-[#64748B]" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="ابحث باسم القاعدة، الرمز، أو المشغّل..."
+                    className="w-full rounded-xl border border-[#CBD5E1] bg-white py-2 pr-9 pl-3 text-xs font-semibold text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#004AC6] focus:outline-none"
+                  />
+                </div>
+
+                <select
+                  value={moduleFilter}
+                  onChange={(e) => setModuleFilter(e.target.value as 'ALL' | ModuleTargetKey)}
+                  aria-label="فلترة حسب الموديول"
+                  className="rounded-xl border border-[#CBD5E1] bg-white px-3 py-2 text-xs font-bold text-[#334155] focus:border-[#004AC6] focus:outline-none"
+                >
+                  <option value="ALL">جميع الموديولات ({rulesCatalog.length})</option>
+                  <option value="deals">الصفقات</option>
+                  <option value="leads">العملاء المحتملين</option>
+                  <option value="contacts">جهات الاتصال</option>
+                  <option value="accounts">الحسابات</option>
+                </select>
+
+                <select
+                  value={statusFilter}
+                  onChange={(e) =>
+                    setStatusFilter(e.target.value as 'ALL' | 'ACTIVE' | 'INACTIVE')
+                  }
+                  aria-label="فلترة حسب الحالة"
+                  className="rounded-xl border border-[#CBD5E1] bg-white px-3 py-2 text-xs font-bold text-[#334155] focus:border-[#004AC6] focus:outline-none"
+                >
+                  <option value="ALL">كل الحالات</option>
+                  <option value="ACTIVE">مفعلة ونشطة</option>
+                  <option value="INACTIVE">متوقفة / مسودة</option>
+                </select>
               </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateRuleModal(true)}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#004AC6] px-4 py-2 text-xs font-extrabold text-white shadow-2xs transition hover:bg-[#003999]"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>+ قاعدة جديدة</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Workflow Rules Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-xs">
+                <thead className="border-b border-[#E2E8F0] bg-[#F8FAFC] text-[11px] font-extrabold text-[#475569]">
+                  <tr>
+                    <th className="px-4 py-3.5">اسم قاعدة الورك فلو</th>
+                    <th className="px-4 py-3.5">الرمز</th>
+                    <th className="px-4 py-3.5">الموديول</th>
+                    <th className="px-4 py-3.5">المشغّل (Trigger)</th>
+                    <th className="px-4 py-3.5 text-center">الحالة (تفعيل/إيقاف)</th>
+                    <th className="px-4 py-3.5 text-left">الإجراءات</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#F1F5F9]">
+                  {filteredCatalog.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-10 text-center text-[#64748B]">
+                        لا توجد قواعد ورك فلو مطابقة لمعايير البحث الحالية.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredCatalog.map((entry) => (
+                      <tr
+                        key={entry.id}
+                        className="group transition hover:bg-[#F8FAFC]/80"
+                      >
+                        <td className="px-4 py-3.5">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenRuleInEditor(entry)}
+                            className="text-right font-extrabold text-[#0F172A] group-hover:text-[#004AC6] transition"
+                          >
+                            {entry.name}
+                          </button>
+                          <p className="mt-0.5 text-[11px] text-[#64748B]">
+                            {entry.actionSummary}
+                          </p>
+                        </td>
+
+                        <td className="px-4 py-3.5 whitespace-nowrap">
+                          <span className="rounded-md border border-[#E2E8F0] bg-[#F8FAFC] px-2 py-1 font-mono text-[11px] font-bold text-[#2563EB]">
+                            {entry.code}
+                          </span>
+                        </td>
+
+                        <td className="px-4 py-3.5 whitespace-nowrap">
+                          <span className="rounded-lg bg-[#EFF6FF] px-2.5 py-1 text-[11px] font-extrabold text-[#1D4ED8]">
+                            {entry.moduleLabel}
+                          </span>
+                        </td>
+
+                        <td className="px-4 py-3.5 text-[#334155] font-semibold">
+                          {entry.triggerLabel}
+                        </td>
+
+                        <td className="px-4 py-3.5 text-center whitespace-nowrap">
+                          <div className="inline-flex items-center gap-2">
+                            <button
+                              type="button"
+                              role="switch"
+                              aria-checked={entry.active}
+                              onClick={() => void handleToggleRuleInTable(entry)}
+                              className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                                entry.active ? 'bg-[#059669]' : 'bg-[#CBD5E1]'
+                              }`}
+                            >
+                              <span
+                                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-xs transition duration-200 ease-in-out ${
+                                  entry.active ? '-translate-x-5' : 'translate-x-0'
+                                }`}
+                              />
+                            </button>
+                            <span
+                              className={`text-[11px] font-extrabold ${
+                                entry.active ? 'text-[#059669]' : 'text-[#64748B]'
+                              }`}
+                            >
+                              {entry.active ? 'نشط' : 'متوقف'}
+                            </span>
+                          </div>
+                        </td>
+
+                        <td className="px-4 py-3.5 text-left whitespace-nowrap">
+                          <div className="inline-flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenRuleInEditor(entry)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-[#BFDBFE] bg-[#EFF6FF] px-3 py-1.5 text-[11px] font-extrabold text-[#1D4ED8] transition hover:bg-[#DBEAFE]"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                              <span>تعديل</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleDeleteRuleInTable(entry)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-[#FECDD3] bg-[#FFF1F2] px-2.5 py-1.5 text-[11px] font-bold text-[#E11D48] transition hover:bg-[#FFE4E6]"
+                              title="حذف القاعدة"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              <span>حذف</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Top Editor Navigation Strip */}
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#BFDBFE] bg-[#EFF6FF]/70 px-4 py-2.5">
+              <div className="flex items-center gap-2 text-xs font-bold text-[#1E3A8A]">
+                <span>وضع محرر قاعدة الورك فلو:</span>
+                <span className="font-mono text-[#2563EB]">{selectedRuleCode}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewMode('list')}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-white border border-[#93C5FD] px-3.5 py-1.5 text-xs font-extrabold text-[#1D4ED8] shadow-2xs transition hover:bg-[#DBEAFE]"
+              >
+                <span>← العودة لقائمة القواعد</span>
+              </button>
+            </div>
+
+            {/* 2. Rule Configuration Card */}
+            <div className="rounded-2xl border border-[#E2E8F0] bg-white p-6 shadow-2xs">
+              {/* Card Header */}
+              <div className="flex flex-col justify-between gap-4 border-b border-[#F1F5F9] pb-5 lg:flex-row lg:items-center">
+                <div className="flex items-start gap-3.5">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#EFF6FF] text-[#004AC6]">
+                    <SlidersHorizontal className="h-5 w-5" />
+                  </div>
 
               <div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -1781,9 +1974,12 @@ export function WorkflowRulesPage() {
             <span className="font-extrabold text-[#0F172A]">{lastSavedLabel}</span>
           </div>
         </div>
+          </>
+        )}
       </div>
 
-      {/* 7. Sticky Bottom Deployment Bar */}
+      {/* 7. Sticky Bottom Deployment Bar (visible in editor mode) */}
+      {viewMode === 'editor' && (
       <div className="fixed right-0 bottom-0 left-0 z-40 border-t border-[#E2E8F0] bg-white/95 px-6 py-3 shadow-lg backdrop-blur-xs">
         <div className="mx-auto flex w-full flex-wrap items-center justify-between gap-3">
           {/* Right Side inside RTL bar: Save & Deploy + Save as Draft + Test with Live Deal */}
@@ -1825,7 +2021,7 @@ export function WorkflowRulesPage() {
             </button>
           </div>
 
-          {/* Left Side inside RTL bar: Revert + Cancel */}
+          {/* Left Side inside RTL bar: Revert + Back to list */}
           <div className="flex items-center gap-4 text-xs font-bold">
             <button
               type="button"
@@ -1834,12 +2030,17 @@ export function WorkflowRulesPage() {
             >
               تراجع عن التعديلات
             </button>
-            <Link to="/settings" className="text-[#E11D48] transition hover:underline">
-              إلغاء
-            </Link>
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              className="text-[#E11D48] transition hover:underline"
+            >
+              ← العودة لقائمة القواعد
+            </button>
           </div>
         </div>
       </div>
+      )}
 
       {/* Modal 1: Add / Edit Workflow Action */}
       {showAddActionModal && (
@@ -2017,7 +2218,7 @@ export function WorkflowRulesPage() {
             <div className="space-y-4 p-5">
               <div className="rounded-xl border border-[#A7F3D0] bg-[#F0FDF4] p-4 text-xs leading-relaxed text-[#0F172A]">
                 <p className="font-extrabold text-[#065F46]">
-                  🎉 إشعار إتمام تعاقد صفقة كبرى — رواق CRM
+                  🎉 إشعار إتمام تعاقد صفقة كبرى — Crm-One-step
                 </p>
                 <p className="mt-2">
                   مرحباً <strong>طارق العتيبي</strong>، تم بحمد الله إغلاق الصفقة{' '}

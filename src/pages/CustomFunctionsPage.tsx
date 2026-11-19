@@ -10,6 +10,7 @@ import {
   FileText,
   Key,
   Layers,
+  Pencil,
   Play,
   Plus,
   RefreshCw,
@@ -150,6 +151,7 @@ export default async function handle({ input, env }) {
     },
   ]);
 
+  const [viewMode, setViewMode] = useState<'list' | 'editor'>('list');
   const [selectedFuncId, setSelectedFuncId] = useState<string>('func_1');
   const activeFunc = functionsList.find((f) => f.id === selectedFuncId) || functionsList[0];
 
@@ -158,6 +160,20 @@ export default async function handle({ input, env }) {
   const [editorTrigger, setEditorTrigger] = useState<'workflow' | 'custom_button' | 'cron' | 'webhook'>(activeFunc.triggerType);
   const [filterTrigger, setFilterTrigger] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  const triggerToast = (msg: string) => {
+    setToastMsg(msg);
+    window.setTimeout(() => {
+      setToastMsg((prev) => (prev === msg ? null : prev));
+    }, 3400);
+  };
+
+  const openFunctionInEditor = (funcId: string) => {
+    setSelectedFuncId(funcId);
+    setViewMode('editor');
+    window.dispatchEvent(new CustomEvent('crm:sidebar-collapse', { detail: true }));
+  };
 
   // Test console states
   const [sampleRecordId, setSampleRecordId] = useState('DEAL-84920');
@@ -285,7 +301,7 @@ export default async function handle({ input, env }) {
       };
       setExecutionLogs([newLog, ...executionLogs]);
     } catch {
-      alert('حدث خطأ أثناء تشغيل الدالة في بيئة المعزولة (Sandbox).');
+      triggerToast('حدث خطأ أثناء تشغيل الدالة في البيئة المعزولة (Sandbox).');
     } finally {
       setIsExecuting(false);
     }
@@ -296,7 +312,7 @@ export default async function handle({ input, env }) {
       f.id === activeFunc.id ? { ...f, code: editorCode, language: editorLanguage, triggerType: editorTrigger, updatedAt: 'الآن' } : f
     );
     setFunctionsList(updated);
-    alert(`تم حفظ ونشر الدالة (${activeFunc.name}) بنجاح في سحابة Firestore.`);
+    triggerToast(`تم حفظ ونشر الدالة (${activeFunc.name}) بنجاح في سحابة Crm-One-step.`);
   };
 
   const handleCreateFunction = () => {
@@ -314,8 +330,39 @@ export default async function handle({ input, env }) {
       isActive: true,
       updatedAt: 'الآن',
     };
-    setFunctionsList([...functionsList, newFunc]);
-    setSelectedFuncId(newId);
+    setFunctionsList([newFunc, ...functionsList]);
+    openFunctionInEditor(newId);
+    triggerToast('تم إنشاء دالة مخصصة جديدة وفتح محرر الكود');
+  };
+
+  const handleToggleFunctionActive = (funcId: string) => {
+    setFunctionsList((prev) =>
+      prev.map((f) =>
+        f.id === funcId ? { ...f, isActive: !f.isActive, updatedAt: 'الآن' } : f
+      )
+    );
+    const target = functionsList.find((f) => f.id === funcId);
+    if (target) {
+      triggerToast(
+        !target.isActive
+          ? `تم تفعيل الدالة «${target.name}» بنجاح`
+          : `تم إيقاف الدالة «${target.name}» مؤقتاً`
+      );
+    }
+  };
+
+  const handleDeleteFunction = (funcId: string) => {
+    if (functionsList.length <= 1) {
+      triggerToast('يجب الإبقاء على دالة واحدة على الأقل في النظام');
+      return;
+    }
+    const target = functionsList.find((f) => f.id === funcId);
+    const next = functionsList.filter((f) => f.id !== funcId);
+    setFunctionsList(next);
+    if (selectedFuncId === funcId && next[0]) {
+      setSelectedFuncId(next[0].id);
+    }
+    triggerToast(`تم حذف الدالة «${target?.name || funcId}» بنجاح`);
   };
 
   const handleAddSecret = (e: React.FormEvent) => {
@@ -331,11 +378,18 @@ export default async function handle({ input, env }) {
     setSecretsList([...secretsList, sec]);
     setNewKeyName('');
     setNewKeyValue('');
-    alert('تم تشفير وحفظ المتغير السري بـ AES-256 بنجاح.');
+    triggerToast('تم تشفير وحفظ المتغير السري بـ AES-256 بنجاح.');
   };
 
   return (
     <div dir="rtl" className="w-full h-[calc(100vh-65px)] flex flex-col bg-[#0F172A] text-white">
+      {toastMsg && (
+        <div className="fixed bottom-6 left-6 z-50 flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-[#0F172A] px-4 py-3 text-xs font-bold text-emerald-300 shadow-2xl">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{toastMsg}</span>
+        </div>
+      )}
+
       {/* Top Banner Bar */}
       <div className="bg-[#1E293B] border-b border-[#334155] px-6 py-3 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -359,7 +413,16 @@ export default async function handle({ input, env }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
+          {viewMode === 'editor' && (
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              className="px-3.5 py-2 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 text-xs font-extrabold flex items-center gap-1.5 transition-colors cursor-pointer border border-blue-500/40"
+            >
+              <span>← العودة لقائمة الدوال</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setIsSecretsModalOpen(true)}
@@ -370,7 +433,7 @@ export default async function handle({ input, env }) {
           </button>
           <button
             type="button"
-            onClick={() => alert('تم تصدير سجل التنفيذ الشامل (Audit Log) بصيغة JSON & CSV.')}
+            onClick={() => triggerToast('تم تصدير سجل التنفيذ الشامل (Audit Log) بصيغة JSON & CSV.')}
             className="px-3.5 py-2 rounded-xl bg-[#334155] hover:bg-[#475569] text-slate-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-600"
           >
             <Activity className="w-3.5 h-3.5 text-blue-400" />
@@ -382,12 +445,184 @@ export default async function handle({ input, env }) {
             className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            إنشاء دالة جديدة
+            + دالة جديدة
           </button>
         </div>
       </div>
 
-      {/* Main 3-Column Layout */}
+      {viewMode === 'list' ? (
+        <div className="flex-1 overflow-y-auto bg-[#F8FAFC] text-[#0F172A] p-6">
+          <div className="mx-auto max-w-[1440px] space-y-4">
+            {/* List Toolbar */}
+            <div className="flex flex-col gap-3 rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-2xs lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-wrap items-center gap-2.5 flex-1">
+                <div className="relative w-full sm:max-w-xs">
+                  <Search className="w-4 h-4 text-[#64748B] absolute right-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="ابحث باسم الدالة، الوصف، أو API Name..."
+                    className="w-full pr-9 pl-3 py-2 rounded-xl bg-white border border-[#CBD5E1] text-xs font-semibold text-[#0F172A] focus:outline-none focus:border-[#2563EB]"
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {[
+                    { id: 'all', label: `الكل (${functionsList.length})` },
+                    { id: 'workflow', label: 'سير عمل (Workflow)' },
+                    { id: 'custom_button', label: 'أزرار مخصصة' },
+                    { id: 'cron', label: 'مجدولة (Cron)' },
+                    { id: 'webhook', label: 'Webhook' },
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setFilterTrigger(tab.id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                        filterTrigger === tab.id
+                          ? 'bg-[#004AC6] text-white'
+                          : 'bg-[#F8FAFC] border border-[#E2E8F0] text-[#475569] hover:bg-[#F1F5F9]'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleCreateFunction}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#004AC6] px-4 py-2 text-xs font-extrabold text-white shadow-2xs transition hover:bg-[#003999] cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ دالة جديدة</span>
+              </button>
+            </div>
+
+            {/* Functions Table */}
+            <div className="overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white shadow-2xs">
+              <div className="overflow-x-auto">
+                <table className="w-full text-right text-xs">
+                  <thead className="border-b border-[#E2E8F0] bg-[#F8FAFC] text-[11px] font-extrabold text-[#475569]">
+                    <tr>
+                      <th className="px-4 py-3.5">اسم الدالة</th>
+                      <th className="px-4 py-3.5">الوصف</th>
+                      <th className="px-4 py-3.5">البيئة (Node / Python)</th>
+                      <th className="px-4 py-3.5">المشغّل</th>
+                      <th className="px-4 py-3.5 text-center">الحالة</th>
+                      <th className="px-4 py-3.5 text-left">الإجراءات</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#F1F5F9]">
+                    {filteredFunctions.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-10 text-center text-[#64748B]">
+                          لا توجد دوال مخصصة مطابقة لمعايير البحث الحالية.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredFunctions.map((fn) => (
+                        <tr
+                          key={fn.id}
+                          onClick={() => openFunctionInEditor(fn.id)}
+                          className="group cursor-pointer transition hover:bg-[#F8FAFC]"
+                        >
+                          <td className="px-4 py-3.5">
+                            <div className="font-extrabold text-[#0F172A] group-hover:text-[#004AC6]">
+                              {fn.name}
+                            </div>
+                            <div className="mt-0.5 font-mono text-[11px] text-[#2563EB]" dir="ltr">
+                              {fn.apiName}
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-3.5 text-[#475569] font-medium">
+                            {fn.description || '—'}
+                          </td>
+
+                          <td className="px-4 py-3.5 whitespace-nowrap">
+                            <span
+                              className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 font-mono text-[11px] font-extrabold ${
+                                fn.language === 'python'
+                                  ? 'border-amber-200 bg-amber-50 text-amber-800'
+                                  : 'border-[#BFDBFE] bg-[#EFF6FF] text-[#1D4ED8]'
+                              }`}
+                              dir="ltr"
+                            >
+                              {fn.language === 'python' ? 'Python 3.11' : 'Node 20 (JS)'}
+                            </span>
+                          </td>
+
+                          <td className="px-4 py-3.5 whitespace-nowrap">
+                            <span className="rounded-lg bg-[#F1F5F9] px-2.5 py-1 text-[11px] font-bold text-[#334155]">
+                              {fn.triggerType === 'custom_button'
+                                ? 'زر مخصص (الصفقات)'
+                                : fn.triggerType === 'workflow'
+                                  ? 'سير عمل (Workflow)'
+                                  : fn.triggerType === 'cron'
+                                    ? 'مجدول (Cron)'
+                                    : 'REST API / Webhook'}
+                            </span>
+                          </td>
+
+                          <td
+                            className="px-4 py-3.5 text-center whitespace-nowrap"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => handleToggleFunctionActive(fn.id)}
+                              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-extrabold ${
+                                fn.isActive
+                                  ? 'border-[#A7F3D0] bg-[#ECFDF5] text-[#059669]'
+                                  : 'border-[#CBD5E1] bg-[#F1F5F9] text-[#64748B]'
+                              }`}
+                            >
+                              <span
+                                className={`h-1.5 w-1.5 rounded-full ${
+                                  fn.isActive ? 'bg-[#10B981]' : 'bg-[#94A3B8]'
+                                }`}
+                              />
+                              <span>{fn.isActive ? 'نشطة' : 'متوقفة'}</span>
+                            </button>
+                          </td>
+
+                          <td
+                            className="px-4 py-3.5 text-left whitespace-nowrap"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="inline-flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => openFunctionInEditor(fn.id)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-[#BFDBFE] bg-[#EFF6FF] px-3 py-1.5 text-[11px] font-extrabold text-[#1D4ED8] transition hover:bg-[#DBEAFE]"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                                <span>تعديل</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteFunction(fn.id)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-[#FECDD3] bg-[#FFF1F2] px-2.5 py-1.5 text-[11px] font-bold text-[#E11D48] transition hover:bg-[#FFE4E6]"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                <span>حذف</span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+      /* Main 3-Column Layout */
       <div className="flex-1 flex overflow-hidden">
         {/* Right Column (22%) - Functions List & Triggers */}
         <div className="w-[22%] bg-[#1E293B] border-l border-[#334155] flex flex-col">
@@ -669,6 +904,7 @@ export default async function handle({ input, env }) {
           </div>
         </div>
       </div>
+      )}
 
       {/* Secrets Manager Modal */}
       {isSecretsModalOpen && (

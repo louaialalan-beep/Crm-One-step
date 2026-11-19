@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -23,6 +23,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { useCrm } from '../context/CrmContext';
+import { activitiesService } from '../services/activitiesService';
 import type { InboxMessage } from '../types/crm';
 
 export function WhatsappInboxPage() {
@@ -51,6 +52,7 @@ export function WhatsappInboxPage() {
   const [sending, setSending] = useState(false);
   const [embeddedModalOpen, setEmbeddedModalOpen] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [liveWsMessages, setLiveWsMessages] = useState<InboxMessage[]>([]);
   const [attachedFile, setAttachedFile] = useState<{
     name: string;
     kind: 'file' | 'image';
@@ -66,6 +68,43 @@ export function WhatsappInboxPage() {
       setToastMsg((prev) => (prev === msg ? null : prev));
     }, 3500);
   };
+
+  useEffect(() => {
+    if (!currentOrgId) return;
+    const unsubscribe = activitiesService.subscribeToWhatsAppWebSocket({
+      orgId: currentOrgId,
+      onEvent: (envelope) => {
+        if (
+          (envelope.event === 'whatsapp:message_received' ||
+            envelope.event === 'whatsapp:message_sent') &&
+          envelope.data
+        ) {
+          const item = envelope.data;
+          const mapped: InboxMessage = {
+            id: item.wamid || item.id,
+            ownerId: currentUser.id,
+            org_id: currentOrgId,
+            channel: 'whatsapp',
+            senderName: item.contact_name || item.phone_number,
+            body: item.body,
+            direction: item.direction,
+            unread: item.direction === 'inbound',
+            timestampLabel: 'الآن',
+            leadUniqueId: item.lead_uid,
+          };
+          setLiveWsMessages((prev) =>
+            prev.some((m) => m.id === mapped.id) ? prev : [...prev, mapped]
+          );
+          if (item.direction === 'inbound') {
+            triggerToast(
+              `رسالة واتساب واردة من ${mapped.senderName} (${item.lead_uid})`
+            );
+          }
+        }
+      },
+    });
+    return unsubscribe;
+  }, [currentOrgId, currentUser.id]);
 
   // Merge BOTH leads and contacts and apply dynamic RBAC filtering for conversations
   const conversations = useMemo(() => {
@@ -184,12 +223,20 @@ export function WhatsappInboxPage() {
 
   const activeMessages = useMemo(() => {
     if (!activeConvo) return [];
-    return messages.filter(
+    const baseList = messages.filter(
       (m) =>
         m.leadUniqueId === activeConvo.uniqueId ||
         m.senderName.includes(activeConvo.name)
     );
-  }, [messages, activeConvo]);
+    const seenIds = new Set(baseList.map((m) => m.id));
+    const extras = liveWsMessages.filter(
+      (m) =>
+        !seenIds.has(m.id) &&
+        (m.leadUniqueId === activeConvo.uniqueId ||
+          m.senderName.includes(activeConvo.name))
+    );
+    return [...baseList, ...extras];
+  }, [messages, liveWsMessages, activeConvo]);
 
   const handleSendReply = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -314,7 +314,7 @@ export function FinancialModulePage({
   const [newLineItems, setNewLineItems] = useState<FinancialLineItem[]>([
     {
       id: `item_${Date.now()}`,
-      productName: 'رخصة منظومة رواق CRM Enterprise (الباقة السنوية)',
+      productName: 'رخصة منظومة Crm-One-step Enterprise (الباقة السنوية)',
       description: 'تهيئة كاملة للمبيعات، واتساب السحابي، والفوترة الضريبية ZATCA',
       unit: 'اشتراك',
       quantity: 1,
@@ -1153,7 +1153,7 @@ export function FinancialModulePage({
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 text-xs text-[#64748B] mb-1">
-              <span>رواق CRM</span>
+              <span>Crm-One-step</span>
               <span>/</span>
               <span>{currentOrganization?.name}</span>
               <span>/</span>

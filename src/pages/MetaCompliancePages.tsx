@@ -142,7 +142,7 @@ export function TermsOfServicePage() {
           <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
             <h3 className="font-bold text-slate-900 mb-1">1. التزام المنشأة بسياسات رسائل WhatsApp Business</h3>
             <p>
-              تلتزم المنشأة المستخدمة لنظام رواق CRM بعدم إرسال رسائل تسويقية خارج نافذة الـ 24 ساعة إلا عبر قوالب معتمدة رسمياً (Approved Message Templates) من ميتا، مع احترام خيارات إلغاء الاشتراك الفوري للعملاء.
+              تلتزم المنشأة المستخدمة لنظام Crm-One-step بعدم إرسال رسائل تسويقية خارج نافذة الـ 24 ساعة إلا عبر قوالب معتمدة رسمياً (Approved Message Templates) من ميتا، مع احترام خيارات إلغاء الاشتراك الفوري للعملاء.
             </p>
           </div>
           <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">

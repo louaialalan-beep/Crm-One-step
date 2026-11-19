@@ -17,7 +17,7 @@ export const ModulePlaceholderPage: React.FC = () => {
   const path = location.pathname;
   const meta = ROUTE_METADATA[path] ?? {
     title: 'إعدادات ووحدات النظام',
-    section: 'رواق CRM',
+    section: 'Crm-One-step',
     description: 'صفحة مهيأة ضمن البنية التحتية للنظام وجاهزة للتشغيل الفعلي.',
   };
 
@@ -298,7 +298,7 @@ export const ModulePlaceholderPage: React.FC = () => {
                 {meta.title}
               </h2>
               <p className="mt-1 text-[12px] text-[#64748B]">
-                هذه الوحدة الفرعية مهيأة ضمن معمارية رواق CRM ومرتبطة بالصلاحيات المركزية للمؤسسة.
+                هذه الوحدة الفرعية مهيأة ضمن معمارية Crm-One-step ومرتبطة بالصلاحيات المركزية للمؤسسة.
               </p>
             </div>
             <NavLink

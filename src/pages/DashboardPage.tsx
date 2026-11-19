@@ -463,7 +463,7 @@ export const DashboardPage: React.FC = () => {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 text-xs text-[#64748B] mb-1">
-              <span>رواق CRM</span>
+              <span>Crm-One-step</span>
               <span>/</span>
               <span className="text-[#0F172A] font-bold">لوحة القيادة التنفيذية والمبيعات</span>
             </div>
@@ -845,7 +845,7 @@ export const DashboardPage: React.FC = () => {
                   عائد الإنفاق الإعلاني (ROAS): {metaStats.roas}x
                 </span>
                 <div className="text-[11px] text-[#1D4ED8] mt-0.5">
-                  بفضل الإسناد المباشر والمحادثات المؤتمتة لرواق CRM
+                  بفضل الإسناد المباشر والمحادثات المؤتمتة لـ Crm-One-step
                 </div>
               </div>
               <Sparkles className="w-6 h-6 text-[#2563EB]" />

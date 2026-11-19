@@ -18,6 +18,7 @@ import { ProfilesPage } from './pages/ProfilesPage';
 import { RoleHierarchyPage } from './pages/RoleHierarchyPage';
 import { SetupHubPage } from './pages/SetupHubPage';
 import { SubscriptionPage } from './pages/SubscriptionPage';
+import { SuperAdminPage } from './pages/SuperAdminPage';
 import { UsersManagementPage } from './pages/UsersManagementPage';
 import { WorkflowRulesPage } from './pages/WorkflowRulesPage';
 import { MetaIntegrationPage } from './pages/MetaIntegrationPage';
@@ -195,6 +196,8 @@ export default function App() {
                     <Route path="/reports" element={<ReportsPage />} />
                     <Route path="/analytics" element={<AnalyticsPage />} />
                     <Route path="/settings" element={<SetupHubPage />} />
+                    <Route path="/super-admin" element={<SuperAdminPage />} />
+                    <Route path="/settings/super-admin" element={<SuperAdminPage />} />
                     <Route path="/settings/users" element={<UsersManagementPage />} />
                     <Route path="/settings/subscription" element={<SubscriptionPage defaultTab="subscription" />} />
                     <Route path="/settings/company" element={<SubscriptionPage defaultTab="company" />} />

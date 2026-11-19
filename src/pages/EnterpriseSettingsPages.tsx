@@ -303,7 +303,7 @@ export const ImportExportPage: React.FC = () => {
           {/* Step 2: Field Mapping */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold text-[#0F172A]">2. مطابقة أعمدة الملف مع حقول رواق CRM</h3>
+              <h3 className="text-xs font-bold text-[#0F172A]">2. مطابقة أعمدة الملف مع حقول Crm-One-step</h3>
               <span className="text-[11px] text-[#64748B]">تم التعرف على {columns.length} أعمدة</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
@@ -439,7 +439,7 @@ export const ImportExportPage: React.FC = () => {
               </div>
 
               <div className="p-3.5 rounded-md bg-[#F8FAFC] border border-[#E2E8F0] text-[11px] text-[#475569] space-y-1">
-                <div className="font-bold text-[#0F172A]">مميزات التصدير في رواق CRM:</div>
+                <div className="font-bold text-[#0F172A]">مميزات التصدير في Crm-One-step:</div>
                 <p>• يتضمن ترويسة UTF-8 BOM لضمان فتح الحروف العربية في Microsoft Excel بدون رموز مشوهة.</p>
                 <p>• يشمل جميع السجلات النشطة والحقول المالية بالريال السعودي.</p>
               </div>
@@ -494,7 +494,7 @@ const INITIAL_TEMPLATES: MessageTemplate[] = [
     channel: 'email',
     name: 'إرسال العرض الفني والمالي الرسمي',
     category: 'عروض الأسعار',
-    subject: 'العرض الفني والمالي لمشروع {{اسم_الشركة}} — رواق CRM',
+    subject: 'العرض الفني والمالي لمشروع {{اسم_الشركة}} — Crm-One-step',
     body: 'سعادة الأستاذ {{اسم_العميل}} المحترم،\n\nتحية طيبة وبعد،\nيرفق لكم فريقنا العرض الفني والمالي المعتمد لشركة {{اسم_الشركة}} بإجمالي {{قيمة_الصفقة}} ريال سعودي.\n\nوتفضلوا بقبول فائق الاحترام،\n{{المندوب_المسؤول}}',
     updatedAt: '2025-02-28',
   },
@@ -1467,7 +1467,7 @@ export const WebformsBuilderPage: React.FC = () => {
   const { createLead, currentOrgId } = useCrm();
   const { toast, showToast } = useToast();
 
-  const [formTitle, setFormTitle] = useState('اطلب عرض سعر واستشارة مجانية — رواق CRM');
+  const [formTitle, setFormTitle] = useState('اطلب عرض سعر واستشارة مجانية — Crm-One-step');
   const [assignedOwner, setAssignedOwner] = useState('usr_sales_1');
   const [thankYouMessage, setThankYouMessage] = useState('شكراً لتواصلك معنا! سيقوم مستشار المبيعات بالتواصل معك خلال 15 دقيقة.');
   const [selectedFields, setSelectedFields] = useState<Record<string, boolean>>({

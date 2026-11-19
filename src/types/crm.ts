@@ -16,7 +16,10 @@ export interface CrmAddonFlags {
   custom_functions: boolean;
 }
 
-export type OrganizationPlan = 'Starter' | 'Pro' | 'Enterprise';
+export type OrganizationPlan = 'Free' | 'Growth' | 'Starter' | 'Pro' | 'Enterprise';
+
+export type PaymentStatus = 'paid' | 'trialing' | 'past_due' | 'suspended';
+export type BillingProvider = 'moyasar' | 'tap' | 'stripe';
 
 export interface CrmOrganization {
   id: string;
@@ -26,6 +29,12 @@ export interface CrmOrganization {
   plan: OrganizationPlan;
   seats_limit: number;
   active_users_count: number;
+  customers_count?: number;
+  payment_status?: PaymentStatus;
+  billing_provider?: BillingProvider;
+  subscription_id?: string;
+  is_active?: boolean;
+  vat_number?: string;
   addons: CrmAddonFlags;
   numbers_limit?: number;
   messages_used?: number;
@@ -53,6 +62,7 @@ export interface CrmUser {
   department?: string;
   avatarUrl?: string;
   status: 'active' | 'inactive';
+  is_super_admin?: boolean;
 }
 
 export interface CrmProfile {

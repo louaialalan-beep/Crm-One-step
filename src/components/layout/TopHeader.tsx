@@ -124,9 +124,9 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
   return (
     <>
-      <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-3 sm:gap-4 border-b border-[#E2E8F0] bg-[#FFFFFF] px-3 sm:px-4 lg:px-6 overflow-visible">
+      <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-4 sm:gap-5 lg:gap-7 border-b border-[#E2E8F0] bg-[#FFFFFF] px-3 sm:px-4 lg:px-6 overflow-visible">
         {/* Right Side (RTL start): Mobile menu + Crm-One-step Identity + Organization Switcher + Breadcrumb / Search trigger */}
-        <div className="flex items-center gap-2.5 min-w-0 flex-1 overflow-visible">
+        <div className="flex items-center gap-2.5 min-w-0 flex-1 overflow-visible pl-2 sm:pl-4">
           <button
             type="button"
             onClick={onOpenMobileSidebar}
@@ -152,7 +152,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               onClick={() => setOrgMenuOpen((prev) => !prev)}
               aria-expanded={orgMenuOpen}
               title="تبديل المؤسسة (عزل كامل للبيانات والصلاحيات)"
-              className="flex h-9 items-center gap-1.5 rounded-md border border-[#CBD5E1] bg-[#F8FAFC] px-2.5 text-[12px] font-bold text-[#0F172A] hover:border-[#94A3B8] hover:bg-[#FFFFFF] transition-colors max-w-[175px] sm:max-w-[220px] xl:max-w-[260px]"
+              className="flex h-9 items-center gap-1.5 rounded-md border border-[#CBD5E1] bg-[#F8FAFC] px-2.5 text-[12px] font-bold text-[#0F172A] hover:border-[#94A3B8] hover:bg-[#FFFFFF] transition-colors max-w-[160px] sm:max-w-[200px] xl:max-w-[235px]"
             >
               <Building2 className="h-3.5 w-3.5 shrink-0 text-[#004AC6]" />
               <span className="truncate">
@@ -272,15 +272,15 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             <span className="text-[#CBD5E1]" aria-hidden="true">
               /
             </span>
-            <span className="font-semibold text-[#0F172A] max-w-[140px] truncate">{routeMeta.title}</span>
+            <span className="font-semibold text-[#0F172A] max-w-[130px] truncate">{routeMeta.title}</span>
           </div>
 
-          {/* Ctrl+K Command Palette Trigger — Bounded width with left margin so it never overlaps + صفقة سريعة */}
+          {/* Ctrl+K Command Palette Trigger — Bounded width with generous RTL end margin so it never overlaps + صفقة سريعة */}
           <button
             type="button"
             onClick={onOpenCommandPalette}
             aria-label="فتح البحث الشامل ولوحة الأوامر في Crm-One-step"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[#CBD5E1] bg-[#F8FAFC] text-[#64748B] hover:border-[#94A3B8] hover:bg-[#FFFFFF] transition-colors md:w-48 lg:w-56 xl:w-64 md:justify-between md:gap-2 md:px-2.5 text-[12px] ml-2"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[#CBD5E1] bg-[#F8FAFC] text-[#64748B] hover:border-[#94A3B8] hover:bg-[#FFFFFF] transition-colors md:w-44 lg:w-48 xl:w-56 md:justify-between md:gap-2 md:px-2.5 text-[12px] ml-4 lg:ml-6"
           >
             <span className="flex items-center gap-1.5 min-w-0">
               <Search className="h-3.5 w-3.5 shrink-0 text-[#64748B]" />
@@ -295,17 +295,17 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         </div>
 
         {/* Left Side (RTL end): Actions, Sync, Inbox, Signals, Employee Menu */}
-        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 pr-1">
+        <div className="flex items-center gap-2.5 sm:gap-3 shrink-0 pr-2">
           {/* + صفقة سريعة */}
           <button
             type="button"
             onClick={onOpenQuickDeal}
             aria-label="إضافة صفقة سريعة"
-            className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[#2563EB] px-3 text-[12px] font-bold text-[#FFFFFF] hover:bg-[#1D4ED8] active:bg-[#1E40AF] transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-2xs"
+            className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[#2563EB] px-3.5 text-[12px] font-bold text-[#FFFFFF] hover:bg-[#1D4ED8] active:bg-[#1E40AF] transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-2xs"
           >
             <Plus className="h-3.5 w-3.5 shrink-0" />
-            <span className="hidden sm:inline">صفقة سريعة</span>
-            <span className="sm:hidden">صفقة</span>
+            <span className="hidden sm:inline">+ صفقة سريعة</span>
+            <span className="sm:hidden">+ صفقة</span>
           </button>
 
           {/* Real-time Sync Status & Preview Mode Controls */}

@@ -213,7 +213,7 @@ export const ROUTE_METADATA: Record<string, RouteMeta> = {
   '/settings/custom-fields': {
     title: 'منشئ الحقول والنماذج',
     section: 'الإعدادات والنظام',
-    description: 'تخصيص الحقول الإضافية وتنظيم أقسام العرض لكل وحدة في رواق CRM.',
+    description: 'تخصيص الحقول الإضافية وتنظيم أقسام العرض لكل وحدة في Crm-One-step.',
   },
   '/settings/blueprints': {
     title: 'مخططات المراحل (Blueprints)',

@@ -55,7 +55,7 @@ const SETUP_CATEGORIES: SetupCategoryCard[] = [
     id: 'general',
     titleAr: 'الإعدادات العامة',
     titleEn: 'GENERAL',
-    countLabel: '6 إعدادات',
+    countLabel: '5 إعدادات',
     iconType: 'general',
     iconBoxStyle: 'bg-[#DBEAFE] text-[#2563EB]',
     items: [
@@ -490,7 +490,7 @@ export const SetupHubPage: React.FC = () => {
           if (item.id === 'profiles') {
             return {
               ...item,
-              badgeText: `${profiles.length} ملفات`,
+              badgeText: `${Math.max(5, profiles.length)} ملفات`,
             };
           }
           if (item.id === 'users') {
@@ -686,7 +686,7 @@ export const SetupHubPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Left: Action Buttons ("سجل التعديلات الأخير" + "بيئة الاختبار (Sandbox: نشط)") */}
+          {/* Left: Action Buttons ("سجل التعديلات الأخير" + "تقرير الصحة التشغيلية") */}
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
             <button
               type="button"
@@ -701,28 +701,12 @@ export const SetupHubPage: React.FC = () => {
 
             <button
               type="button"
-              onClick={() => {
-                const next = !sandboxActive;
-                setSandboxActive(next);
-                setToastMessage(
-                  next
-                    ? 'تم تفعيل وضع بيئة الاختبار (Sandbox: نشط)'
-                    : 'تم إيقاف بيئة الاختبار والانتقال إلى بيئة الإنتاج المباشرة'
-                );
-              }}
-              className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-[12px] font-extrabold transition-colors ${
-                sandboxActive
-                  ? 'border-[#E2E8F0] bg-[#F1F5F9]/80 hover:bg-[#E2E8F0]/70 text-[#0F172A]'
-                  : 'border-[#CBD5E1] bg-[#FFFFFF] hover:bg-[#F8FAFC] text-[#475569]'
-              }`}
+              onClick={() => setHealthModalOpen(true)}
+              className="inline-flex items-center gap-2 rounded-xl border border-[#A7F3D0] bg-[#ECFDF5] hover:bg-[#D1FAE5] px-4 py-2.5 text-[12px] font-extrabold text-[#065F46] transition-colors"
             >
-              <span
-                className={`h-2 w-2 rounded-full ${
-                  sandboxActive ? 'bg-[#059669]' : 'bg-[#94A3B8]'
-                }`}
-              />
+              <span className="h-2 w-2 rounded-full bg-[#059669]" />
               <span className="text-center leading-snug">
-                بيئة الاختبار (Sandbox: {sandboxActive ? 'نشط' : 'متوقف'})
+                حالة النظام (Crm-One-step: متصل)
               </span>
             </button>
           </div>
