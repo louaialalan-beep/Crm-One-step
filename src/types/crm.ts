@@ -397,6 +397,13 @@ export interface Invoice {
   totalWithVat?: number;
   paidAmount: number;
   zatcaQrBase64?: string;
+  xmlContent?: string;
+  zatcaHash?: string;
+  zatcaStatus?: 'PHASE1_READY' | 'CLEARED' | 'REPORTED' | 'PENDING' | string;
+  zatcaUuid?: string;
+  zatcaPih?: string;
+  zatcaSignature?: string;
+  zatcaSubmittedAt?: string;
   notes?: string;
   payments?: InvoicePaymentRecord[];
   status: 'مكتملة' | 'مدفوعة' | 'مدفوعة جزئياً' | 'غير مدفوعة' | 'مؤجلة' | 'متأخرة' | 'مسودة';

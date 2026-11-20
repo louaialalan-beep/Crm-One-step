@@ -178,6 +178,54 @@ export const leadsService = {
     });
   },
 
+  /**
+   * Blueprint Stage Transition Engine for Leads (`POST /api/v1/leads/{id}/transition`):
+   * Validates Before/During rules in FastAPI and triggers After-Actions (including Custom Functions) via ARQ.
+   */
+  async transitionLeadStage(params: {
+    orgId: string;
+    isCloudMode: boolean;
+    leadId: string;
+    toStage: Lead['status'];
+    lostReason?: string;
+    reviewNotes?: string;
+    nextStep?: string;
+    estimatedValue?: number;
+    duringFields?: Record<string, unknown>;
+    onPreviewApply: () => void;
+  }): Promise<void> {
+    await executeWithAdapter({
+      endpoint: `/api/v1/leads/${params.leadId}/transition`,
+      method: 'POST',
+      orgId: params.orgId,
+      payload: {
+        to_stage: params.toStage,
+        lost_reason: params.lostReason,
+        review_notes: params.reviewNotes,
+        next_step: params.nextStep,
+        estimated_value: params.estimatedValue,
+        during_fields: params.duringFields || {},
+      },
+      fallback: async () => {
+        if (!params.isCloudMode) {
+          params.onPreviewApply();
+          return;
+        }
+        try {
+          await updateDoc(doc(db, 'leads', params.leadId), {
+            ...stripUndefinedFields({
+              status: params.toStage,
+              estimatedValue: params.estimatedValue,
+            }),
+            updatedAt: serverTimestamp(),
+          });
+        } catch (err) {
+          handleFirestoreError(err, OperationType.UPDATE, `leads/${params.leadId}`);
+        }
+      },
+    });
+  },
+
   async updateLeadFields(params: {
     orgId: string;
     isCloudMode: boolean;
@@ -185,6 +233,17 @@ export const leadsService = {
     patch: Partial<Lead>;
     onPreviewApply: () => void;
   }): Promise<void> {
+    if (params.patch.status) {
+      return this.transitionLeadStage({
+        orgId: params.orgId,
+        isCloudMode: params.isCloudMode,
+        leadId: params.leadId,
+        toStage: params.patch.status,
+        estimatedValue: params.patch.estimatedValue,
+        onPreviewApply: params.onPreviewApply,
+      });
+    }
+
     return executeWithAdapter({
       endpoint: `/api/v1/leads/${params.leadId}`,
       method: 'PATCH',

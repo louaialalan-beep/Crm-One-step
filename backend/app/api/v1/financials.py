@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,6 +35,15 @@ from app.schemas.crm import (
     SalesOrderCreate,
     SalesOrderResponse,
     SalesOrderUpdate,
+    ZatcaCsidOnboardRequest,
+    ZatcaCsidOnboardResponse,
+    ZatcaPhase2SubmitRequest,
+    ZatcaPhase2SubmitResponse,
+)
+from app.services.zatca_phase2 import (
+    ZATCA_GENESIS_PIH,
+    build_csid_onboarding_structure,
+    process_zatca_phase2_submission,
 )
 from app.worker import sha256_normalize
 
@@ -500,3 +509,203 @@ async def list_order_attributions(
         stmt = stmt.where(OrderAttribution.lead_uid == lead_uid)
     rows = (await db.scalars(stmt)).all()
     return [OrderAttributionResponse.model_validate(r) for r in rows]
+
+
+# ============================================================================
+# 5. ZATCA Phase 2 (الفوترة الإلكترونية - المرحلة الثانية: الربط والتكامل)
+#    - UBL 2.1 XML Generation + SHA-256 Invoice Hash + ECDSA Digital Signature
+#    - B2B Clearance (CLEARED) & B2C Simplified Reporting (REPORTED)
+#    - CSID Onboarding Structure (Sandbox / Simulation / Production)
+# ============================================================================
+
+
+@router.post(
+    "/invoices/{invoice_id}/zatca-phase2/submit",
+    response_model=ZatcaPhase2SubmitResponse,
+)
+@router.post(
+    "/invoices/{invoice_id}/zatca/submit",
+    response_model=ZatcaPhase2SubmitResponse,
+)
+async def submit_invoice_zatca_phase2(
+    invoice_id: uuid.UUID,
+    payload: ZatcaPhase2SubmitRequest = ZatcaPhase2SubmitRequest(),
+    db: AsyncSession = Depends(get_db),
+    token_payload: TokenPayload = Depends(get_current_token_payload),
+) -> ZatcaPhase2SubmitResponse:
+    """
+    Submits an invoice to ZATCA Phase 2 (Clearance for B2B Tax Invoices or Reporting
+    for Simplified B2C Tax Invoices), computes the UBL 2.1 XML, SHA-256 Invoice Hash,
+    ECDSA Digital Signature, and 9-tag Phase 2 TLV QR code, and saves xml_content,
+    zatca_hash, and zatca_status in the `invoices` table.
+    """
+    invoice = await db.scalar(
+        select(Invoice).where(Invoice.id == invoice_id, Invoice.deleted_at.is_(None))
+    )
+    if not invoice:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="الفاتورة الضريبية غير موجودة.",
+        )
+
+    # Find previous invoice hash (PIH) in the tenant's chain if not explicitly provided
+    resolved_pih = payload.previous_invoice_hash
+    if not resolved_pih:
+        prev_invoice = await db.scalar(
+            select(Invoice)
+            .where(
+                Invoice.org_id == token_payload.org_id,
+                Invoice.id != invoice.id,
+                Invoice.zatca_hash.is_not(None),
+                Invoice.deleted_at.is_(None),
+            )
+            .order_by(Invoice.issued_at.desc())
+        )
+        resolved_pih = prev_invoice.zatca_hash if (prev_invoice and prev_invoice.zatca_hash) else ZATCA_GENESIS_PIH
+
+    icv_count = int(
+        (
+            await db.scalar(
+                select(func.count(Invoice.id)).where(Invoice.org_id == token_payload.org_id)
+            )
+        )
+        or 1
+    )
+
+    artifact = process_zatca_phase2_submission(
+        invoice_number=invoice.invoice_number,
+        invoice_uuid=invoice.zatca_uuid or str(invoice.id),
+        issued_at=invoice.issued_at,
+        seller_name=invoice.seller_name,
+        seller_vat_number=invoice.seller_vat_number,
+        customer_name=invoice.customer_company or invoice.customer_name,
+        customer_vat_number=invoice.customer_vat_number,
+        currency=invoice.currency,
+        line_items=invoice.line_items,
+        subtotal_amount=invoice.subtotal_amount,
+        discount_total=invoice.discount_total,
+        taxable_amount=invoice.taxable_amount,
+        vat_rate=invoice.vat_rate,
+        vat_amount=invoice.vat_amount,
+        total_amount=invoice.total_amount,
+        submission_mode=payload.submission_mode,
+        environment=payload.environment,
+        previous_invoice_hash=resolved_pih,
+        icv_counter=max(1, icv_count),
+    )
+
+    invoice.xml_content = artifact.xml_content
+    invoice.zatca_hash = artifact.zatca_hash
+    invoice.zatca_status = artifact.zatca_status
+    invoice.zatca_uuid = artifact.invoice_uuid
+    invoice.zatca_pih = artifact.zatca_pih
+    invoice.zatca_signature = artifact.zatca_signature
+    invoice.zatca_tlv_base64 = artifact.zatca_tlv_base64
+    invoice.zatca_invoice_type = (
+        "B2B_STANDARD" if artifact.submission_type == "CLEARANCE" else "B2C_SIMPLIFIED"
+    )
+    invoice.zatca_submitted_at = artifact.submitted_at
+    await db.flush()
+
+    return ZatcaPhase2SubmitResponse(
+        invoice_id=invoice.id,
+        invoice_number=invoice.invoice_number,
+        lead_uid=invoice.lead_uid,
+        submission_type=artifact.submission_type,
+        environment=artifact.environment,
+        zatca_status=artifact.zatca_status,
+        zatca_uuid=artifact.invoice_uuid,
+        zatca_hash=artifact.zatca_hash,
+        zatca_pih=artifact.zatca_pih,
+        zatca_signature=artifact.zatca_signature,
+        zatca_tlv_base64=artifact.zatca_tlv_base64,
+        xml_content=artifact.xml_content,
+        clearance_or_reporting_message=artifact.message,
+        submitted_at=artifact.submitted_at,
+    )
+
+
+@router.get("/invoices/{invoice_id}/zatca-phase2/xml")
+async def download_invoice_zatca_ubl_xml(
+    invoice_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    token_payload: TokenPayload = Depends(get_current_token_payload),
+) -> Response:
+    """
+    Returns the ZATCA Phase 2 UBL 2.1 XML document for an invoice.
+    If the invoice has not yet been submitted, generates the signed UBL 2.1 XML on the fly.
+    """
+    invoice = await db.scalar(
+        select(Invoice).where(Invoice.id == invoice_id, Invoice.deleted_at.is_(None))
+    )
+    if not invoice:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="الفاتورة الضريبية غير موجودة.",
+        )
+
+    if not invoice.xml_content:
+        artifact = process_zatca_phase2_submission(
+            invoice_number=invoice.invoice_number,
+            invoice_uuid=invoice.zatca_uuid or str(invoice.id),
+            issued_at=invoice.issued_at,
+            seller_name=invoice.seller_name,
+            seller_vat_number=invoice.seller_vat_number,
+            customer_name=invoice.customer_company or invoice.customer_name,
+            customer_vat_number=invoice.customer_vat_number,
+            currency=invoice.currency,
+            line_items=invoice.line_items,
+            subtotal_amount=invoice.subtotal_amount,
+            discount_total=invoice.discount_total,
+            taxable_amount=invoice.taxable_amount,
+            vat_rate=invoice.vat_rate,
+            vat_amount=invoice.vat_amount,
+            total_amount=invoice.total_amount,
+        )
+        invoice.xml_content = artifact.xml_content
+        invoice.zatca_hash = artifact.zatca_hash
+        invoice.zatca_status = artifact.zatca_status
+        invoice.zatca_uuid = artifact.invoice_uuid
+        invoice.zatca_pih = artifact.zatca_pih
+        invoice.zatca_signature = artifact.zatca_signature
+        invoice.zatca_tlv_base64 = artifact.zatca_tlv_base64
+        invoice.zatca_submitted_at = artifact.submitted_at
+        await db.flush()
+
+    filename = f"{invoice.invoice_number}-ZATCA-UBL21.xml"
+    return Response(
+        content=invoice.xml_content,
+        media_type="application/xml; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-ZATCA-Hash": invoice.zatca_hash or "",
+            "X-ZATCA-Status": invoice.zatca_status or "CLEARED",
+        },
+    )
+
+
+@router.post(
+    "/invoices/zatca-phase2/csid-onboard",
+    response_model=ZatcaCsidOnboardResponse,
+)
+async def onboard_zatca_phase2_csid(
+    payload: ZatcaCsidOnboardRequest = ZatcaCsidOnboardRequest(),
+    token_payload: TokenPayload = Depends(get_current_token_payload),
+) -> ZatcaCsidOnboardResponse:
+    """
+    Builds and returns the ZATCA Phase 2 CSID Onboarding payload (CSR, BinarySecurityToken,
+    Secret, Public Key, and Fatoora Sandbox/Production API endpoints).
+    """
+    result = build_csid_onboarding_structure(
+        environment=payload.environment,
+        otp=payload.otp,
+        common_name=payload.common_name,
+        organization_name=payload.organization_name,
+        organization_unit_name=payload.organization_unit_name,
+        vat_number=payload.vat_number,
+        invoice_type_flag=payload.invoice_type_flag,
+        location_address=payload.location_address,
+        industry_business_category=payload.industry_business_category,
+    )
+    return ZatcaCsidOnboardResponse(**result)
+

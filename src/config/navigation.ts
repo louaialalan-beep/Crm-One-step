@@ -100,6 +100,10 @@ export const SIDEBAR_MODULES: NavModuleItem[] = [
     label: 'التحليلات',
     path: '/analytics',
     iconName: 'PieChart',
+    subItems: [
+      { id: 'operational_analytics', label: 'تحليلات القمع والإسناد', path: '/analytics' },
+      { id: 'predictive_analytics', label: 'التحليلات التنبؤية', path: '/predictive-analytics' },
+    ],
   },
   {
     id: 'settings',
@@ -194,6 +198,11 @@ export const ROUTE_METADATA: Record<string, RouteMeta> = {
     title: 'التحليلات',
     section: 'الذكاء التشغيلي',
     description: 'تحليلات التنبؤ بالإيرادات واتجاهات النمو حسب القطاع والمرحلة.',
+  },
+  '/predictive-analytics': {
+    title: 'التحليلات التنبؤية',
+    section: 'الذكاء التشغيلي',
+    description: 'توقعات إيرادات الشهر القادم بالاعتماد على البيانات التاريخية لصفقات الفوز وخط الأنابيب المرجّح.',
   },
   '/settings': {
     title: 'الإعدادات والنظام',

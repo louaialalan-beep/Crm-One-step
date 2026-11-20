@@ -61,15 +61,49 @@ export const DealsKanbanView: React.FC<DealsKanbanViewProps> = ({
 }) => {
   const [draggingDealId, setDraggingDealId] = useState<string | null>(null);
   const [dragOverColId, setDragOverColId] = useState<string | null>(null);
+  const [mobileColFilter, setMobileColFilter] = useState<string>('ALL');
 
   const selectedSet = new Set(selectedIds);
 
   return (
-    <div
-      className="flex gap-2.5 overflow-x-auto pb-4 items-start"
-      aria-label="لوحة كانبان لإدارة الصفقات"
-    >
-      {DEAL_KANBAN_COLUMNS.map((col) => {
+    <div className="space-y-3">
+      {/* Mobile Stage Switcher (< md) */}
+      <div className="flex md:hidden items-center gap-1.5 overflow-x-auto pb-1">
+        <button
+          type="button"
+          onClick={() => setMobileColFilter('ALL')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-colors ${
+            mobileColFilter === 'ALL'
+              ? 'bg-[#2563EB] text-white shadow-xs'
+              : 'bg-white border border-[#E2E8F0] text-[#475569]'
+          }`}
+        >
+          كل المراحل ({deals.length})
+        </button>
+        {DEAL_KANBAN_COLUMNS.map((col) => {
+          const count = deals.filter((d) => col.matchStages.includes(d.stage)).length;
+          return (
+            <button
+              key={col.id}
+              type="button"
+              onClick={() => setMobileColFilter(col.id)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-colors ${
+                mobileColFilter === col.id
+                  ? 'bg-[#2563EB] text-white shadow-xs'
+                  : 'bg-white border border-[#E2E8F0] text-[#475569]'
+              }`}
+            >
+              {col.title} ({count})
+            </button>
+          );
+        })}
+      </div>
+
+      <div
+        className="flex gap-2.5 overflow-x-auto snap-x snap-mandatory pb-4 items-start"
+        aria-label="لوحة كانبان لإدارة الصفقات"
+      >
+        {DEAL_KANBAN_COLUMNS.filter((c) => mobileColFilter === 'ALL' || c.id === mobileColFilter).map((col) => {
         const colDeals = deals.filter((d) => col.matchStages.includes(d.stage));
         const colSum = colDeals.reduce((sum, d) => sum + d.amount, 0);
         const isDropTarget = dragOverColId === col.id;
@@ -106,7 +140,7 @@ export const DealsKanbanView: React.FC<DealsKanbanViewProps> = ({
                 onRequestStageChange(draggedDeal, col.targetStage);
               }
             }}
-            className={`w-[248px] shrink-0 xl:w-auto xl:flex-1 xl:min-w-[208px] rounded-2xl border p-2 transition-colors ${
+            className={`min-w-[280px] w-[280px] shrink-0 xl:w-auto xl:flex-1 rounded-2xl border p-2.5 transition-colors ${
               isDropTarget
                 ? 'bg-[#EFF6FF] border-[#2563EB] ring-2 ring-[#2563EB]/20'
                 : 'bg-[#F1F5F9]/85 border-[#E2E8F0]'
@@ -117,7 +151,7 @@ export const DealsKanbanView: React.FC<DealsKanbanViewProps> = ({
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className={`w-2 h-2 rounded-full shrink-0 ${col.dotColor}`} />
-                  <h2 className="text-[13px] font-bold text-[#131b2e] truncate">
+                  <h2 className="text-[13px] font-bold text-[#131b2e] whitespace-nowrap">
                     {col.title}
                   </h2>
                 </div>
@@ -312,6 +346,7 @@ export const DealsKanbanView: React.FC<DealsKanbanViewProps> = ({
           </section>
         );
       })}
+      </div>
     </div>
   );
 };

@@ -43,6 +43,11 @@ import { deleteDoc, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firest
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useCrm } from '../context/CrmContext';
 import { useSetup } from '../context/SetupContext';
+import {
+  buildSampleRecordForSandbox,
+  executeCustomFunctionInSandbox,
+  getCustomFunctionsForOrg,
+} from '../utils/customFunctionsEngine';
 
 // ============================================================================
 // TYPES & INTERFACES
@@ -50,7 +55,12 @@ import { useSetup } from '../context/SetupContext';
 
 export type BlueprintStageCategory = 'normal' | 'active' | 'won' | 'lost';
 export type BlueprintTransitionTone = 'normal' | 'won' | 'lost' | 'loop';
-export type BlueprintAfterActionType = 'field_update' | 'whatsapp_email' | 'create_task' | 'webhook';
+export type BlueprintAfterActionType =
+  | 'field_update'
+  | 'whatsapp_email'
+  | 'create_task'
+  | 'webhook'
+  | 'custom_function';
 
 export interface BlueprintStageNode {
   id: string;
@@ -92,6 +102,9 @@ export interface BlueprintAfterAction {
   targetDetail: string;
   systemTag: string;
   enabled: boolean;
+  functionId?: string;
+  functionName?: string;
+  paramsJson?: string;
 }
 
 export interface BlueprintTransitionConfig {
@@ -993,6 +1006,10 @@ export const BlueprintBuilderPage: React.FC = () => {
   const [newActionType, setNewActionType] = useState<BlueprintAfterActionType>('field_update');
   const [newActionLabel, setNewActionLabel] = useState('');
   const [newActionTarget, setNewActionTarget] = useState('');
+  const [newActionFunctionId, setNewActionFunctionId] = useState<string>('func_1');
+  const [newActionParamsJson, setNewActionParamsJson] = useState<string>(
+    '{"minThresholdSAR": 250000, "notifySalesDirector": true}',
+  );
 
   const [isSavingCloud, setIsSavingCloud] = useState(false);
 
@@ -1009,6 +1026,11 @@ export const BlueprintBuilderPage: React.FC = () => {
   const [simHistory, setSimHistory] = useState<
     { fromTitle: string; toTitle: string; transitionName: string; time: string; actionsRun: string[] }[]
   >([]);
+
+  const savedCustomFunctions = useMemo(
+    () => getCustomFunctionsForOrg(currentOrgId),
+    [currentOrgId, inspectorTab, simModalOpen],
+  );
 
   // ============================================================================
   // MUTATION HELPERS FOR ACTIVE BLUEPRINT
@@ -1613,7 +1635,7 @@ export const BlueprintBuilderPage: React.FC = () => {
     setSimSignatureSigned(false);
   };
 
-  const handleCompleteSimulatedTransition = (e: React.FormEvent) => {
+  const handleCompleteSimulatedTransition = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeBlueprint || !simActiveTransitionId) return;
     const tr = activeBlueprint.transitions.find((t) => t.id === simActiveTransitionId);
@@ -1652,6 +1674,44 @@ export const BlueprintBuilderPage: React.FC = () => {
     const fromSt = activeBlueprint.stages.find((s) => s.id === tr.fromStageId);
     const toSt = activeBlueprint.stages.find((s) => s.id === tr.toStageId);
 
+    const enabledActions = tr.afterActions.filter((a) => a.enabled);
+    const actionsRunLabels: string[] = [];
+
+    for (const act of enabledActions) {
+      if (act.type === 'custom_function') {
+        const fnDef =
+          savedCustomFunctions.find(
+            (f) => f.id === act.functionId || f.name === act.functionName,
+          ) || savedCustomFunctions[0];
+        if (fnDef) {
+          let parsedParams: Record<string, unknown> = {};
+          try {
+            parsedParams = JSON.parse(act.paramsJson || act.targetDetail || '{}');
+          } catch {
+            parsedParams = { raw: act.targetDetail };
+          }
+          const sampleRec = buildSampleRecordForSandbox({
+            sampleRecordId: 'deal_1',
+            deals: [],
+            leads: [],
+          });
+          const res = await executeCustomFunctionInSandbox({
+            func: fnDef,
+            record: { ...sampleRec, stage: toSt?.title ?? sampleRec.stage },
+            params: parsedParams,
+            orgId: currentOrgId,
+          });
+          actionsRunLabels.push(
+            `${act.label} [Sandbox: ${res.status.toUpperCase()} in ${res.durationMs}ms]`,
+          );
+        } else {
+          actionsRunLabels.push(act.label);
+        }
+      } else {
+        actionsRunLabels.push(act.label);
+      }
+    }
+
     setSimCurrentStageId(tr.toStageId);
     setSimActiveTransitionId(null);
     setSimHistory((prev) => [
@@ -1661,7 +1721,7 @@ export const BlueprintBuilderPage: React.FC = () => {
         toTitle: toSt?.title ?? '',
         transitionName: tr.name,
         time: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-        actionsRun: tr.afterActions.filter((a) => a.enabled).map((a) => a.label),
+        actionsRun: actionsRunLabels,
       },
     ]);
     showToast(`تم تنفيذ الانتقال "${tr.name}" بنجاح وتشغيل الإجراءات التلقائية.`, 'success');
@@ -3701,61 +3761,142 @@ export const BlueprintBuilderPage: React.FC = () => {
                         </label>
                         <select
                           value={newActionType}
-                          onChange={(e) =>
-                            setNewActionType(e.target.value as BlueprintAfterActionType)
-                          }
+                          onChange={(e) => {
+                            const nextType = e.target.value as BlueprintAfterActionType;
+                            setNewActionType(nextType);
+                            if (nextType === 'custom_function') {
+                              const firstFn = savedCustomFunctions[0];
+                              if (firstFn) {
+                                setNewActionFunctionId(firstFn.id);
+                                setNewActionLabel(`تشغيل دالة مخصصة: ${firstFn.name}`);
+                                setNewActionTarget(newActionParamsJson);
+                              }
+                            }
+                          }}
                           className="h-8 w-full rounded-lg border border-[#CBD5E1] bg-white px-2.5 text-xs font-semibold text-[#0F172A]"
                         >
                           <option value="field_update">تحديث حقل تلقائياً (Field Update)</option>
                           <option value="whatsapp_email">إرسال قالب واتساب / بريد إلكتروني</option>
                           <option value="create_task">إنشاء مهمة متابعة للفريق</option>
                           <option value="webhook">إطلاق Webhook لنظام خارجي / ERP</option>
+                          <option value="custom_function">
+                            تشغيل دالة مخصصة (Execute Custom Function)
+                          </option>
                         </select>
                       </div>
 
-                      <div>
-                        <label className="mb-1 block text-[10px] font-semibold text-[#64748B]">
-                          وصف الإجراء
-                        </label>
-                        <input
-                          type="text"
-                          value={newActionLabel}
-                          onChange={(e) => setNewActionLabel(e.target.value)}
-                          placeholder={
-                            newActionType === 'field_update'
-                              ? 'مثال: تحديث احتمالية الإغلاق إلى 80%'
-                              : newActionType === 'whatsapp_email'
-                                ? 'مثال: إرسال رسالة واتساب للعميل بتأكيد المرحلة'
-                                : newActionType === 'create_task'
-                                  ? 'مثال: إنشاء مهمة إعداد العقد خلال 24 ساعة'
-                                  : 'مثال: إرسال بيانات الصفقة إلى نظام الفوترة ERP'
-                          }
-                          className="h-8 w-full rounded-lg border border-[#CBD5E1] bg-white px-2.5 text-xs"
-                        />
-                      </div>
+                      {newActionType === 'custom_function' ? (
+                        <>
+                          <div>
+                            <label className="mb-1 block text-[10px] font-semibold text-[#64748B]">
+                              اختر الدالة المخصصة المحفوظة (Saved Custom Function)
+                            </label>
+                            <select
+                              value={newActionFunctionId}
+                              onChange={(e) => {
+                                const fnId = e.target.value;
+                                setNewActionFunctionId(fnId);
+                                const fnObj = savedCustomFunctions.find((f) => f.id === fnId);
+                                if (fnObj) {
+                                  setNewActionLabel(`تشغيل دالة مخصصة: ${fnObj.name}`);
+                                }
+                              }}
+                              className="h-8 w-full rounded-lg border border-[#CBD5E1] bg-white px-2.5 font-mono text-xs font-bold text-[#0F172A]"
+                            >
+                              {savedCustomFunctions.map((fn) => (
+                                <option key={fn.id} value={fn.id}>
+                                  {fn.name} ({fn.language})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
 
-                      <div>
-                        <label className="mb-1 block text-[10px] font-semibold text-[#64748B]">
-                          الهدف / القالب / الرابط
-                        </label>
-                        <input
-                          type="text"
-                          value={newActionTarget}
-                          onChange={(e) => setNewActionTarget(e.target.value)}
-                          placeholder="مثال: قالب واتساب الرسمي أو POST /api/webhook"
-                          className="h-8 w-full rounded-lg border border-[#CBD5E1] bg-white px-2.5 text-xs"
-                        />
-                      </div>
+                          <div>
+                            <label className="mb-1 block text-[10px] font-semibold text-[#64748B]">
+                              وصف الإجراء
+                            </label>
+                            <input
+                              type="text"
+                              value={newActionLabel}
+                              onChange={(e) => setNewActionLabel(e.target.value)}
+                              placeholder="مثال: تشغيل دالة فحص صفقات VIP وتوليد المهام"
+                              className="h-8 w-full rounded-lg border border-[#CBD5E1] bg-white px-2.5 text-xs"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="mb-1 block text-[10px] font-semibold text-[#64748B]">
+                              المعاملات الممررة للدالة (input.params JSON)
+                            </label>
+                            <input
+                              type="text"
+                              dir="ltr"
+                              value={newActionParamsJson}
+                              onChange={(e) => {
+                                setNewActionParamsJson(e.target.value);
+                                setNewActionTarget(e.target.value);
+                              }}
+                              placeholder='{"minThresholdSAR": 250000, "notifySalesDirector": true}'
+                              className="h-8 w-full rounded-lg border border-[#CBD5E1] bg-white px-2.5 font-mono text-xs"
+                            />
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div>
+                            <label className="mb-1 block text-[10px] font-semibold text-[#64748B]">
+                              وصف الإجراء
+                            </label>
+                            <input
+                              type="text"
+                              value={newActionLabel}
+                              onChange={(e) => setNewActionLabel(e.target.value)}
+                              placeholder={
+                                newActionType === 'field_update'
+                                  ? 'مثال: تحديث احتمالية الإغلاق إلى 80%'
+                                  : newActionType === 'whatsapp_email'
+                                    ? 'مثال: إرسال رسالة واتساب للعميل بتأكيد المرحلة'
+                                    : newActionType === 'create_task'
+                                      ? 'مثال: إنشاء مهمة إعداد العقد خلال 24 ساعة'
+                                      : 'مثال: إرسال بيانات الصفقة إلى نظام الفوترة ERP'
+                              }
+                              className="h-8 w-full rounded-lg border border-[#CBD5E1] bg-white px-2.5 text-xs"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="mb-1 block text-[10px] font-semibold text-[#64748B]">
+                              الهدف / القالب / الرابط
+                            </label>
+                            <input
+                              type="text"
+                              value={newActionTarget}
+                              onChange={(e) => setNewActionTarget(e.target.value)}
+                              placeholder="مثال: قالب واتساب الرسمي أو POST /api/webhook"
+                              className="h-8 w-full rounded-lg border border-[#CBD5E1] bg-white px-2.5 text-xs"
+                            />
+                          </div>
+                        </>
+                      )}
 
                       <button
                         type="button"
                         onClick={() => {
-                          if (!newActionLabel.trim()) return;
+                          const selectedFnObj =
+                            savedCustomFunctions.find((f) => f.id === newActionFunctionId) ||
+                            savedCustomFunctions[0];
+                          const resolvedLabel =
+                            newActionLabel.trim() ||
+                            (newActionType === 'custom_function'
+                              ? `تشغيل دالة مخصصة: ${selectedFnObj?.name || 'Custom Function'}`
+                              : '');
+                          if (!resolvedLabel) return;
                           const tagMap: Record<BlueprintAfterActionType, string> = {
                             field_update: 'Field Update',
                             whatsapp_email: 'WhatsApp / Email',
                             create_task: 'Auto Task',
                             webhook: 'Webhook API',
+                            custom_function: 'Custom Function',
                           };
                           updateSelectedTransition((tr) => ({
                             ...tr,
@@ -3764,10 +3905,25 @@ export const BlueprintBuilderPage: React.FC = () => {
                               {
                                 id: `act_${Date.now()}`,
                                 type: newActionType,
-                                label: newActionLabel.trim(),
-                                targetDetail: newActionTarget.trim() || activeBlueprint.module,
+                                label: resolvedLabel,
+                                targetDetail:
+                                  newActionType === 'custom_function'
+                                    ? `${selectedFnObj?.name || 'custom_fn'} • params: ${newActionParamsJson}`
+                                    : newActionTarget.trim() || activeBlueprint.module,
                                 systemTag: tagMap[newActionType],
                                 enabled: true,
+                                functionId:
+                                  newActionType === 'custom_function'
+                                    ? selectedFnObj?.id
+                                    : undefined,
+                                functionName:
+                                  newActionType === 'custom_function'
+                                    ? selectedFnObj?.name
+                                    : undefined,
+                                paramsJson:
+                                  newActionType === 'custom_function'
+                                    ? newActionParamsJson
+                                    : undefined,
                               },
                             ],
                           }));

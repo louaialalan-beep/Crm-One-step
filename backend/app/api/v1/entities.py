@@ -8,6 +8,15 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.permissions import (
+    PermissionContext,
+    apply_fls_to_response,
+    enforce_fls_on_write,
+    enforce_module_permission,
+    enforce_record_access,
+    filter_records_by_data_sharing,
+    get_permission_context,
+)
 from app.core.quotas import enforce_customer_quota
 from app.core.security import TokenPayload, get_current_token_payload
 from app.db.models import (
@@ -54,7 +63,11 @@ router = APIRouter(tags=["Accounts, Contacts, Deals, Activities & Recycle Bin"])
 
 
 @router.get("/accounts", response_model=List[AccountResponse])
-async def list_accounts(db: AsyncSession = Depends(get_db)) -> List[AccountResponse]:
+async def list_accounts(
+    db: AsyncSession = Depends(get_db),
+    perm_ctx: PermissionContext = Depends(get_permission_context),
+) -> List[AccountResponse]:
+    enforce_module_permission(perm_ctx, "accounts", "read")
     rows = (
         await db.scalars(
             select(Account)
@@ -62,7 +75,9 @@ async def list_accounts(db: AsyncSession = Depends(get_db)) -> List[AccountRespo
             .order_by(Account.created_at.desc())
         )
     ).all()
-    return [AccountResponse.model_validate(r) for r in rows]
+    visible_rows = filter_records_by_data_sharing(perm_ctx, rows, owner_attr="owner_id")
+    validated = [AccountResponse.model_validate(r) for r in visible_rows]
+    return apply_fls_to_response(perm_ctx, "accounts", validated)
 
 
 @router.post("/accounts", response_model=AccountResponse, status_code=status.HTTP_201_CREATED)
@@ -70,7 +85,9 @@ async def create_account(
     payload: AccountCreate,
     db: AsyncSession = Depends(get_db),
     token_payload: TokenPayload = Depends(get_current_token_payload),
+    perm_ctx: PermissionContext = Depends(get_permission_context),
 ) -> AccountResponse:
+    enforce_module_permission(perm_ctx, "accounts", "create")
     account = Account(
         org_id=token_payload.org_id,
         lead_uid=payload.lead_uid or generate_unified_customer_uid(),
@@ -82,12 +99,12 @@ async def create_account(
         city=payload.city,
         website=payload.website,
         annual_revenue=payload.annual_revenue,
-        owner_id=payload.owner_id,
+        owner_id=payload.owner_id or perm_ctx.user_id,
         custom_data=payload.custom_data,
     )
     db.add(account)
     await db.flush()
-    return AccountResponse.model_validate(account)
+    return apply_fls_to_response(perm_ctx, "accounts", AccountResponse.model_validate(account))
 
 
 @router.patch("/accounts/{account_id}", response_model=AccountResponse)
@@ -95,17 +112,23 @@ async def update_account(
     account_id: uuid.UUID,
     payload: AccountUpdate,
     db: AsyncSession = Depends(get_db),
+    perm_ctx: PermissionContext = Depends(get_permission_context),
 ) -> AccountResponse:
+    enforce_module_permission(perm_ctx, "accounts", "update")
     account = await db.scalar(
         select(Account).where(Account.id == account_id, Account.deleted_at.is_(None))
     )
     if not account:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="الحساب غير موجود.")
+    enforce_record_access(perm_ctx, account.owner_id, action="update")
 
-    for k, v in payload.model_dump(exclude_unset=True).items():
+    update_data = enforce_fls_on_write(
+        perm_ctx, "accounts", payload.model_dump(exclude_unset=True)
+    )
+    for k, v in update_data.items():
         setattr(account, k, v)
     await db.flush()
-    return AccountResponse.model_validate(account)
+    return apply_fls_to_response(perm_ctx, "accounts", AccountResponse.model_validate(account))
 
 
 @router.delete("/accounts/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -113,12 +136,15 @@ async def soft_delete_account(
     account_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     token_payload: TokenPayload = Depends(get_current_token_payload),
+    perm_ctx: PermissionContext = Depends(get_permission_context),
 ) -> None:
+    enforce_module_permission(perm_ctx, "accounts", "delete")
     account = await db.scalar(
         select(Account).where(Account.id == account_id, Account.deleted_at.is_(None))
     )
     if not account:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="الحساب غير موجود.")
+    enforce_record_access(perm_ctx, account.owner_id, action="delete")
     account.deleted_at = datetime.now(timezone.utc)
     account.deleted_by = token_payload.sub
     await db.flush()
@@ -130,7 +156,11 @@ async def soft_delete_account(
 
 
 @router.get("/contacts", response_model=List[ContactResponse])
-async def list_contacts(db: AsyncSession = Depends(get_db)) -> List[ContactResponse]:
+async def list_contacts(
+    db: AsyncSession = Depends(get_db),
+    perm_ctx: PermissionContext = Depends(get_permission_context),
+) -> List[ContactResponse]:
+    enforce_module_permission(perm_ctx, "contacts", "read")
     rows = (
         await db.scalars(
             select(Contact)
@@ -138,7 +168,9 @@ async def list_contacts(db: AsyncSession = Depends(get_db)) -> List[ContactRespo
             .order_by(Contact.created_at.desc())
         )
     ).all()
-    return [ContactResponse.model_validate(r) for r in rows]
+    visible_rows = filter_records_by_data_sharing(perm_ctx, rows, owner_attr="owner_id")
+    validated = [ContactResponse.model_validate(r) for r in visible_rows]
+    return apply_fls_to_response(perm_ctx, "contacts", validated)
 
 
 @router.post("/contacts", response_model=ContactResponse, status_code=status.HTTP_201_CREATED)
@@ -146,8 +178,10 @@ async def create_contact(
     payload: ContactCreate,
     db: AsyncSession = Depends(get_db),
     token_payload: TokenPayload = Depends(get_current_token_payload),
+    perm_ctx: PermissionContext = Depends(get_permission_context),
     _org: Organization = Depends(enforce_customer_quota),
 ) -> ContactResponse:
+    enforce_module_permission(perm_ctx, "contacts", "create")
     contact = Contact(
         org_id=token_payload.org_id,
         lead_uid=payload.lead_uid or generate_unified_customer_uid(),
@@ -157,12 +191,12 @@ async def create_contact(
         email=payload.email,
         phone=payload.phone,
         company_name=payload.company_name,
-        owner_id=payload.owner_id,
+        owner_id=payload.owner_id or perm_ctx.user_id,
         custom_data=payload.custom_data,
     )
     db.add(contact)
     await db.flush()
-    return ContactResponse.model_validate(contact)
+    return apply_fls_to_response(perm_ctx, "contacts", ContactResponse.model_validate(contact))
 
 
 @router.patch("/contacts/{contact_id}", response_model=ContactResponse)
@@ -170,17 +204,23 @@ async def update_contact(
     contact_id: uuid.UUID,
     payload: ContactUpdate,
     db: AsyncSession = Depends(get_db),
+    perm_ctx: PermissionContext = Depends(get_permission_context),
 ) -> ContactResponse:
+    enforce_module_permission(perm_ctx, "contacts", "update")
     contact = await db.scalar(
         select(Contact).where(Contact.id == contact_id, Contact.deleted_at.is_(None))
     )
     if not contact:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="جهة الاتصال غير موجودة.")
+    enforce_record_access(perm_ctx, contact.owner_id, action="update")
 
-    for k, v in payload.model_dump(exclude_unset=True).items():
+    update_data = enforce_fls_on_write(
+        perm_ctx, "contacts", payload.model_dump(exclude_unset=True)
+    )
+    for k, v in update_data.items():
         setattr(contact, k, v)
     await db.flush()
-    return ContactResponse.model_validate(contact)
+    return apply_fls_to_response(perm_ctx, "contacts", ContactResponse.model_validate(contact))
 
 
 @router.delete("/contacts/{contact_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -188,12 +228,15 @@ async def soft_delete_contact(
     contact_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     token_payload: TokenPayload = Depends(get_current_token_payload),
+    perm_ctx: PermissionContext = Depends(get_permission_context),
 ) -> None:
+    enforce_module_permission(perm_ctx, "contacts", "delete")
     contact = await db.scalar(
         select(Contact).where(Contact.id == contact_id, Contact.deleted_at.is_(None))
     )
     if not contact:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="جهة الاتصال غير موجودة.")
+    enforce_record_access(perm_ctx, contact.owner_id, action="delete")
     contact.deleted_at = datetime.now(timezone.utc)
     contact.deleted_by = token_payload.sub
     await db.flush()
@@ -205,7 +248,11 @@ async def soft_delete_contact(
 
 
 @router.get("/deals", response_model=List[DealResponse])
-async def list_deals(db: AsyncSession = Depends(get_db)) -> List[DealResponse]:
+async def list_deals(
+    db: AsyncSession = Depends(get_db),
+    perm_ctx: PermissionContext = Depends(get_permission_context),
+) -> List[DealResponse]:
+    enforce_module_permission(perm_ctx, "deals", "read")
     rows = (
         await db.scalars(
             select(Deal)
@@ -213,7 +260,9 @@ async def list_deals(db: AsyncSession = Depends(get_db)) -> List[DealResponse]:
             .order_by(Deal.created_at.desc())
         )
     ).all()
-    return [DealResponse.model_validate(r) for r in rows]
+    visible_rows = filter_records_by_data_sharing(perm_ctx, rows, owner_attr="owner_id")
+    validated = [DealResponse.model_validate(r) for r in visible_rows]
+    return apply_fls_to_response(perm_ctx, "deals", validated)
 
 
 @router.post("/deals", response_model=DealResponse, status_code=status.HTTP_201_CREATED)
@@ -221,7 +270,9 @@ async def create_deal(
     payload: DealCreate,
     db: AsyncSession = Depends(get_db),
     token_payload: TokenPayload = Depends(get_current_token_payload),
+    perm_ctx: PermissionContext = Depends(get_permission_context),
 ) -> DealResponse:
+    enforce_module_permission(perm_ctx, "deals", "create")
     unified_uid = payload.lead_uid or generate_unified_customer_uid()
     now = datetime.now(timezone.utc)
 
@@ -237,7 +288,7 @@ async def create_deal(
         currency=payload.currency,
         probability=payload.probability,
         expected_close_date=payload.expected_close_date,
-        owner_id=payload.owner_id,
+        owner_id=payload.owner_id or perm_ctx.user_id,
         custom_data=payload.custom_data,
     )
     db.add(deal)
@@ -257,7 +308,7 @@ async def create_deal(
     db.add(initial_history)
     await db.flush()
 
-    return DealResponse.model_validate(deal)
+    return apply_fls_to_response(perm_ctx, "deals", DealResponse.model_validate(deal))
 
 
 @router.patch("/deals/{deal_id}", response_model=DealResponse)
@@ -266,19 +317,24 @@ async def update_deal(
     payload: DealUpdate,
     db: AsyncSession = Depends(get_db),
     token_payload: TokenPayload = Depends(get_current_token_payload),
+    perm_ctx: PermissionContext = Depends(get_permission_context),
 ) -> DealResponse:
     """
     Updates a Deal and automatically records Blueprint Stage Dwell Time (`dwell_seconds`)
-    in `stage_history` whenever `stage` changes.
+    in `stage_history` whenever `stage` changes. Enforces Profile FLS and Data Sharing.
     """
+    enforce_module_permission(perm_ctx, "deals", "update")
     deal = await db.scalar(
         select(Deal).where(Deal.id == deal_id, Deal.deleted_at.is_(None))
     )
     if not deal:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="الصفقة غير موجودة.")
+    enforce_record_access(perm_ctx, deal.owner_id, action="update")
 
     previous_stage = deal.stage
-    update_data = payload.model_dump(exclude_unset=True)
+    update_data = enforce_fls_on_write(
+        perm_ctx, "deals", payload.model_dump(exclude_unset=True)
+    )
     for k, v in update_data.items():
         setattr(deal, k, v)
 
@@ -311,14 +367,21 @@ async def update_deal(
         db.add(next_history)
 
     await db.flush()
-    return DealResponse.model_validate(deal)
+    return apply_fls_to_response(perm_ctx, "deals", DealResponse.model_validate(deal))
 
 
 @router.get("/deals/{deal_id}/stage-history", response_model=List[StageHistoryResponse])
 async def list_deal_stage_history(
     deal_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    perm_ctx: PermissionContext = Depends(get_permission_context),
 ) -> List[StageHistoryResponse]:
+    enforce_module_permission(perm_ctx, "deals", "read")
+    deal = await db.scalar(
+        select(Deal).where(Deal.id == deal_id, Deal.deleted_at.is_(None))
+    )
+    if deal:
+        enforce_record_access(perm_ctx, deal.owner_id, action="read")
     rows = (
         await db.scalars(
             select(StageHistory)
@@ -334,12 +397,15 @@ async def soft_delete_deal(
     deal_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     token_payload: TokenPayload = Depends(get_current_token_payload),
+    perm_ctx: PermissionContext = Depends(get_permission_context),
 ) -> None:
+    enforce_module_permission(perm_ctx, "deals", "delete")
     deal = await db.scalar(
         select(Deal).where(Deal.id == deal_id, Deal.deleted_at.is_(None))
     )
     if not deal:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="الصفقة غير موجودة.")
+    enforce_record_access(perm_ctx, deal.owner_id, action="delete")
     deal.deleted_at = datetime.now(timezone.utc)
     deal.deleted_by = token_payload.sub
     await db.flush()
@@ -351,7 +417,11 @@ async def soft_delete_deal(
 
 
 @router.get("/activities", response_model=List[ActivityResponse])
-async def list_activities(db: AsyncSession = Depends(get_db)) -> List[ActivityResponse]:
+async def list_activities(
+    db: AsyncSession = Depends(get_db),
+    perm_ctx: PermissionContext = Depends(get_permission_context),
+) -> List[ActivityResponse]:
+    enforce_module_permission(perm_ctx, "activities", "read")
     rows = (
         await db.scalars(
             select(Activity)
@@ -359,7 +429,9 @@ async def list_activities(db: AsyncSession = Depends(get_db)) -> List[ActivityRe
             .order_by(Activity.created_at.desc())
         )
     ).all()
-    return [ActivityResponse.model_validate(r) for r in rows]
+    visible_rows = filter_records_by_data_sharing(perm_ctx, rows, owner_attr="owner_id")
+    validated = [ActivityResponse.model_validate(r) for r in visible_rows]
+    return apply_fls_to_response(perm_ctx, "activities", validated)
 
 
 @router.post("/activities", response_model=ActivityResponse, status_code=status.HTTP_201_CREATED)
@@ -367,7 +439,9 @@ async def create_activity(
     payload: ActivityCreate,
     db: AsyncSession = Depends(get_db),
     token_payload: TokenPayload = Depends(get_current_token_payload),
+    perm_ctx: PermissionContext = Depends(get_permission_context),
 ) -> ActivityResponse:
+    enforce_module_permission(perm_ctx, "activities", "create")
     activity = Activity(
         org_id=token_payload.org_id,
         lead_uid=payload.lead_uid,
@@ -380,12 +454,12 @@ async def create_activity(
         lead_id=payload.lead_id,
         contact_id=payload.contact_id,
         deal_id=payload.deal_id,
-        owner_id=payload.owner_id,
+        owner_id=payload.owner_id or perm_ctx.user_id,
         payload=payload.payload,
     )
     db.add(activity)
     await db.flush()
-    return ActivityResponse.model_validate(activity)
+    return apply_fls_to_response(perm_ctx, "activities", ActivityResponse.model_validate(activity))
 
 
 @router.patch("/activities/{activity_id}", response_model=ActivityResponse)
@@ -393,17 +467,23 @@ async def update_activity(
     activity_id: uuid.UUID,
     payload: ActivityUpdate,
     db: AsyncSession = Depends(get_db),
+    perm_ctx: PermissionContext = Depends(get_permission_context),
 ) -> ActivityResponse:
+    enforce_module_permission(perm_ctx, "activities", "update")
     activity = await db.scalar(
         select(Activity).where(Activity.id == activity_id, Activity.deleted_at.is_(None))
     )
     if not activity:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="النشاط غير موجود.")
+    enforce_record_access(perm_ctx, activity.owner_id, action="update")
 
-    for k, v in payload.model_dump(exclude_unset=True).items():
+    update_data = enforce_fls_on_write(
+        perm_ctx, "activities", payload.model_dump(exclude_unset=True)
+    )
+    for k, v in update_data.items():
         setattr(activity, k, v)
     await db.flush()
-    return ActivityResponse.model_validate(activity)
+    return apply_fls_to_response(perm_ctx, "activities", ActivityResponse.model_validate(activity))
 
 
 @router.delete("/activities/{activity_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -411,12 +491,15 @@ async def soft_delete_activity(
     activity_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     token_payload: TokenPayload = Depends(get_current_token_payload),
+    perm_ctx: PermissionContext = Depends(get_permission_context),
 ) -> None:
+    enforce_module_permission(perm_ctx, "activities", "delete")
     activity = await db.scalar(
         select(Activity).where(Activity.id == activity_id, Activity.deleted_at.is_(None))
     )
     if not activity:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="النشاط غير موجود.")
+    enforce_record_access(perm_ctx, activity.owner_id, action="delete")
     activity.deleted_at = datetime.now(timezone.utc)
     activity.deleted_by = token_payload.sub
     await db.flush()

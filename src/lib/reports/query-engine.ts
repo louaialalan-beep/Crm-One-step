@@ -765,7 +765,15 @@ export function computeAggregationsForRows(
 
     const numericValues: number[] = [];
     for (const r of rows) {
-      const raw = resolveFieldValue(r, agg.field);
+      let raw = resolveFieldValue(r, agg.field);
+      if ((raw === null || raw === undefined) && agg.field === 'valueSAR') {
+        raw =
+          r['estimatedValueSAR'] ??
+          r['estimatedValue'] ??
+          r['approvedBudget'] ??
+          r['amountSAR'] ??
+          r['amount'];
+      }
       const num = typeof raw === 'number' ? raw : Number(raw);
       if (!Number.isNaN(num) && Number.isFinite(num)) {
         numericValues.push(num);
@@ -1092,15 +1100,17 @@ function buildChartDataAndDrillDown(
     const aggMap = computeAggregationsForRows(groupRows, report.aggregations);
     let metricValue = groupRows.length;
 
-    if (yAxisMetric in aggMap) {
+    if (yAxisMetric in aggMap && aggMap[yAxisMetric] > 0) {
       metricValue = aggMap[yAxisMetric];
     } else {
       const numericSum = groupRows.reduce((sum, r) => {
         const v = Number(resolveFieldValue(r, yAxisMetric));
         return Number.isNaN(v) ? sum : sum + v;
       }, 0);
-      if (numericSum > 0 || yAxisMetric !== 'count') {
+      if (numericSum > 0) {
         metricValue = Number(numericSum.toFixed(2));
+      } else {
+        metricValue = groupRows.length;
       }
     }
 

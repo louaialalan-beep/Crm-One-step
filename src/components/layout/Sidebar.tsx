@@ -52,6 +52,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     billing: true,
     tasks: true,
+    analytics: true,
     settings: location.pathname.startsWith('/settings'),
   });
 
@@ -62,6 +63,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       setExpandedGroups((prev) => ({ ...prev, billing: true }));
     } else if (['/tasks', '/activities', '/calendar'].includes(location.pathname)) {
       setExpandedGroups((prev) => ({ ...prev, tasks: true }));
+    } else if (['/analytics', '/predictive-analytics'].includes(location.pathname)) {
+      setExpandedGroups((prev) => ({ ...prev, analytics: true }));
     }
   }, [location.pathname]);
 

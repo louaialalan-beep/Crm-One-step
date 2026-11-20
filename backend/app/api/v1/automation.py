@@ -28,9 +28,14 @@ from app.schemas.crm import (
     BlueprintCreate,
     BlueprintResponse,
     CapiEventLogResponse,
+    CustomFunctionExecuteRequest,
+    CustomFunctionExecuteResponse,
     DealResponse,
     DealStageTransitionRequest,
     DealStageTransitionResponse,
+    LeadResponse,
+    LeadStageTransitionRequest,
+    LeadStageTransitionResponse,
     StageBottleneckMetric,
     StageBottlenecksReportResponse,
     WorkflowLogResponse,
@@ -38,6 +43,8 @@ from app.schemas.crm import (
     WorkflowRuleResponse,
 )
 from app.worker import (
+    _execute_custom_function_on_session,
+    execute_custom_function_task,
     execute_workflow_rule_task,
     send_meta_capi_event_task,
     sha256_normalize,
@@ -46,12 +53,12 @@ from app.worker import (
 router = APIRouter(tags=["Blueprint Transition Engine, Workflow Rules & Stage Bottleneck Analytics"])
 
 WON_STAGES = {"مكتملة", "إغلاق - فوز", "إغلاق - فوز (100%)", "Won", "Closed Won"}
-LOST_STAGES = {"خسارة", "إغلاق - خسارة", "Lost", "Closed Lost"}
+LOST_STAGES = {"خسارة", "إغلاق - خسارة", "Lost", "Closed Lost", "غير مؤهل", "مرفوض"}
 
 
 def _evaluate_rule_conditions(
     conditions: List[Dict[str, Any]],
-    deal: Deal,
+    record: Any,
     from_stage: str,
     to_stage: str,
 ) -> bool:
@@ -63,14 +70,14 @@ def _evaluate_rule_conditions(
         expected = cond.get("value")
 
         actual: Any = None
-        if field == "to_stage" or field == "stage":
+        if field in ("to_stage", "stage", "status"):
             actual = to_stage
         elif field == "from_stage":
             actual = from_stage
-        elif hasattr(deal, field):
-            actual = getattr(deal, field)
+        elif hasattr(record, field):
+            actual = getattr(record, field)
         else:
-            actual = (deal.custom_data or {}).get(field)
+            actual = (getattr(record, "custom_data", None) or {}).get(field)
 
         if operator in ("equals", "=="):
             if str(actual) != str(expected):
@@ -85,6 +92,53 @@ def _evaluate_rule_conditions(
             except Exception:
                 return False
     return True
+
+
+def _validate_blueprint_before_rules(
+    before_rules: Optional[Dict[str, Any]],
+    record: Any,
+    token_payload: TokenPayload,
+) -> None:
+    if not before_rules:
+        return
+
+    allowed_roles = before_rules.get("allowed_roles") or before_rules.get("allowedRoles")
+    if isinstance(allowed_roles, list) and allowed_roles:
+        user_role = str(getattr(token_payload, "role", "") or "")
+        if (
+            user_role
+            and user_role not in ("admin", "super_admin", "مدير النظام")
+            and user_role not in allowed_roles
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"شرط البلوبرينت (Before): الدور الوظيفي ({user_role}) غير مخوّل بتنفيذ هذا الانتقال.",
+            )
+
+    min_amount = before_rules.get("min_amount") or before_rules.get("minAmount")
+    if min_amount is not None:
+        rec_amount = getattr(record, "amount", None) or getattr(record, "estimated_value", None) or 0
+        try:
+            if Decimal(str(rec_amount)) < Decimal(str(min_amount)):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"شرط البلوبرينت (Before): قيمة السجل يجب ألا تقل عن {min_amount} ر.س قبل الانتقال.",
+                )
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+
+    required_before_fields = before_rules.get("required_fields") or before_rules.get("requiredFields") or []
+    if isinstance(required_before_fields, list):
+        custom_data = getattr(record, "custom_data", None) or {}
+        for req_f in required_before_fields:
+            val = getattr(record, req_f, None) if hasattr(record, req_f) else custom_data.get(req_f)
+            if val is None or str(val).strip() == "":
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"شرط البلوبرينت (Before): الحقل ({req_f}) يجب أن يكون مكتملًا قبل بدء الانتقال.",
+                )
 
 
 @router.post(
@@ -102,6 +156,7 @@ async def transition_deal_stage_blueprint(
     """
     Blueprint & Workflow Stage Transition Engine (`POST /api/v1/deals/{id}/transition`):
       1. Validates **Before** & **During** conditions on the server:
+         - Enforces `before_rules` configured on `BlueprintTransitionModel`.
          - On transition to Lost (`خسارة` / `إغلاق - خسارة`), enforces `lost_reason` and
            strictly blocks automatic sales order generation and onboarding tasks.
          - On transition to Quote/Won, validates positive deal amount and any blueprint
@@ -109,7 +164,7 @@ async def transition_deal_stage_blueprint(
       2. Computes exact `dwell_seconds` in the previous stage inside `stage_history`
          and records the new `stage_history` entry.
       3. Triggers **After** actions and matching active `workflow_rules` via ARQ
-         (`update_field`, `create_task`, `send_whatsapp`, `send_webhook`).
+         (`update_field`, `create_task`, `send_whatsapp`, `send_webhook`, `custom_function`).
       4. When transitioning to Won (`مكتملة` / `إغلاق - فوز`), enqueues a Meta CAPI
          `Purchase` event with `RWQ-xxxxx` (`lead_uid`) and logs it in `capi_events_log`.
     """
@@ -136,6 +191,9 @@ async def transition_deal_stage_blueprint(
             BlueprintTransitionModel.to_stage == to_stage,
         )
     )
+
+    if bp_transition and bp_transition.before_rules:
+        _validate_blueprint_before_rules(bp_transition.before_rules, deal, token_payload)
 
     if is_lost_transition:
         if not (payload.lost_reason or deal.lost_reason):
@@ -164,18 +222,22 @@ async def transition_deal_stage_blueprint(
             provided_keys.add("amount")
         if payload.next_step:
             provided_keys.add("next_step")
+        if payload.review_notes:
+            provided_keys.add("review_notes")
         if payload.contract_pdf_url:
             provided_keys.add("contract_pdf_url")
 
         missing = [
             req_field
             for req_field in bp_transition.during_required_fields
-            if req_field not in provided_keys and not getattr(deal, req_field, None)
+            if req_field not in provided_keys
+            and not getattr(deal, req_field, None)
+            and not (deal.custom_data or {}).get(req_field)
         ]
         if missing:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"حقول إلزامية مفقودة في انتقال البلوبرينت: {', '.join(missing)}",
+                detail=f"حقول إلزامية مفقودة في انتقال البلوبرينت (During): {', '.join(missing)}",
             )
 
     # 2. Update Deal fields & Stage
@@ -583,3 +645,241 @@ async def list_workflow_logs(db: AsyncSession = Depends(get_db)) -> List[Workflo
         )
     ).all()
     return [WorkflowLogResponse.model_validate(r) for r in rows]
+
+
+@router.post(
+    "/leads/{lead_id}/transition",
+    response_model=LeadStageTransitionResponse,
+)
+async def transition_lead_stage_blueprint(
+    lead_id: uuid.UUID,
+    payload: LeadStageTransitionRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    token_payload: TokenPayload = Depends(get_current_token_payload),
+    _org: Organization = Depends(require_plan_feature("blueprints")),
+) -> LeadStageTransitionResponse:
+    """
+    Blueprint & Workflow Stage Transition Engine for Leads (`POST /api/v1/leads/{id}/transition`):
+      1. Validates **Before** & **During** conditions on the server from `BlueprintTransitionModel`.
+      2. Updates the Lead status/stage and any `during_fields` in `custom_data`.
+      3. Triggers **After** actions and matching active `workflow_rules` for `leads` via ARQ
+         (including `custom_function`).
+    """
+    lead = await db.scalar(
+        select(Lead)
+        .where(Lead.id == lead_id, Lead.deleted_at.is_(None))
+        .with_for_update()
+    )
+    if not lead:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="العميل المحتمل غير موجود.",
+        )
+
+    from_stage = lead.status
+    to_stage = payload.to_stage.strip()
+    is_lost_transition = to_stage in LOST_STAGES
+
+    bp_transition = await db.scalar(
+        select(BlueprintTransitionModel).where(
+            BlueprintTransitionModel.from_stage == from_stage,
+            BlueprintTransitionModel.to_stage == to_stage,
+        )
+    )
+
+    if bp_transition and bp_transition.before_rules:
+        _validate_blueprint_before_rules(bp_transition.before_rules, lead, token_payload)
+
+    if is_lost_transition and not (payload.lost_reason or (lead.custom_data or {}).get("lost_reason")):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="شرط البلوبرينت (During): يجب تحديد سبب الاستبعاد/عدم التأهيل عند نقل العميل المحتمل إلى غير مؤهل.",
+        )
+
+    if bp_transition and bp_transition.during_required_fields:
+        provided_keys = set((payload.during_fields or {}).keys())
+        if payload.lost_reason:
+            provided_keys.add("lost_reason")
+        if payload.review_notes:
+            provided_keys.add("review_notes")
+        if payload.next_step:
+            provided_keys.add("next_step")
+        if payload.estimated_value is not None:
+            provided_keys.add("estimated_value")
+
+        missing = [
+            req_field
+            for req_field in bp_transition.during_required_fields
+            if req_field not in provided_keys
+            and not getattr(lead, req_field, None)
+            and not (lead.custom_data or {}).get(req_field)
+        ]
+        if missing:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"حقول إلزامية مفقودة في انتقال بلوبرينت العملاء المحتملين (During): {', '.join(missing)}",
+            )
+
+    lead.status = to_stage
+    if payload.estimated_value is not None:
+        lead.estimated_value = payload.estimated_value
+
+    merged_custom = dict(lead.custom_data or {})
+    if payload.lost_reason:
+        merged_custom["lost_reason"] = payload.lost_reason
+    if payload.review_notes:
+        merged_custom["review_notes"] = payload.review_notes
+    if payload.next_step:
+        merged_custom["next_step"] = payload.next_step
+    if payload.during_fields:
+        merged_custom.update(payload.during_fields)
+    lead.custom_data = merged_custom
+
+    after_actions: List[Dict[str, Any]] = []
+    if bp_transition and bp_transition.after_actions:
+        after_actions.extend(bp_transition.after_actions)
+
+    active_rules = (
+        await db.scalars(
+            select(WorkflowRuleModel).where(
+                WorkflowRuleModel.module.in_(["leads", "العملاء المحتملين"]),
+                WorkflowRuleModel.is_active.is_(True),
+            )
+        )
+    ).all()
+
+    matched_rules: List[WorkflowRuleModel] = []
+    for rule in active_rules:
+        if _evaluate_rule_conditions(rule.conditions or [], lead, from_stage, to_stage):
+            matched_rules.append(rule)
+
+    arq_pool = getattr(request.app.state, "arq_pool", None)
+    snapshot = {
+        "lead_id": str(lead.id),
+        "full_name": lead.full_name,
+        "lead_uid": lead.lead_uid,
+        "from_stage": from_stage,
+        "to_stage": to_stage,
+        "amount": float(lead.estimated_value or 0),
+        "phone": lead.phone,
+    }
+
+    if after_actions:
+        if arq_pool is not None:
+            await arq_pool.enqueue_job(
+                "execute_workflow_rule_task",
+                org_id=str(token_payload.org_id),
+                module="leads",
+                record_id=str(lead.id),
+                lead_uid=lead.lead_uid,
+                actions=after_actions,
+                blueprint_transition_id=str(bp_transition.id) if bp_transition else None,
+                record_snapshot=snapshot,
+            )
+        else:
+            for act in after_actions:
+                if act.get("type") in ("custom_function", "execute_custom_function"):
+                    await _execute_custom_function_on_session(
+                        session=db,
+                        org_uuid=token_payload.org_id,
+                        module="leads",
+                        record_id=str(lead.id),
+                        lead_uid=lead.lead_uid,
+                        function_name=str(act.get("function_name") or act.get("functionName") or "lead_custom_fn"),
+                        code=str(act.get("code") or ""),
+                        params=act.get("params") if isinstance(act.get("params"), dict) else {},
+                        record_snapshot=snapshot,
+                    )
+                db.add(
+                    WorkflowLogModel(
+                        org_id=token_payload.org_id,
+                        blueprint_transition_id=bp_transition.id if bp_transition else None,
+                        module="leads",
+                        record_id=str(lead.id),
+                        lead_uid=lead.lead_uid,
+                        action_type=str(act.get("type") or "create_task"),
+                        status="executed",
+                        details=act,
+                    )
+                )
+
+    for rule in matched_rules:
+        rule_actions = list(rule.actions or [])
+        if not rule_actions:
+            continue
+        if arq_pool is not None:
+            await arq_pool.enqueue_job(
+                "execute_workflow_rule_task",
+                org_id=str(token_payload.org_id),
+                module="leads",
+                record_id=str(lead.id),
+                lead_uid=lead.lead_uid,
+                actions=rule_actions,
+                rule_id=str(rule.id),
+                record_snapshot=snapshot,
+            )
+        else:
+            rule.executions_count = int(rule.executions_count or 0) + 1
+            for act in rule_actions:
+                db.add(
+                    WorkflowLogModel(
+                        org_id=token_payload.org_id,
+                        rule_id=rule.id,
+                        module="leads",
+                        record_id=str(lead.id),
+                        lead_uid=lead.lead_uid,
+                        action_type=str(act.get("type") or "create_task"),
+                        status="executed",
+                        details=act,
+                    )
+                )
+
+    await db.flush()
+    return LeadStageTransitionResponse(
+        lead=LeadResponse.model_validate(lead),
+        from_stage=from_stage,
+        to_stage=to_stage,
+        triggered_after_actions=after_actions,
+        triggered_workflow_rules=[r.code for r in matched_rules],
+    )
+
+
+@router.post(
+    "/settings/functions/execute",
+    response_model=CustomFunctionExecuteResponse,
+)
+async def execute_custom_function_endpoint(
+    payload: CustomFunctionExecuteRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    token_payload: TokenPayload = Depends(get_current_token_payload),
+) -> CustomFunctionExecuteResponse:
+    """
+    Executes a Custom Function against a specified `record_id` (`deals` or `leads`)
+    inside the server-side sandboxed executor (or enqueues via ARQ worker) and logs
+    execution to `workflow_logs`.
+    """
+    exec_res = await _execute_custom_function_on_session(
+        session=db,
+        org_uuid=token_payload.org_id,
+        module=payload.module,
+        record_id=payload.record_id,
+        lead_uid=payload.lead_uid,
+        function_name=payload.function_name,
+        code=payload.code,
+        params=payload.params,
+    )
+    db.add(
+        WorkflowLogModel(
+            org_id=token_payload.org_id,
+            module=payload.module,
+            record_id=payload.record_id,
+            lead_uid=exec_res.get("lead_uid") or payload.lead_uid,
+            action_type="custom_function",
+            status="executed",
+            details=exec_res,
+        )
+    )
+    await db.flush()
+    return CustomFunctionExecuteResponse(**exec_res)

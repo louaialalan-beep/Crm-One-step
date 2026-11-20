@@ -507,6 +507,20 @@ class Invoice(Base, TenantScopedMixin, TimestampMixin, SoftDeleteMixin):
         Numeric(14, 2), default=Decimal("0.00"), nullable=False
     )
     zatca_tlv_base64: Mapped[str] = mapped_column(Text, nullable=False)
+    xml_content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    zatca_hash: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    zatca_status: Mapped[str] = mapped_column(
+        String(64), default="PHASE1_READY", nullable=False
+    )
+    zatca_uuid: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    zatca_signature: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    zatca_pih: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    zatca_invoice_type: Mapped[str] = mapped_column(
+        String(32), default="B2B_STANDARD", nullable=False
+    )
+    zatca_submitted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     issued_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False
     )
@@ -681,6 +695,52 @@ class WorkflowLogModel(Base, TenantScopedMixin):
     )
 
 
+class EmailMessage(Base, TenantScopedMixin, TimestampMixin):
+    """
+    جدول رسائل البريد الإلكتروني ثنائي الاتجاه (email_messages - IMAP/SMTP)
+    المرتبط بـ org_id وسياسة RLS ومعرّف العميل الموحد RWQ-xxxxx.
+    """
+
+    __tablename__ = "email_messages"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    lead_uid: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    lead_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("leads.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    contact_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True
+    )
+    deal_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("deals.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    direction: Mapped[str] = mapped_column(
+        String(20), default="outbound", nullable=False, index=True
+    )  # inbound | outbound
+    from_email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    to_email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    cc_email: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    subject: Mapped[str] = mapped_column(String(500), default="(بدون عنوان)", nullable=False)
+    body_text: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    body_html: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    message_id_header: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True, index=True
+    )
+    in_reply_to: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    folder: Mapped[str] = mapped_column(String(64), default="INBOX", nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32), default="sent", nullable=False, index=True
+    )  # received | queued | sent | simulated | failed
+    attachments: Mapped[List[Dict[str, Any]]] = mapped_column(
+        JSONB, default=list, nullable=False
+    )
+    metadata_: Mapped[Dict[str, Any]] = mapped_column(
+        "metadata", JSONB, default=dict, nullable=False
+    )
+
+
 RLS_PROTECTED_TABLES: List[str] = [
     "roles",
     "profiles",
@@ -697,9 +757,11 @@ RLS_PROTECTED_TABLES: List[str] = [
     "sales_orders",
     "invoices",
     "whatsapp_messages",
+    "email_messages",
     "capi_events_log",
     "blueprints",
     "blueprint_transitions",
     "workflow_rules",
     "workflow_logs",
 ]
+

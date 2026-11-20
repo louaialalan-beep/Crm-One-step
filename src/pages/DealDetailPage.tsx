@@ -20,6 +20,7 @@ import {
   FileText,
   Info,
   Lock,
+  Mail,
   MessageCircle,
   Mic,
   MoreVertical,
@@ -56,6 +57,7 @@ import {
 import { formatCurrencySAR } from '../utils/formatters';
 import { BlueprintTransitionModal } from '../components/deals/BlueprintTransitionModal';
 import { getArabicInitials } from '../components/leads/LeadChannelIcon';
+import EntityEmailTimelineTab from '../components/email/EntityEmailTimelineTab';
 
 const TOUCHPOINT_CHANNELS: TouchpointChannel[] = [
   'اجتماع',
@@ -300,6 +302,7 @@ export const DealDetailPage: React.FC = () => {
   );
 
   const [quickEditMode, setQuickEditMode] = useState(false);
+  const [activeTimelineTab, setActiveTimelineTab] = useState<'touchpoints' | 'email'>('touchpoints');
   const [amountDraft, setAmountDraft] = useState('');
   const [closeDateDraft, setCloseDateDraft] = useState('');
   const [ownerDraft, setOwnerDraft] = useState('');
@@ -1978,200 +1981,238 @@ export const DealDetailPage: React.FC = () => {
             )}
           </section>
 
-          {/* Card 3: تاريخ المراحل وسجل نقاط الاتصال */}
+          {/* Card 3: تاريخ المراحل وسجل نقاط الاتصال + تبويب البريد الإلكتروني */}
           <section className="rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] p-5 space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-[#2563EB]" />
-                <h2 className="text-[14px] font-bold text-[#0F172A]">
-                  تاريخ المراحل وسجل نقاط الاتصال (Touchpoints)
-                </h2>
-              </div>
-              <div className="flex items-center gap-3 text-[11px]">
-                <span className="text-[#64748B] tabular-nums">
-                  المرحلة الحالية: <strong className="text-[#0F172A]">{currentCol.title}</strong>
-                </span>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#F1F5F9] pb-3">
+              <div className="flex items-center gap-2 flex-wrap">
                 <button
                   type="button"
-                  onClick={() => setTpOpen((p) => !p)}
-                  className="inline-flex items-center gap-1 rounded-lg border border-[#CBD5E1] bg-[#FFFFFF] px-2.5 py-1 text-[11px] font-semibold text-[#2563EB] hover:bg-[#EFF6FF]"
+                  onClick={() => setActiveTimelineTab('touchpoints')}
+                  className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-[13px] font-bold transition-colors ${
+                    activeTimelineTab === 'touchpoints'
+                      ? 'bg-[#EFF6FF] text-[#2563EB] border border-[#BFDBFE]'
+                      : 'text-[#64748B] hover:bg-[#F8FAFC] hover:text-[#0F172A]'
+                  }`}
                 >
-                  <Plus className="h-3 w-3" />
-                  <span>تسجيل متابعة</span>
+                  <Clock className="h-4 w-4" />
+                  <span>تاريخ المراحل وسجل نقاط الاتصال ({dealTouchpoints.length})</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTimelineTab('email')}
+                  className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-[13px] font-bold transition-colors ${
+                    activeTimelineTab === 'email'
+                      ? 'bg-[#EFF6FF] text-[#2563EB] border border-[#BFDBFE]'
+                      : 'text-[#64748B] hover:bg-[#F8FAFC] hover:text-[#0F172A]'
+                  }`}
+                >
+                  <Mail className="h-4 w-4" />
+                  <span>البريد الإلكتروني</span>
+                  <span className="rounded-full bg-[#DBEAFE] px-1.5 py-0.5 text-[10px] font-extrabold text-[#1D4ED8]">
+                    IMAP/SMTP
+                  </span>
                 </button>
               </div>
-            </div>
-
-            {/* Stage Duration Pills */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {[
-                {
-                  title: 'التأهيل المبدئي',
-                  status: currentStepIndex > 0 || deal.stage === 'مكتملة' ? 'مكتملة' : 'قيد التنفيذ',
-                  duration: 'استغرقت: 4 أيام',
-                  sub: 'تحديد الميزانية وصاحب القرار',
-                },
-                {
-                  title: 'تقديم عرض السعر',
-                  status:
-                    currentStepIndex > 1 || deal.stage === 'مكتملة'
-                      ? 'مكتملة'
-                      : currentStepIndex === 1
-                      ? 'قيد التنفيذ'
-                      : 'قادمة',
-                  duration: 'استغرقت: 8 أيام',
-                  sub: `عرض السعر ${activeQuoteNumber}`,
-                },
-                {
-                  title: 'التفاوض والعقد',
-                  status:
-                    deal.stage === 'مكتملة'
-                      ? 'مكتملة'
-                      : currentStepIndex === 2
-                      ? 'قيد التنفيذ'
-                      : 'قادمة',
-                  duration:
-                    currentStepIndex === 2 ? 'نشطة حالياً' : `الاحتمال: ${deal.probability}%`,
-                  sub: `الهدف: الإغلاق قبل ${deal.closeDate}`,
-                },
-              ].map((st) => {
-                const isDone = st.status === 'مكتملة';
-                const isActive = st.status === 'قيد التنفيذ';
-                return (
-                  <div
-                    key={st.title}
-                    className={`rounded-xl border p-3.5 space-y-1.5 ${
-                      isActive
-                        ? 'border-[#93C5FD] bg-[#EFF6FF]/60'
-                        : isDone
-                        ? 'border-[#E2E8F0] bg-[#FFFFFF]'
-                        : 'border-[#E2E8F0] bg-[#F8FAFC]/70'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[12px] font-bold text-[#0F172A]">{st.title}</span>
-                      {isDone ? (
-                        <span className="inline-flex items-center gap-1 rounded bg-[#ECFDF5] px-1.5 py-0.5 text-[10px] font-bold text-[#059669]">
-                          <Check className="h-2.5 w-2.5" />
-                          <span>مكتملة</span>
-                        </span>
-                      ) : isActive ? (
-                        <span className="rounded bg-[#2563EB] px-1.5 py-0.5 text-[10px] font-bold text-[#FFFFFF]">
-                          قيد التنفيذ
-                        </span>
-                      ) : (
-                        <span className="rounded bg-[#F1F5F9] px-1.5 py-0.5 text-[10px] font-semibold text-[#64748B]">
-                          مجدولة
-                        </span>
-                      )}
-                    </div>
-                    <p
-                      className={`text-[11px] font-semibold tabular-nums ${
-                        isActive ? 'text-[#2563EB]' : 'text-[#475569]'
-                      }`}
-                    >
-                      {st.duration}
-                    </p>
-                    <p className="text-[10px] text-[#94A3B8] truncate tabular-nums">{st.sub}</p>
-                  </div>
-                );
-              })}
-            </div>
-
-            {tpOpen && (
-              <form
-                onSubmit={handleAddTouchpoint}
-                className="rounded-xl border border-[#BFDBFE] bg-[#F8FAFC] p-3.5 space-y-2.5 text-xs"
-              >
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                  <select
-                    value={tpChannel}
-                    onChange={(e) => setTpChannel(e.target.value as TouchpointChannel)}
-                    className="h-9 rounded-lg border border-[#CBD5E1] bg-[#FFFFFF] px-2.5 text-[#0F172A]"
-                  >
-                    {TOUCHPOINT_CHANNELS.map((ch) => (
-                      <option key={ch} value={ch}>
-                        {ch}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="text"
-                    required
-                    maxLength={300}
-                    value={tpSummary}
-                    onChange={(e) => setTpSummary(e.target.value)}
-                    placeholder="ملخص الاجتماع أو التحديث الميداني..."
-                    className="h-9 rounded-lg border border-[#CBD5E1] bg-[#FFFFFF] px-3 sm:col-span-2"
-                  />
-                </div>
-                <div className="flex justify-end gap-2">
+              {activeTimelineTab === 'touchpoints' && (
+                <div className="flex items-center gap-3 text-[11px]">
+                  <span className="text-[#64748B] tabular-nums">
+                    المرحلة الحالية: <strong className="text-[#0F172A]">{currentCol.title}</strong>
+                  </span>
                   <button
                     type="button"
-                    onClick={() => setTpOpen(false)}
-                    className="h-8 rounded-lg border border-[#CBD5E1] bg-[#FFFFFF] px-3 font-medium text-[#475569]"
+                    onClick={() => setTpOpen((p) => !p)}
+                    className="inline-flex items-center gap-1 rounded-lg border border-[#CBD5E1] bg-[#FFFFFF] px-2.5 py-1 text-[11px] font-semibold text-[#2563EB] hover:bg-[#EFF6FF]"
                   >
-                    إلغاء
-                  </button>
-                  <button
-                    type="submit"
-                    className="h-8 rounded-lg bg-[#2563EB] px-3.5 font-bold text-[#FFFFFF] hover:bg-[#1D4ED8]"
-                  >
-                    حفظ السجل
+                    <Plus className="h-3 w-3" />
+                    <span>تسجيل متابعة</span>
                   </button>
                 </div>
-              </form>
-            )}
+              )}
+            </div>
 
-            {/* Inherited Touchpoints Timeline */}
-            <div className="space-y-2 pt-1">
-              <p className="text-[12px] font-bold text-[#0F172A]">
-                سجل تفاعلات العميل المتوارثة ({dealTouchpoints.length} نقاط اتصال مسجلة)
-              </p>
-
-              {dealTouchpoints.length === 0 ? (
-                <p className="rounded-xl border border-dashed border-[#E2E8F0] p-4 text-center text-xs text-[#64748B]">
-                  لا توجد نقاط اتصال مسجلة حتى الآن لهذه الصفقة.
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {dealTouchpoints.map((tp, idx) => {
-                    const isFirst = idx === dealTouchpoints.length - 1;
-                    const isLast = idx === 0;
-                    const dotColor =
-                      tp.channel === 'واتساب' || tp.channel === 'اجتماع'
-                        ? 'bg-[#10B981]'
-                        : 'bg-[#2563EB]';
+            {activeTimelineTab === 'email' ? (
+              <EntityEmailTimelineTab
+                orgId={currentOrgId || 'org-1'}
+                leadUid={permanentRwq || deal.leadUniqueId || 'RWQ-88410'}
+                dealId={deal.id}
+                customerName={contact?.fullName || deal.accountName}
+                customerEmail={contact?.email}
+              />
+            ) : (
+              <>
+                {/* Stage Duration Pills */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {[
+                    {
+                      title: 'التأهيل المبدئي',
+                      status: currentStepIndex > 0 || deal.stage === 'مكتملة' ? 'مكتملة' : 'قيد التنفيذ',
+                      duration: 'استغرقت: 4 أيام',
+                      sub: 'تحديد الميزانية وصاحب القرار',
+                    },
+                    {
+                      title: 'تقديم عرض السعر',
+                      status:
+                        currentStepIndex > 1 || deal.stage === 'مكتملة'
+                          ? 'مكتملة'
+                          : currentStepIndex === 1
+                          ? 'قيد التنفيذ'
+                          : 'قادمة',
+                      duration: 'استغرقت: 8 أيام',
+                      sub: `عرض السعر ${activeQuoteNumber}`,
+                    },
+                    {
+                      title: 'التفاوض والعقد',
+                      status:
+                        deal.stage === 'مكتملة'
+                          ? 'مكتملة'
+                          : currentStepIndex === 2
+                          ? 'قيد التنفيذ'
+                          : 'قادمة',
+                      duration:
+                        currentStepIndex === 2 ? 'نشطة حالياً' : `الاحتمال: ${deal.probability}%`,
+                      sub: `الهدف: الإغلاق قبل ${deal.closeDate}`,
+                    },
+                  ].map((st) => {
+                    const isDone = st.status === 'مكتملة';
+                    const isActive = st.status === 'قيد التنفيذ';
                     return (
                       <div
-                        key={tp.id}
-                        className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC]/70 px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs"
+                        key={st.title}
+                        className={`rounded-xl border p-3.5 space-y-1.5 ${
+                          isActive
+                            ? 'border-[#93C5FD] bg-[#EFF6FF]/60'
+                            : isDone
+                            ? 'border-[#E2E8F0] bg-[#FFFFFF]'
+                            : 'border-[#E2E8F0] bg-[#F8FAFC]/70'
+                        }`}
                       >
-                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                          <span className={`h-2 w-2 rounded-full shrink-0 ${dotColor}`} />
-                          <p className="text-[#0F172A] font-medium truncate">
-                            {tp.summary}
-                            {tp.campaign ? ` — (${tp.campaign})` : ''}
-                          </p>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[12px] font-bold text-[#0F172A]">{st.title}</span>
+                          {isDone ? (
+                            <span className="inline-flex items-center gap-1 rounded bg-[#ECFDF5] px-1.5 py-0.5 text-[10px] font-bold text-[#059669]">
+                              <Check className="h-2.5 w-2.5" />
+                              <span>مكتملة</span>
+                            </span>
+                          ) : isActive ? (
+                            <span className="rounded bg-[#2563EB] px-1.5 py-0.5 text-[10px] font-bold text-[#FFFFFF]">
+                              قيد التنفيذ
+                            </span>
+                          ) : (
+                            <span className="rounded bg-[#F1F5F9] px-1.5 py-0.5 text-[10px] font-semibold text-[#64748B]">
+                              مجدولة
+                            </span>
+                          )}
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="rounded border border-[#E2E8F0] bg-[#FFFFFF] px-2 py-0.5 text-[10px] font-semibold text-[#475569]">
-                            {isFirst
-                              ? 'First Touch'
-                              : isLast
-                              ? 'Last Touch'
-                              : tp.eventType || tp.channel}
-                          </span>
-                          <span className="text-[11px] text-[#64748B] tabular-nums whitespace-nowrap">
-                            {tp.occurredAt}
-                          </span>
-                        </div>
+                        <p
+                          className={`text-[11px] font-semibold tabular-nums ${
+                            isActive ? 'text-[#2563EB]' : 'text-[#475569]'
+                          }`}
+                        >
+                          {st.duration}
+                        </p>
+                        <p className="text-[10px] text-[#94A3B8] truncate tabular-nums">{st.sub}</p>
                       </div>
                     );
                   })}
                 </div>
-              )}
-            </div>
+
+                {tpOpen && (
+                  <form
+                    onSubmit={handleAddTouchpoint}
+                    className="rounded-xl border border-[#BFDBFE] bg-[#F8FAFC] p-3.5 space-y-2.5 text-xs"
+                  >
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      <select
+                        value={tpChannel}
+                        onChange={(e) => setTpChannel(e.target.value as TouchpointChannel)}
+                        className="h-9 rounded-lg border border-[#CBD5E1] bg-[#FFFFFF] px-2.5 text-[#0F172A]"
+                      >
+                        {TOUCHPOINT_CHANNELS.map((ch) => (
+                          <option key={ch} value={ch}>
+                            {ch}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="text"
+                        required
+                        maxLength={300}
+                        value={tpSummary}
+                        onChange={(e) => setTpSummary(e.target.value)}
+                        placeholder="ملخص الاجتماع أو التحديث الميداني..."
+                        className="h-9 rounded-lg border border-[#CBD5E1] bg-[#FFFFFF] px-3 sm:col-span-2"
+                      />
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setTpOpen(false)}
+                        className="h-8 rounded-lg border border-[#CBD5E1] bg-[#FFFFFF] px-3 font-medium text-[#475569]"
+                      >
+                        إلغاء
+                      </button>
+                      <button
+                        type="submit"
+                        className="h-8 rounded-lg bg-[#2563EB] px-3.5 font-bold text-[#FFFFFF] hover:bg-[#1D4ED8]"
+                      >
+                        حفظ السجل
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {/* Inherited Touchpoints Timeline */}
+                <div className="space-y-2 pt-1">
+                  <p className="text-[12px] font-bold text-[#0F172A]">
+                    سجل تفاعلات العميل المتوارثة ({dealTouchpoints.length} نقاط اتصال مسجلة)
+                  </p>
+
+                  {dealTouchpoints.length === 0 ? (
+                    <p className="rounded-xl border border-dashed border-[#E2E8F0] p-4 text-center text-xs text-[#64748B]">
+                      لا توجد نقاط اتصال مسجلة حتى الآن لهذه الصفقة.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {dealTouchpoints.map((tp, idx) => {
+                        const isFirst = idx === dealTouchpoints.length - 1;
+                        const isLast = idx === 0;
+                        const dotColor =
+                          tp.channel === 'واتساب' || tp.channel === 'اجتماع'
+                            ? 'bg-[#10B981]'
+                            : 'bg-[#2563EB]';
+                        return (
+                          <div
+                            key={tp.id}
+                            className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC]/70 px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                              <span className={`h-2 w-2 rounded-full shrink-0 ${dotColor}`} />
+                              <p className="text-[#0F172A] font-medium truncate">
+                                {tp.summary}
+                                {tp.campaign ? ` — (${tp.campaign})` : ''}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="rounded border border-[#E2E8F0] bg-[#FFFFFF] px-2 py-0.5 text-[10px] font-semibold text-[#475569]">
+                                {isFirst
+                                  ? 'First Touch'
+                                  : isLast
+                                  ? 'Last Touch'
+                                  : tp.eventType || tp.channel}
+                              </span>
+                              <span className="text-[11px] text-[#64748B] tabular-nums whitespace-nowrap">
+                                {tp.occurredAt}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </section>
         </div>
 

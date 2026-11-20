@@ -376,7 +376,139 @@ export const LeadsTableView: React.FC<LeadsTableViewProps> = ({
       ref={containerRef}
       className="bg-[#ffffff] rounded-xl shadow-sm border border-[#e2e7ff]/80 overflow-visible mb-8"
     >
-      <div className="overflow-x-auto w-full rounded-t-xl">
+      {/* Mobile-First Cards View (< md) */}
+      <div className="md:hidden divide-y divide-[#e2e7ff] p-3 space-y-3">
+        {paginatedLeads.map((lead) => {
+          const isSelected = selectedIds.includes(lead.id);
+          const dupReason = duplicateReasons.get(lead.id);
+          const avatarTone =
+            AVATAR_TONES[getToneIndex(lead.id || lead.fullName, AVATAR_TONES.length)];
+          const scoreStyle = getScoreBarStyle(lead.aiScore);
+          const stageStyle = getStageButtonStyle(lead.status);
+
+          return (
+            <div
+              key={lead.id}
+              className={`rounded-xl border p-3.5 space-y-3 transition-all ${
+                isSelected
+                  ? 'border-[#004ac6] bg-[#dbe1ff]/20'
+                  : 'border-[#e2e7ff] bg-[#ffffff]'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => onToggleSelect(lead.id)}
+                    aria-label={`تحديد ${lead.fullName}`}
+                    className="h-4 w-4 rounded border-[#c3c6d7] text-[#004ac6] shrink-0"
+                  />
+                  <div
+                    className={`w-8 h-8 rounded-full text-xs font-bold flex items-center justify-center shrink-0 ${avatarTone}`}
+                  >
+                    {getDotInitials(lead.fullName)}
+                  </div>
+                  <div className="min-w-0">
+                    <Link
+                      to={`/leads/${lead.id}`}
+                      className="text-sm font-bold text-[#131b2e] hover:text-[#004ac6] block truncate"
+                    >
+                      {lead.fullName}
+                    </Link>
+                    <div className="flex items-center gap-1.5 text-[11px] text-[#737686]">
+                      <span className="font-mono" dir="ltr">
+                        {lead.unique_id}
+                      </span>
+                      <span>•</span>
+                      <span className="truncate">{lead.company || lead.city || lead.source}</span>
+                    </div>
+                  </div>
+                </div>
+                {renderChannelBadge(lead.channel)}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-xs bg-[#f8f9ff] rounded-lg p-2.5 border border-[#e2e7ff]/60">
+                <div>
+                  <span className="text-[10px] text-[#737686] block">رقم الهاتف</span>
+                  <span dir="ltr" className="font-mono font-semibold text-[#131b2e] inline-block">
+                    {lead.phone || '—'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-[#737686] block">درجة التأهيل</span>
+                  <span className={`font-bold tabular-nums ${scoreStyle.text}`}>
+                    {lead.aiScore}%
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-[#737686] block">المصدر</span>
+                  <span className="font-semibold text-[#131b2e] truncate block">
+                    {lead.source || '—'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-[#737686] block">المسؤول</span>
+                  <span className="font-semibold text-[#131b2e] truncate block">
+                    {lead.assignedToName}
+                  </span>
+                </div>
+              </div>
+
+              {dupReason && (
+                <button
+                  type="button"
+                  onClick={() => onInspectDuplicate(lead.id)}
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-[#ffdad6] text-[#93000a] text-[11px] font-semibold flex items-center justify-center gap-1"
+                >
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  <span>{dupReason}</span>
+                </button>
+              )}
+
+              <div className="flex items-center justify-between gap-2 pt-1">
+                <select
+                  disabled={!canUpdateLead}
+                  value={lead.status}
+                  onChange={(e) => onChangeStage(lead.id, e.target.value as LeadStatus)}
+                  aria-label={`تغيير مرحلة ${lead.fullName}`}
+                  className={`px-2.5 py-1 rounded-full text-[11px] font-bold cursor-pointer ${stageStyle.pill}`}
+                >
+                  {LEAD_STAGES.map((st) => (
+                    <option key={st} value={st} className="bg-white text-[#131b2e]">
+                      {st}
+                    </option>
+                  ))}
+                </select>
+
+                <div className="flex items-center gap-1.5">
+                  {renderQuickChatButton(lead, onQuickChat)}
+                  <button
+                    type="button"
+                    onClick={() => onOpenSplitView(lead.id)}
+                    className="p-1.5 rounded-lg border border-[#e2e7ff] text-[#004ac6] hover:bg-[#eaedff]"
+                    title="معاينة سريعة"
+                  >
+                    <Phone className="h-3.5 w-3.5" />
+                  </button>
+                  {!lead.converted && (
+                    <button
+                      type="button"
+                      onClick={() => onConvertLead(lead)}
+                      className="px-2 py-1 rounded-lg bg-[#006242] text-white text-[10px] font-bold"
+                    >
+                      تحويل
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Desktop Table View (>= md) */}
+      <div className="hidden md:block overflow-x-auto w-full rounded-t-xl">
         <table className="w-full text-right border-collapse select-none text-xs">
           {/* Table Head */}
           <thead>
@@ -452,8 +584,8 @@ export const LeadsTableView: React.FC<LeadsTableViewProps> = ({
                 </th>
               )}
 
-              <th className="py-2.5 px-1.5 text-left whitespace-nowrap relative" scope="col">
-                <div className="flex items-center justify-end gap-1">
+              <th className="py-2.5 pl-3 pr-2 min-w-[135px] text-left whitespace-nowrap relative" scope="col">
+                <div className="flex items-center justify-end gap-1.5">
                   <button
                     type="button"
                     onClick={() => setColumnsPopoverOpen((prev) => !prev)}
@@ -464,7 +596,7 @@ export const LeadsTableView: React.FC<LeadsTableViewProps> = ({
                   >
                     <SlidersHorizontal className="h-3.5 w-3.5" />
                   </button>
-                  <span className="text-[11px] font-semibold">إجراءات</span>
+                  <span className="text-[11px] font-semibold">الإجراءات</span>
                 </div>
 
                 {columnsPopoverOpen && (

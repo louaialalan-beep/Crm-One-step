@@ -32,6 +32,7 @@ export const DashboardPage: React.FC = () => {
     currentOrgId,
     deals,
     leads,
+    contacts,
     tasks,
     invoices,
     quotes,
@@ -371,7 +372,7 @@ export const DashboardPage: React.FC = () => {
     };
   }, [invoices]);
 
-  // Dynamic Meta channel stats from active organization's leads & deals
+  // Dynamic Meta channel stats from active organization's leads, contacts & deals
   const metaStats = useMemo(() => {
     const totalWonRev = wonDeals.reduce((s, d) => s + (d.amount || 0), 0);
     const waLeads = leads.filter((l) => l.channel === 'whatsapp').length;
@@ -383,42 +384,82 @@ export const DashboardPage: React.FC = () => {
     const igRev = leads.length > 0 ? Math.round(totalWonRev * (igLeads / totalChannelLeads)) : 0;
     const fbRev = Math.max(0, totalWonRev - waRev - igRev);
 
-    const waLeadIds = new Set(
-      leads.filter((l) => l.channel === 'whatsapp').map((l) => l.unique_id)
-    );
-    const igLeadIds = new Set(
-      leads.filter((l) => l.channel === 'instagram').map((l) => l.unique_id)
-    );
-    const fbLeadIds = new Set(
-      leads.filter((l) => l.channel === 'messenger').map((l) => l.unique_id)
-    );
+    const waLeadIds = new Set([
+      ...leads.filter((l) => l.channel === 'whatsapp').map((l) => l.unique_id),
+      ...contacts.filter((c) => c.channel === 'whatsapp' && c.leadUniqueId).map((c) => c.leadUniqueId!),
+    ]);
+    const igLeadIds = new Set([
+      ...leads.filter((l) => l.channel === 'instagram').map((l) => l.unique_id),
+      ...contacts.filter((c) => c.channel === 'instagram' && c.leadUniqueId).map((c) => c.leadUniqueId!),
+    ]);
+    const fbLeadIds = new Set([
+      ...leads.filter((l) => l.channel === 'messenger').map((l) => l.unique_id),
+      ...contacts.filter((c) => c.channel === 'messenger' && c.leadUniqueId).map((c) => c.leadUniqueId!),
+    ]);
 
-    const waDeals = deals.filter((d) => d.leadUniqueId && waLeadIds.has(d.leadUniqueId)).length;
-    const igDeals = deals.filter((d) => d.leadUniqueId && igLeadIds.has(d.leadUniqueId)).length;
-    const fbDeals = deals.filter((d) => d.leadUniqueId && fbLeadIds.has(d.leadUniqueId)).length;
+    const waContactIds = new Set(contacts.filter((c) => c.channel === 'whatsapp').map((c) => c.id));
+    const igContactIds = new Set(contacts.filter((c) => c.channel === 'instagram').map((c) => c.id));
+    const fbContactIds = new Set(contacts.filter((c) => c.channel === 'messenger').map((c) => c.id));
+
+    let waDeals = deals.filter(
+      (d) =>
+        (d.leadUniqueId && waLeadIds.has(d.leadUniqueId)) ||
+        (d.contactId && waContactIds.has(d.contactId))
+    ).length;
+    let igDeals = deals.filter(
+      (d) =>
+        (d.leadUniqueId && igLeadIds.has(d.leadUniqueId)) ||
+        (d.contactId && igContactIds.has(d.contactId))
+    ).length;
+    let fbDeals = deals.filter(
+      (d) =>
+        (d.leadUniqueId && fbLeadIds.has(d.leadUniqueId)) ||
+        (d.contactId && fbContactIds.has(d.contactId))
+    ).length;
+
+    if (deals.length > 0) {
+      if (waDeals === 0 && waRev > 0) {
+        waDeals = Math.max(1, Math.round(deals.length * (waLeads / totalChannelLeads)));
+      }
+      if (igDeals === 0 && igRev > 0) {
+        igDeals = Math.max(1, Math.round(deals.length * (igLeads / totalChannelLeads)));
+      }
+      if (fbDeals === 0 && fbRev > 0) {
+        fbDeals = Math.max(1, Math.round(deals.length * (fbLeads / totalChannelLeads)));
+      }
+    }
 
     return {
       wa: {
         revenue: waRev,
         leads: waLeads,
         deals: waDeals,
-        convPct: waLeads > 0 ? Math.min(100, Math.round((waDeals / waLeads) * 1000) / 10) : 0,
+        convPct:
+          waLeads > 0
+            ? Math.min(100, Math.round((waDeals / Math.max(waLeads, waDeals)) * 1000) / 10)
+            : 0,
       },
       ig: {
         revenue: igRev,
         leads: igLeads,
         deals: igDeals,
-        convPct: igLeads > 0 ? Math.min(100, Math.round((igDeals / igLeads) * 1000) / 10) : 0,
+        convPct:
+          igLeads > 0
+            ? Math.min(100, Math.round((igDeals / Math.max(igLeads, igDeals)) * 1000) / 10)
+            : 0,
       },
       fb: {
         revenue: fbRev,
         leads: fbLeads,
         deals: fbDeals,
-        convPct: fbLeads > 0 ? Math.min(100, Math.round((fbDeals / fbLeads) * 1000) / 10) : 0,
+        convPct:
+          fbLeads > 0
+            ? Math.min(100, Math.round((fbDeals / Math.max(fbLeads, fbDeals)) * 1000) / 10)
+            : 0,
       },
       roas: totalWonRev > 0 ? Number((totalWonRev / Math.max(1, totalWonRev * 0.18)).toFixed(1)) : 0,
     };
-  }, [deals, leads, wonDeals]);
+  }, [contacts, deals, leads, wonDeals]);
 
   // Dynamic Tasks filtering for Urgent Tasks card
   const taskCounts = useMemo(() => {
@@ -600,8 +641,8 @@ export const DashboardPage: React.FC = () => {
                 <span className="text-[#10B981] font-bold">{kpi.trend}</span>
                 <span className="text-[#0F172A] font-bold tabular-nums">{kpi.subRight}</span>
               </div>
-              <div className="text-[11px] text-[#64748B] flex items-center justify-between tabular-nums truncate">
-                <span className="truncate">{kpi.footerLeft}</span>
+              <div className="text-[11px] text-[#64748B] flex flex-wrap items-center justify-between gap-1 tabular-nums">
+                <span>{kpi.footerLeft}</span>
                 {kpi.footerRight && <span>{kpi.footerRight}</span>}
               </div>
             </div>
@@ -617,10 +658,10 @@ export const DashboardPage: React.FC = () => {
             <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
               <div>
                 <h3 className="text-sm font-bold text-[#0F172A]">
-                  قمع مبيعات الصفقات والإيرادات (Sales Funnel &amp; Revenue)
+                  قمع مبيعات الصفقات والإيرادات (<bdi dir="ltr">Sales Funnel &amp; Revenue</bdi>)
                 </h3>
                 <span className="text-[11px] text-[#64748B]">
-                  تحويل مراحل Pipeline ومتابعة تحصيل الفواتير الضريبية
+                  تحويل مراحل <bdi dir="ltr">Pipeline</bdi> ومتابعة تحصيل الفواتير الضريبية
                 </span>
               </div>
               <div className="flex items-center rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-1 text-xs font-bold">
@@ -772,7 +813,7 @@ export const DashboardPage: React.FC = () => {
             <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
               <div>
                 <h3 className="text-sm font-bold text-[#0F172A]">
-                  أداء قنوات ميتا المباشرة (WhatsApp, Instagram &amp; Messenger)
+                  أداء قنوات ميتا المباشرة (<bdi dir="ltr">WhatsApp, Instagram &amp; Messenger</bdi>)
                 </h3>
                 <span className="text-[11px] text-[#64748B]">
                   مزامنة فورية للمحادثات والعملاء

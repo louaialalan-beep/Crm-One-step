@@ -45,6 +45,7 @@ export function WhatsappInboxPage() {
   const isWhatsappEnabled = Boolean(currentOrganization?.addons?.whatsapp_campaigns);
 
   const [selectedConvoId, setSelectedConvoId] = useState<string>('lead_1');
+  const [mobilePane, setMobilePane] = useState<'list' | 'chat' | 'info'>('list');
   const [filterTab, setFilterTab] = useState<'all' | 'mine' | 'unread'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [replyBody, setReplyBody] = useState('');
@@ -61,6 +62,8 @@ export function WhatsappInboxPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const triggerToast = (msg: string) => {
     setToastMsg(msg);
@@ -118,7 +121,7 @@ export function WhatsappInboxPage() {
       const threadMsgs = messages.filter(
         (m) => m.leadUniqueId === l.unique_id || m.senderName.includes(l.fullName)
       );
-      const latestMsg = threadMsgs[threadMsgs.length - 1];
+      const latestMsg = threadMsgs[0];
       return {
         id: l.id,
         name: l.fullName,
@@ -147,7 +150,7 @@ export function WhatsappInboxPage() {
         const threadMsgs = messages.filter(
           (m) => m.leadUniqueId === contactRefId || m.senderName.includes(c.fullName)
         );
-        const latestMsg = threadMsgs[threadMsgs.length - 1];
+        const latestMsg = threadMsgs[0];
         return {
           id: `contact_${c.id}`,
           name: c.fullName,
@@ -223,11 +226,14 @@ export function WhatsappInboxPage() {
 
   const activeMessages = useMemo(() => {
     if (!activeConvo) return [];
-    const baseList = messages.filter(
-      (m) =>
-        m.leadUniqueId === activeConvo.uniqueId ||
-        m.senderName.includes(activeConvo.name)
-    );
+    const baseList = messages
+      .filter(
+        (m) =>
+          m.leadUniqueId === activeConvo.uniqueId ||
+          m.senderName.includes(activeConvo.name)
+      )
+      .slice()
+      .reverse();
     const seenIds = new Set(baseList.map((m) => m.id));
     const extras = liveWsMessages.filter(
       (m) =>
@@ -237,6 +243,14 @@ export function WhatsappInboxPage() {
     );
     return [...baseList, ...extras];
   }, [messages, liveWsMessages, activeConvo]);
+
+  useEffect(() => {
+    const el = messagesContainerRef.current;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+    }
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [activeConvo?.id, activeMessages.length]);
 
   const handleSendReply = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -519,7 +533,7 @@ export function WhatsappInboxPage() {
                       {activeConvo.name}
                     </h3>
                     <div className="flex items-center gap-2 text-[11px] text-slate-500 font-mono">
-                      <span>{activeConvo.phone}</span>
+                      <span dir="ltr" className="inline-block">{activeConvo.phone}</span>
                       <span>•</span>
                       <span className="text-emerald-700 font-bold">نافذة 24 ساعة مفتوحة ✓</span>
                     </div>
@@ -534,7 +548,10 @@ export function WhatsappInboxPage() {
               </div>
 
               {/* Messages Timeline */}
-              <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-[#efeae2]/30">
+              <div
+                ref={messagesContainerRef}
+                className="flex-1 p-4 overflow-y-auto space-y-3 bg-[#efeae2]/30"
+              >
                 <div className="text-center my-2">
                   <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-slate-200 text-slate-600 shadow-2xs">
                     المحادثة مؤمنة ومشفرة تماماً عبر WhatsApp Cloud API
@@ -542,33 +559,36 @@ export function WhatsappInboxPage() {
                 </div>
 
                 {activeMessages.length > 0 ? (
-                  activeMessages.map((msg) => {
-                    const outbound = msg.direction === 'outbound';
-                    return (
-                      <div
-                        key={msg.id}
-                        className={`flex ${outbound ? 'justify-start' : 'justify-end'}`}
-                      >
+                  <>
+                    {activeMessages.map((msg) => {
+                      const outbound = msg.direction === 'outbound';
+                      return (
                         <div
-                          className={`max-w-md rounded-2xl px-4 py-2.5 text-xs shadow-xs space-y-1 ${
-                            outbound
-                              ? 'bg-white text-slate-900 border border-slate-200'
-                              : 'bg-emerald-700 text-white'
-                          }`}
+                          key={msg.id}
+                          className={`flex ${outbound ? 'justify-start' : 'justify-end'}`}
                         >
-                          <p className="leading-relaxed">{msg.body}</p>
                           <div
-                            className={`flex items-center justify-end gap-1 text-[10px] font-mono ${
-                              outbound ? 'text-slate-400' : 'text-emerald-200'
+                            className={`max-w-md rounded-2xl px-4 py-2.5 text-xs shadow-xs space-y-1 ${
+                              outbound
+                                ? 'bg-emerald-700 text-white'
+                                : 'bg-white text-slate-900 border border-slate-200'
                             }`}
                           >
-                            <span>{msg.timestampLabel}</span>
-                            {outbound && <span>✓✓</span>}
+                            <p className="leading-relaxed">{msg.body}</p>
+                            <div
+                              className={`flex items-center justify-end gap-1 text-[10px] font-mono ${
+                                outbound ? 'text-emerald-100' : 'text-slate-400'
+                              }`}
+                            >
+                              <span>{msg.timestampLabel}</span>
+                              {outbound && <span>✓✓</span>}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })
+                      );
+                    })}
+                    <div ref={messagesEndRef} />
+                  </>
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full text-center py-12 text-slate-400 space-y-2">
                     <MessageSquare className="w-8 h-8 text-slate-300" />
@@ -727,7 +747,7 @@ export function WhatsappInboxPage() {
                 </div>
                 <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200">
                   <span className="text-slate-500">رقم الهاتف:</span>
-                  <span className="font-mono text-slate-800">{activeConvo.phone}</span>
+                  <span dir="ltr" className="inline-block font-mono text-slate-800">{activeConvo.phone}</span>
                 </div>
                 <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200">
                   <span className="text-slate-500">المسؤول المكلف:</span>

@@ -28,128 +28,77 @@ import { StatusBadge } from '../components/ui/StatusBadge';
 import { collection, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import { CustomFunction, FunctionExecutionLog, OrgSecret } from '../types/crm';
+import {
+  buildSampleRecordForSandbox,
+  executeCustomFunctionInSandbox,
+  getCustomFunctionsForOrg,
+  saveCustomFunctionsForOrg,
+  type CustomFunctionRecord,
+} from '../utils/customFunctionsEngine';
+
+function mapEngineRecordToUiFunction(rec: CustomFunctionRecord, orgId: string): CustomFunction {
+  const triggerMap: Record<CustomFunctionRecord['triggerType'], CustomFunction['triggerType']> = {
+    Workflow: 'workflow',
+    Blueprint: 'custom_button',
+    Webhook: 'webhook',
+    Schedule: 'cron',
+  };
+  return {
+    id: rec.id,
+    ownerId: 'user_admin',
+    org_id: orgId,
+    name: rec.name,
+    apiName: `${rec.name}.${rec.language === 'python' ? 'py' : 'js'}`,
+    language: rec.language === 'python' ? 'python' : 'javascript',
+    triggerType: triggerMap[rec.triggerType] || 'workflow',
+    code: rec.code,
+    description: rec.description,
+    isActive: rec.status === 'active',
+    updatedAt: rec.lastExecuted || 'الآن',
+  };
+}
+
+function mapUiFunctionToEngineRecord(fn: CustomFunction): CustomFunctionRecord {
+  const revTriggerMap: Record<CustomFunction['triggerType'], CustomFunctionRecord['triggerType']> = {
+    workflow: 'Workflow',
+    custom_button: 'Blueprint',
+    webhook: 'Webhook',
+    cron: 'Schedule',
+  };
+  return {
+    id: fn.id,
+    name: fn.name,
+    description: fn.description || 'دالة مخصصة في محرك الأتمتة',
+    language: fn.language === 'python' ? 'python' : 'js',
+    triggerType: revTriggerMap[fn.triggerType] || 'Workflow',
+    targetModule: 'الصفقات (Deals)',
+    status: fn.isActive ? 'active' : 'draft',
+    lastExecuted: fn.updatedAt || 'الآن',
+    version: 'v2.4.0',
+    code: fn.code,
+  };
+}
 
 export function CustomFunctionsPage() {
-  const { currentOrgId, currentOrganization } = useCrm();
+  const { currentOrgId, deals, leads } = useCrm();
 
-  const [functionsList, setFunctionsList] = useState<CustomFunction[]>([
-    {
-      id: 'func_1',
-      ownerId: 'user_admin',
-      org_id: currentOrgId,
-      name: 'إرسال عرض سعر واتساب',
-      apiName: 'send_quote_whatsapp.js',
-      language: 'javascript',
-      triggerType: 'custom_button',
-      code: `/**
- * دالة مخصصة: إرسال عرض السعر للعميل عبر واتساب وتحديث سجل الصفقة
- * المشعل: زر مخصص في تفاصيل الصفقة (Custom Action)
- * المعطيات: input.record_id, input.user_id
- */
-import { crm } from '@riwaq/sdk';
+  const [functionsList, setFunctionsList] = useState<CustomFunction[]>(() =>
+    getCustomFunctionsForOrg(currentOrgId).map((rec) => mapEngineRecordToUiFunction(rec, currentOrgId))
+  );
 
-export default async function handle({ input, env }) {
-  // 1. جلب تفاصيل الصفقة وجهة الاتصال المرتبطة
-  const deal = await crm.getRecord('deals', input.record_id);
-  const customer = await crm.getRecord('contacts', deal.contact_id);
+  useEffect(() => {
+    setFunctionsList(
+      getCustomFunctionsForOrg(currentOrgId).map((rec) => mapEngineRecordToUiFunction(rec, currentOrgId))
+    );
+  }, [currentOrgId]);
 
-  if (!customer.phone_number) {
-    throw new Error('رقم الجوال غير مسجل لجهة الاتصال المرتبطة بالصفقة');
-  }
-
-  // 2. صياغة وإرسال رسالة واتساب عبر Meta Cloud API
-  const templateData = {
-    customerName: customer.full_name,
-    dealTitle: deal.deal_name,
-    amount: deal.amount_formatted,
-    quoteUrl: \`https://riwaq.sa/quote/\${deal.quote_token}\`
+  const persistFunctions = (nextList: CustomFunction[]) => {
+    setFunctionsList(nextList);
+    saveCustomFunctionsForOrg(
+      currentOrgId,
+      nextList.map((f) => mapUiFunctionToEngineRecord(f))
+    );
   };
-
-  const waResponse = await crm.sendWhatsAppArgs({
-    template: 'quote_proposal_v2',
-    to: customer.phone_number,
-    params: templateData
-  });
-
-  // 3. تحديث مرحلة الصفقة وتسجيل النشاط في التايم لاين
-  await crm.updateRecord('deals', input.record_id, {
-    stage: 'إتمام العرض مرسل',
-    last_quote_sent_at: new Date().toISOString()
-  });
-
-  return {
-    status: 'success',
-    message_id: waResponse.message_id,
-    recipient: customer.phone_number,
-    timestamp: Date.now()
-  };
-}`,
-      description: 'إرسال عرض سعر عبر واتساب وتحديث مرحلة الصفقة تلقائياً',
-      isActive: true,
-      updatedAt: 'منذ ساعتين',
-    },
-    {
-      id: 'func_2',
-      ownerId: 'user_admin',
-      org_id: currentOrgId,
-      name: 'حساب عمولة المندوب تلقائياً',
-      apiName: 'calc_rep_commission',
-      language: 'javascript',
-      triggerType: 'workflow',
-      code: `export default async function handle({ input }) {
-  const deal = await crm.getRecord('deals', input.record_id);
-  const commissionRate = deal.amount > 200000 ? 0.07 : 0.05;
-  const commissionVal = deal.amount * commissionRate;
-  
-  await crm.updateRecord('deals', input.record_id, {
-    rep_commission: commissionVal
-  });
-  return { status: 'calculated', commission: commissionVal };
-}`,
-      description: 'حساب عمولة المندوب عند إغلاق الصفقة بنجاح',
-      isActive: true,
-      updatedAt: 'عند الفوز',
-    },
-    {
-      id: 'func_3',
-      ownerId: 'user_admin',
-      org_id: currentOrgId,
-      name: 'تنظيف وتصنيف السجلات ليلاً',
-      apiName: 'nightly_leads_hygiene',
-      language: 'python',
-      triggerType: 'cron',
-      code: `def handle(input, env):
-    # Cron nightly hygiene job
-    leads = crm.query('leads', {'status': 'جديد', 'days_inactive': '>14'})
-    for lead in leads:
-        crm.update_record('leads', lead['id'], {'status': 'مؤرشف تلقائياً'})
-    return {'archived_count': len(leads)}`,
-      description: 'مهمة مجدولة لتنظيف العملاء المحتملين الخاملين',
-      isActive: true,
-      updatedAt: 'يومياً 02:00 ص',
-    },
-    {
-      id: 'func_4',
-      ownerId: 'user_admin',
-      org_id: currentOrgId,
-      name: 'استقبال طلبات ERP الخارجي',
-      apiName: 'erp_webhook_receiver',
-      language: 'javascript',
-      triggerType: 'webhook',
-      code: `export default async function handle({ input }) {
-  const payload = input.body;
-  await crm.createRecord('invoices', {
-    invoiceNumber: payload.invoice_num,
-    totalAmount: payload.total,
-    accountName: payload.company
-  });
-  return { status: 'synced_with_erp' };
-}`,
-      description: 'استقبال الويب هوك وتحديث فواتير النظام الخارجي',
-      isActive: true,
-      updatedAt: 'POST /v1/sync',
-    },
-  ]);
 
   const [viewMode, setViewMode] = useState<'list' | 'editor'>('list');
   const [selectedFuncId, setSelectedFuncId] = useState<string>('func_1');
@@ -177,23 +126,28 @@ export default async function handle({ input, env }) {
 
   // Test console states
   const [sampleRecordId, setSampleRecordId] = useState('DEAL-84920');
+  const [sandboxParamsJson, setSandboxParamsJson] = useState(
+    '{\n  "minThresholdSAR": 250000,\n  "notifyAccountExecutive": true\n}'
+  );
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionResult, setExecutionResult] = useState<any>({
     status: 'success',
     code: 200,
-    durationMs: 142,
-    memoryMb: 18.4,
+    durationMs: 18,
+    memoryMb: 28,
     output: {
-      status: 'success',
-      message_id: 'wamid.HBgMOTY2NTUwMjAwMDAwMDAwMDE=',
-      recipient: '+966501234567',
-      timestamp: '1715849201000'
+      status: 'SUCCESS',
+      executionCode: 200,
+      upgraded: true,
+      assignedTier: 'Platinum VIP',
+      loyaltyPointsAdded: 52500,
+      recordId: 'DEAL-84920',
     },
     consoleLogs: [
-      '[INFO] 14:22:01.102: جلب بيانات الصفقة DEAL-84920 بنجاح',
-      '[INFO] 14:22:01.180: إرسال قالب الواتساب quote_proposal_v2 للمستلم 966501234567+',
-      '[SUCCESS] 14:22:01.244: تم تحديث سجل الصفقة بنجاح إلى مرحلة "عرض السعر مرسل"'
-    ]
+      '[SYSTEM] Ready to execute in isolated Web Worker sandbox...',
+      '[LOG] [Start] Evaluating record DEAL-84920 - Amount: 350000 SAR',
+      '[INFO] [CRM SDK] Account ACC-88210 upgraded to Platinum VIP (+52500 pts)',
+    ],
   });
 
   const [executionLogs, setExecutionLogs] = useState<FunctionExecutionLog[]>([
@@ -201,13 +155,13 @@ export default async function handle({ input, env }) {
       id: 'log_1',
       org_id: currentOrgId,
       functionId: 'func_1',
-      functionName: 'إرسال عرض سعر واتساب',
-      triggerType: 'custom_button',
+      functionName: 'calculateEnterpriseTierAndAutoUpgrade',
+      triggerType: 'workflow',
       status: 'success',
-      durationMs: 142,
-      memoryMb: 18.4,
+      durationMs: 18,
+      memoryMb: 28,
       inputPayload: { record_id: 'DEAL-84920' },
-      outputResult: { status: 'success' },
+      outputResult: { status: 'SUCCESS', assignedTier: 'Platinum VIP' },
       consoleLogs: ['[INFO] Executed successfully'],
       executedAt: 'الآن'
     },
@@ -215,28 +169,28 @@ export default async function handle({ input, env }) {
       id: 'log_2',
       org_id: currentOrgId,
       functionId: 'func_2',
-      functionName: 'حساب عمولة المندوب تلقائياً',
-      triggerType: 'workflow',
+      functionName: 'syncClosedDealToSapErpInvoice',
+      triggerType: 'custom_button',
       status: 'success',
-      durationMs: 128,
-      memoryMb: 16.2,
+      durationMs: 24,
+      memoryMb: 26,
       inputPayload: { record_id: 'DEAL-84915' },
-      outputResult: { status: 'calculated' },
-      consoleLogs: ['[INFO] Commission calculated'],
+      outputResult: { status: 'SUCCESS' },
+      consoleLogs: ['[INFO] Synced with SAP ERP'],
       executedAt: 'منذ 34 دقيقة'
     },
     {
       id: 'log_3',
       org_id: currentOrgId,
       functionId: 'func_3',
-      functionName: 'تنظيف وتصنيف السجلات ليلاً',
-      triggerType: 'cron',
-      status: 'timeout',
-      durationMs: 5002,
-      memoryMb: 45.1,
-      inputPayload: {},
-      outputResult: { error: 'Timeout exceeded 5000ms' },
-      consoleLogs: ['[ERROR] Execution exceeded 5000ms sandbox limit'],
+      functionName: 'assignLeadByGeoTerritoryAndRoundRobin',
+      triggerType: 'webhook',
+      status: 'success',
+      durationMs: 15,
+      memoryMb: 22,
+      inputPayload: { record_id: 'RWQ-10021' },
+      outputResult: { status: 'SUCCESS', routedTo: 'سلمان القحطاني' },
+      consoleLogs: ['[INFO] Lead routed by territory'],
       executedAt: 'منذ ساعة'
     }
   ]);
@@ -253,10 +207,13 @@ export default async function handle({ input, env }) {
     setEditorCode(activeFunc.code);
     setEditorLanguage(activeFunc.language);
     setEditorTrigger(activeFunc.triggerType);
-  }, [selectedFuncId]);
+  }, [selectedFuncId, activeFunc.id]);
 
   const filteredFunctions = functionsList.filter((f) => {
-    const matchesSearch = f.name.toLowerCase().includes(searchQuery.toLowerCase()) || f.apiName.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch =
+      f.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      f.apiName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (f.description || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesTrigger = filterTrigger === 'all' || f.triggerType === filterTrigger;
     return matchesSearch && matchesTrigger;
   });
@@ -264,42 +221,74 @@ export default async function handle({ input, env }) {
   const handleExecuteSandbox = async () => {
     setIsExecuting(true);
     try {
-      const res = await fetch(`/api/functions/${activeFunc.id}/execute`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          org_id: currentOrgId,
-          code: editorCode,
-          language: editorLanguage,
-          input_payload: { record_id: sampleRecordId }
-        })
-      });
-      const data = await res.json();
-      setExecutionResult({
-        status: data.status,
-        code: 200,
-        durationMs: data.duration_ms,
-        memoryMb: data.memory_mb,
-        output: data.output,
-        consoleLogs: data.console_logs
+      let parsedParams: Record<string, unknown> = {
+        minThresholdSAR: 250000,
+        notifyAccountExecutive: true,
+      };
+      try {
+        if (sandboxParamsJson.trim()) {
+          parsedParams = JSON.parse(sandboxParamsJson) as Record<string, unknown>;
+        }
+      } catch {
+        // keep default params if JSON invalid
+      }
+
+      const sampleRecord = buildSampleRecordForSandbox({
+        sampleRecordId,
+        deals,
+        leads,
       });
 
-      // Add to execution logs
+      const result = await executeCustomFunctionInSandbox({
+        func: {
+          id: activeFunc.id,
+          name: activeFunc.name,
+          language: editorLanguage === 'python' ? 'python' : 'js',
+          code: editorCode,
+          triggerType:
+            editorTrigger === 'workflow'
+              ? 'Workflow'
+              : editorTrigger === 'custom_button'
+                ? 'Blueprint'
+                : editorTrigger === 'webhook'
+                  ? 'Webhook'
+                  : 'Schedule',
+        },
+        record: sampleRecord,
+        params: parsedParams,
+        orgId: currentOrgId,
+      });
+
+      setExecutionResult({
+        status: result.status,
+        code: result.status === 'success' ? 200 : 500,
+        durationMs: result.durationMs,
+        memoryMb: result.memoryMb,
+        output: result.output,
+        consoleLogs: result.consoleLogs,
+      });
+
       const newLog: FunctionExecutionLog = {
         id: `exec_${Date.now()}`,
         org_id: currentOrgId,
         functionId: activeFunc.id,
         functionName: activeFunc.name,
-        triggerType: activeFunc.triggerType,
-        status: 'success',
-        durationMs: data.duration_ms,
-        memoryMb: data.memory_mb,
-        inputPayload: { record_id: sampleRecordId },
-        outputResult: data.output,
-        consoleLogs: data.console_logs,
-        executedAt: 'الآن'
+        triggerType: editorTrigger,
+        status: result.status === 'success' ? 'success' : 'timeout',
+        durationMs: result.durationMs,
+        memoryMb: result.memoryMb,
+        inputPayload: { record: sampleRecord, params: parsedParams },
+        outputResult: result.output,
+        consoleLogs: result.consoleLogs,
+        executedAt: 'الآن',
       };
-      setExecutionLogs([newLog, ...executionLogs]);
+      setExecutionLogs((prev) => [newLog, ...prev]);
+
+      if (result.status === 'success') {
+        triggerToast(`تم تشغيل الدالة "${activeFunc.name}" فعلياً في Web Worker وعرض المخرجات الحية.`);
+      } else {
+        triggerToast(`انتهى التشغيل مع خطأ برمجي في الكود: ${String(result.output?.error || '')}`);
+      }
     } catch {
       triggerToast('حدث خطأ أثناء تشغيل الدالة في البيئة المعزولة (Sandbox).');
     } finally {
@@ -309,10 +298,19 @@ export default async function handle({ input, env }) {
 
   const handleSaveFunction = async () => {
     const updated = functionsList.map((f) =>
-      f.id === activeFunc.id ? { ...f, code: editorCode, language: editorLanguage, triggerType: editorTrigger, updatedAt: 'الآن' } : f
+      f.id === activeFunc.id
+        ? {
+            ...f,
+            code: editorCode,
+            language: editorLanguage,
+            triggerType: editorTrigger,
+            updatedAt: 'الآن',
+          }
+        : f
     );
-    setFunctionsList(updated);
-    triggerToast(`تم حفظ ونشر الدالة (${activeFunc.name}) بنجاح في سحابة Crm-One-step.`);
+    persistFunctions(updated);
+    await handleExecuteSandbox();
+    triggerToast(`تم حفظ ونشر الدالة (${activeFunc.name}) وتشغيلها في البيئة المعزولة.`);
   };
 
   const handleCreateFunction = () => {
@@ -321,26 +319,26 @@ export default async function handle({ input, env }) {
       id: newId,
       ownerId: 'user_admin',
       org_id: currentOrgId,
-      name: 'دالة مخصصة جديدة',
+      name: `customAutomationFn_${Date.now().toString().slice(-3)}`,
       apiName: `custom_fn_${Date.now().toString().slice(-4)}.js`,
       language: 'javascript',
-      triggerType: 'custom_button',
-      code: `export default async function handle({ input }) {\n  // Custom code here\n  return { status: 'ok' };\n}`,
-      description: 'دالة جديدة قيد الإنشاء',
+      triggerType: 'workflow',
+      code: `export default async function handle(input, env) {\n  const { record, params } = input;\n  console.log('[CustomFn] Evaluating record:', record.id, 'Amount:', record.amount);\n  return {\n    status: 'SUCCESS',\n    recordId: record.id,\n    title: record.title || record.fullName,\n    computedBonusSAR: Number(record.amount || 0) * 0.05,\n    paramsReceived: params\n  };\n}`,
+      description: 'دالة مخصصة جديدة مرتبطة بمحرك الأتمتة والبلوبرينت',
       isActive: true,
       updatedAt: 'الآن',
     };
-    setFunctionsList([newFunc, ...functionsList]);
+    const next = [newFunc, ...functionsList];
+    persistFunctions(next);
     openFunctionInEditor(newId);
     triggerToast('تم إنشاء دالة مخصصة جديدة وفتح محرر الكود');
   };
 
   const handleToggleFunctionActive = (funcId: string) => {
-    setFunctionsList((prev) =>
-      prev.map((f) =>
-        f.id === funcId ? { ...f, isActive: !f.isActive, updatedAt: 'الآن' } : f
-      )
+    const next = functionsList.map((f) =>
+      f.id === funcId ? { ...f, isActive: !f.isActive, updatedAt: 'الآن' } : f
     );
+    persistFunctions(next);
     const target = functionsList.find((f) => f.id === funcId);
     if (target) {
       triggerToast(
@@ -358,7 +356,7 @@ export default async function handle({ input, env }) {
     }
     const target = functionsList.find((f) => f.id === funcId);
     const next = functionsList.filter((f) => f.id !== funcId);
-    setFunctionsList(next);
+    persistFunctions(next);
     if (selectedFuncId === funcId && next[0]) {
       setSelectedFuncId(next[0].id);
     }
@@ -761,14 +759,19 @@ export default async function handle({ input, env }) {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => alert('تم إدراج قالب حقل النظام المخصص: input.Deal_Amount')}
+                onClick={() => {
+                  setEditorCode((prev) => `${prev}\n// حقل مخصص: Number(input.record.amount || 0)`);
+                  triggerToast('تم إدراج مرجع حقل النظام input.record.amount في الكود.');
+                }}
                 className="px-3 py-1.5 rounded-lg bg-[#334155] hover:bg-[#475569] text-slate-200 text-xs font-bold flex items-center gap-1 cursor-pointer"
               >
                 <span>+ إدراج حقل</span>
               </button>
               <button
                 type="button"
-                onClick={() => alert('مكتبة crm SDK متوفرة بالكامل للاستيراد: import { crm } from "@riwaq/sdk"')}
+                onClick={() =>
+                  triggerToast('كائن crm SDK متاح مباشرة في بيئة Web Worker: crm.getRecord, crm.updateRecord, crm.createRecord, crm.sendWhatsAppArgs')
+                }
                 className="px-3 py-1.5 rounded-lg bg-[#334155] hover:bg-[#475569] text-slate-200 text-xs font-bold flex items-center gap-1 cursor-pointer"
               >
                 <span>مكتبة crm SDK</span>
@@ -808,7 +811,7 @@ export default async function handle({ input, env }) {
             <div className="flex items-center justify-between">
               <span className="font-bold text-slate-200 flex items-center gap-1.5">
                 <Terminal className="w-4 h-4 text-blue-400" />
-                منصة الاختبار وتصحيح الأخطاء (Sandbox)
+                منصة الاختبار وتصحيح الأخطاء (Web Worker Sandbox)
               </span>
               <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[10px] font-bold">
                 معزول (Isolated VM)
@@ -816,7 +819,24 @@ export default async function handle({ input, env }) {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[11px] text-slate-400">سجل الاختبار التجريبي (Sample Record ID):</label>
+              <label className="text-[11px] text-slate-400">اختر سجل اختبار حي (record) أو أدخل معرّف السجل:</label>
+              <select
+                value={sampleRecordId}
+                onChange={(e) => setSampleRecordId(e.target.value)}
+                className="w-full px-2.5 py-1.5 rounded-lg bg-[#0F172A] border border-[#334155] text-xs text-slate-200 focus:outline-none"
+              >
+                <option value="DEAL-84920">صفقة افتراضية: باقة أرامكس ERP (350,000 ر.س — RWQ-88210)</option>
+                {deals.slice(0, 6).map((d) => (
+                  <option key={d.id} value={d.id}>
+                    صفقة: {d.title} ({d.amount.toLocaleString('en-US')} ر.س — {d.stage})
+                  </option>
+                ))}
+                {leads.slice(0, 5).map((l) => (
+                  <option key={l.id} value={l.id}>
+                    عميل محتمل: {l.fullName} ({l.unique_id} — {l.city || 'الرياض'})
+                  </option>
+                ))}
+              </select>
               <div className="flex items-center gap-2">
                 <input
                   type="text"
@@ -836,11 +856,30 @@ export default async function handle({ input, env }) {
               </div>
             </div>
 
+            <div className="space-y-1">
+              <label className="text-[11px] text-slate-400">معاملات الدالة الممررة (input.params JSON):</label>
+              <textarea
+                dir="ltr"
+                rows={2}
+                value={sandboxParamsJson}
+                onChange={(e) => setSandboxParamsJson(e.target.value)}
+                className="w-full rounded-lg bg-[#0F172A] border border-[#334155] p-2 font-mono text-[11px] text-amber-300 focus:outline-none"
+              />
+            </div>
+
             {/* Execution Stats Badge */}
             <div className="flex items-center justify-between bg-[#0F172A] border border-[#334155] rounded-lg p-2.5">
-              <div className="flex items-center gap-2 text-emerald-400 font-bold">
+              <div
+                className={`flex items-center gap-2 font-bold ${
+                  executionResult.status === 'error' ? 'text-rose-400' : 'text-emerald-400'
+                }`}
+              >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>نجاح التنفيذ (OK 200)</span>
+                <span>
+                  {executionResult.status === 'error'
+                    ? 'خطأ في التنفيذ (Error 500)'
+                    : 'نجاح التنفيذ (OK 200)'}
+                </span>
               </div>
               <div className="flex items-center gap-3 text-slate-400 font-mono text-[11px]">
                 <span>{executionResult.durationMs}ms</span>

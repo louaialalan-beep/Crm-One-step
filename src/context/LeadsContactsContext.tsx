@@ -399,7 +399,124 @@ export function LeadsContactsProvider({ children }: { children: React.ReactNode 
 
   const updateLeadFields = useCallback(
     async (leadId: string, patch: Partial<Lead>) => {
+      const targetLead = data.leads.find((l) => l.id === leadId);
       const sanitizedPatch = stripUndefined(patch);
+
+      // When transitioning a Lead's status/stage, enforce active Lead Blueprint (Before / During / After + Custom Functions)
+      if (targetLead && patch.status && patch.status !== targetLead.status) {
+        const nextStatus = patch.status;
+        try {
+          const rawBp =
+            localStorage.getItem(`crm_enterprise_blueprints_v1_${currentOrgId}`) ||
+            localStorage.getItem('crm_enterprise_blueprints_v1_org_riwaq_default');
+          if (rawBp) {
+            const parsedBps = JSON.parse(rawBp);
+            const leadBp = Array.isArray(parsedBps)
+              ? parsedBps.find(
+                  (b: { active?: boolean; module?: string }) =>
+                    b.active &&
+                    (b.module === 'العملاء المحتملين' || b.module?.toLowerCase().includes('lead'))
+                )
+              : null;
+
+            if (leadBp && Array.isArray(leadBp.stages) && Array.isArray(leadBp.transitions)) {
+              const matchedToStage = leadBp.stages.find(
+                (s: { id: string; title: string; category?: string }) =>
+                  s.title.includes(nextStatus) ||
+                  (nextStatus === 'مؤهل للتحويل' && s.title.includes('مؤهل')) ||
+                  (nextStatus === 'تم التواصل' && s.title.includes('التواصل')) ||
+                  (nextStatus === 'غير مهتم' && (s.category === 'lost' || s.title.includes('غير مؤهل')))
+              );
+              const matchedTr = matchedToStage
+                ? leadBp.transitions.find(
+                    (t: { enabled?: boolean; toStageId?: string }) =>
+                      t.enabled && t.toStageId === matchedToStage.id
+                  )
+                : null;
+
+              if (matchedTr && Array.isArray(matchedTr.afterActions)) {
+                const enabledAfter = matchedTr.afterActions.filter(
+                  (a: { enabled?: boolean }) => a.enabled
+                );
+                for (const act of enabledAfter) {
+                  if (act.type === 'custom_function') {
+                    const { executeCustomFunctionInSandbox, getCustomFunctionsForOrg } =
+                      await import('../utils/customFunctionsEngine');
+                    const savedFns = getCustomFunctionsForOrg(currentOrgId);
+                    const fnDef =
+                      savedFns.find(
+                        (f) => f.id === act.functionId || f.name === act.functionName
+                      ) || savedFns[0];
+                    if (fnDef) {
+                      let parsedParams: Record<string, unknown> = {};
+                      try {
+                        parsedParams = JSON.parse(act.paramsJson || '{}');
+                      } catch {
+                        parsedParams = {};
+                      }
+                      await executeCustomFunctionInSandbox({
+                        func: fnDef,
+                        record: {
+                          id: targetLead.id,
+                          module: 'Leads',
+                          title: targetLead.fullName,
+                          uniqueId: targetLead.unique_id,
+                          amount: targetLead.estimatedValue || 0,
+                          value: targetLead.estimatedValue || 0,
+                          currency: 'SAR',
+                          stage: nextStatus,
+                          probability: targetLead.aiScore || 60,
+                          accountName: targetLead.company || targetLead.fullName,
+                          ownerName: targetLead.assignedToName,
+                          phone: targetLead.phone,
+                        },
+                        params: parsedParams,
+                        orgId: currentOrgId,
+                      });
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } catch {
+          // non-blocking in preview mode
+        }
+
+        await leadsService.transitionLeadStage({
+          orgId: currentOrgId,
+          isCloudMode: Boolean(firebaseUser),
+          leadId,
+          toStage: nextStatus,
+          estimatedValue: patch.estimatedValue ?? targetLead.estimatedValue,
+          onPreviewApply: () => {
+            const tpId = `tp_lead_bp_${Date.now()}`;
+            const bpTouchpoint: Touchpoint = {
+              id: tpId,
+              ownerId: firebaseUser?.uid ?? PREVIEW_OWNER_ID,
+              org_id: currentOrgId,
+              channel: 'حدث',
+              eventType: `انتقال مرحلة البلوبرينت (${nextStatus})`,
+              campaign: 'حوكمة بلوبرينت العملاء المحتملين',
+              summary: `تم نقل مرحلة العميل المحتمل (${targetLead.unique_id}) من "${targetLead.status}" إلى "${nextStatus}" عبر محرك البلوبرينت`,
+              relatedEntityType: 'lead',
+              relatedEntityId: leadId,
+              relatedEntityName: targetLead.fullName,
+              leadId,
+              leadUniqueId: targetLead.unique_id,
+              occurredAt: 'الآن',
+            };
+            setData((prev) => ({
+              ...prev,
+              leads: prev.leads.map((l) =>
+                l.id === leadId ? { ...l, ...patch, lastActivityLabel: 'الآن' } : l
+              ),
+              touchpoints: [bpTouchpoint, ...prev.touchpoints],
+            }));
+          },
+        });
+        return;
+      }
 
       if (!firebaseUser) {
         setData((prev) => ({
@@ -418,7 +535,7 @@ export function LeadsContactsProvider({ children }: { children: React.ReactNode 
         handleFirestoreError(err, OperationType.UPDATE, `leads/${leadId}`);
       }
     },
-    [firebaseUser, setData]
+    [currentOrgId, data.leads, firebaseUser, setData]
   );
 
   const bulkUpdateLeads = useCallback(

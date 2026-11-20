@@ -72,7 +72,122 @@ export const DealsTableView: React.FC<DealsTableViewProps> = ({
 
   return (
     <div className="rounded-2xl bg-[#ffffff] border border-[#E2E8F0] shadow-2xs overflow-hidden">
-      <div className="overflow-x-auto">
+      {/* Mobile-First Cards View (< md) */}
+      <div className="md:hidden divide-y divide-[#F1F5F9] p-3 space-y-3">
+        {deals.map((deal) => {
+          const isSelected = selectedSet.has(deal.id);
+          const contact = resolveDealContact(deal, contacts);
+          const attribution = resolveDealLastTouchAttribution(deal, contacts, touchpoints);
+          const overdue = isDealOverdue(deal);
+          const nextStage = getNextAdvanceStage(deal.stage);
+          const colInfo = getDealColumnForStage(deal.stage);
+
+          return (
+            <div
+              key={deal.id}
+              className={`rounded-xl border p-3.5 space-y-3 transition-all ${
+                isSelected ? 'border-[#2563EB] bg-[#EFF6FF]/40' : 'border-[#E2E8F0] bg-white'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start gap-2 min-w-0">
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => onToggleSelect(deal.id)}
+                    aria-label={`تحديد ${deal.title}`}
+                    className="mt-1 h-4 w-4 rounded border-[#CBD5E1] text-[#2563EB] shrink-0"
+                  />
+                  <div className="min-w-0">
+                    <Link
+                      to={`/deals/${deal.id}`}
+                      className="text-sm font-bold text-[#131b2e] hover:text-[#2563EB] block truncate"
+                    >
+                      {deal.title}
+                    </Link>
+                    <span className="text-xs text-[#64748B] block truncate">
+                      {deal.accountName}
+                    </span>
+                  </div>
+                </div>
+                <span className="text-sm font-extrabold text-[#2563EB] tabular-nums shrink-0">
+                  {canViewAmount ? formatCurrencySAR(deal.amount, deal.currency) : 'محجوب (FLS)'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-xs bg-[#F8FAFC] rounded-lg p-2.5 border border-[#E2E8F0]">
+                <div>
+                  <span className="text-[10px] text-[#64748B] block">جهة الاتصال والمعرف</span>
+                  <span className="font-semibold text-[#334155] truncate block">
+                    {contact?.fullName || 'حساب مؤسسي'}
+                  </span>
+                  <span dir="ltr" className="font-mono text-[10px] font-bold text-[#2563EB]">
+                    {deal.leadUniqueId || contact?.leadUniqueId || '—'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-[#64748B] block">تاريخ الإغلاق والاحتمال</span>
+                  <span className={`font-bold tabular-nums ${overdue ? 'text-[#E11D48]' : 'text-[#334155]'}`}>
+                    {deal.closeDate} ({deal.probability ?? colInfo.defaultProbability}%)
+                  </span>
+                  <span className="text-[10px] text-[#64748B] block truncate">{attribution}</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-2 pt-1">
+                {canUpdateDeal ? (
+                  <select
+                    value={deal.stage}
+                    onChange={(e) => {
+                      const target = e.target.value as DealStage;
+                      if (target !== deal.stage) {
+                        onRequestStageChange(deal, target);
+                      }
+                    }}
+                    className={`rounded-lg border px-2.5 py-1 text-xs font-bold ${STAGE_BADGE_CLASS[deal.stage]}`}
+                  >
+                    {DEAL_STAGES_ORDER.map((st) => (
+                      <option key={st} value={st} className="bg-white text-[#131b2e]">
+                        {st}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className={`rounded-lg border px-2.5 py-1 text-xs font-bold ${STAGE_BADGE_CLASS[deal.stage]}`}>
+                    {deal.stage}
+                  </span>
+                )}
+
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-semibold text-[#475569]">{deal.ownerName}</span>
+                  {nextStage && canUpdateDeal && (
+                    <button
+                      type="button"
+                      onClick={() => onRequestStageChange(deal, nextStage)}
+                      className="p-1.5 rounded-lg bg-[#EFF6FF] text-[#2563EB] hover:bg-[#DBEAFE]"
+                      title={`ترقية إلى ${nextStage}`}
+                    >
+                      <ArrowLeft className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  {canDeleteDeal && (
+                    <button
+                      type="button"
+                      onClick={() => onDeleteDeal(deal.id)}
+                      className="p-1.5 rounded-lg text-[#94A3B8] hover:text-[#E11D48] hover:bg-[#FFF1F2]"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Desktop Table View (>= md) */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-right border-collapse">
           <thead>
             <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-bold text-[#64748B]">
@@ -93,7 +208,7 @@ export const DealsTableView: React.FC<DealsTableViewProps> = ({
               <th className="px-2 py-2.5 whitespace-nowrap">تاريخ الإغلاق</th>
               <th className="px-2 py-2.5">الإسناد</th>
               <th className="px-2 py-2.5">المسؤول</th>
-              <th className="px-2 py-2.5 text-center whitespace-nowrap">إجراءات</th>
+              <th className="pl-3 pr-2 py-2.5 min-w-[96px] text-center whitespace-nowrap">الإجراءات</th>
             </tr>
           </thead>
 
@@ -231,8 +346,8 @@ export const DealsTableView: React.FC<DealsTableViewProps> = ({
                     </div>
                   </td>
 
-                  <td className="px-2 py-2.5 whitespace-nowrap">
-                    <div className="flex items-center justify-center gap-0.5">
+                  <td className="pl-3 pr-2 py-2.5 min-w-[96px] whitespace-nowrap">
+                    <div className="flex items-center justify-center gap-1">
                       {nextStage && canUpdateDeal && (
                         <button
                           type="button"

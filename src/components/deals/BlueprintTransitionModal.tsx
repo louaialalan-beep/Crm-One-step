@@ -364,6 +364,55 @@ export const BlueprintTransitionModal: React.FC<BlueprintTransitionModalProps> =
         });
       }
 
+      // Execute any configured Custom Functions in Blueprint After-Actions via Sandbox
+      const customFnActions = (requirement.afterActions || []).filter(
+        (a) => a.type === 'custom_function'
+      );
+      if (customFnActions.length > 0) {
+        const { executeCustomFunctionInSandbox, getCustomFunctionsForOrg } = await import(
+          '../../utils/customFunctionsEngine'
+        );
+        const savedFns = getCustomFunctionsForOrg(currentOrgId);
+        for (const fnAct of customFnActions) {
+          const fnDef =
+            savedFns.find(
+              (f) => f.id === fnAct.functionId || f.name === fnAct.functionName
+            ) || savedFns[0];
+          if (fnDef) {
+            let parsedParams: Record<string, unknown> = {};
+            try {
+              parsedParams = JSON.parse(fnAct.paramsJson || '{}');
+            } catch {
+              parsedParams = {};
+            }
+            const res = await executeCustomFunctionInSandbox({
+              func: fnDef,
+              record: {
+                id: deal.id,
+                module: 'Deals',
+                title: deal.title,
+                uniqueId: deal.leadUniqueId || 'RWQ-88412',
+                amount: effectiveAmount,
+                value: effectiveAmount,
+                currency: deal.currency || 'SAR',
+                stage: requirement.targetStage,
+                probability: targetCol.defaultProbability,
+                accountName: deal.accountName,
+                ownerName: deal.ownerName,
+              },
+              params: parsedParams,
+              orgId: currentOrgId,
+            });
+            await addDealTouchpoint(deal.id, {
+              channel: 'حدث',
+              eventType: `تنفيذ دالة مخصصة (${fnDef.name})`,
+              campaign: 'أتمتة البلوبرينت (After Action)',
+              summary: `تم تشغيل الدالة المخصصة ${fnDef.name} (${res.durationMs}ms): ${JSON.stringify(res.output).slice(0, 140)}`,
+            });
+          }
+        }
+      }
+
       const nextStep = `تم التوقيع (${attachedName}) · خصم ${parsedDiscount}% · PO-KSA-9921`;
 
       const auditSummary = isWon

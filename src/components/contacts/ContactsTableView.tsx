@@ -829,8 +829,8 @@ export const ContactsTableView: React.FC<ContactsTableViewProps> = ({
                         </td>
                       )}
 
-                      {/* إجراءات: محادثة + "+ صفقة" + ⋮ */}
-                      <td className="py-2.5 px-1 text-center whitespace-nowrap relative">
+                      {/* الإجراءات: محادثة + "+ صفقة" + ⋮ */}
+                      <td className="py-2.5 pl-3 pr-2 min-w-[140px] text-center whitespace-nowrap relative">
                         <div className="flex items-center justify-end gap-1">
                           <button
                             type="button"

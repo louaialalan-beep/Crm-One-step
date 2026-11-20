@@ -811,7 +811,7 @@ export const AnalyticsPage: React.FC = () => {
               {analyticsData.targetAchievementPct >= 50 ? (
                 <span className="inline-flex items-center gap-1 rounded-md border border-[#A7F3D0] bg-[#ECFDF5] px-2.5 py-0.5 text-[11px] font-bold text-[#059669]">
                   <span className="h-1.5 w-1.5 rounded-full bg-[#10B981]" />
-                  <span>في المسار (On-track)</span>
+                  <span>في المسار (<bdi dir="ltr">On-track</bdi>)</span>
                 </span>
               ) : analyticsData.targetAchievementPct > 0 ? (
                 <span className="inline-flex items-center gap-1 rounded-md border border-[#FDE68A] bg-[#FFFBEB] px-2.5 py-0.5 text-[11px] font-bold text-[#B45309]">

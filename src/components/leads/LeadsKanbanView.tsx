@@ -218,6 +218,8 @@ export const LeadsKanbanView: React.FC<LeadsKanbanViewProps> = ({
     return counts;
   }, [leads, touchpoints]);
 
+  const [mobileStageFilter, setMobileStageFilter] = useState<LeadStatus | 'ALL'>('ALL');
+
   const handleStageMove = (leadId: string, targetStage: LeadStatus) => {
     const currentLead = effectiveLeads.find((l) => l.id === leadId);
     if (!currentLead || currentLead.status === targetStage) return;
@@ -226,12 +228,45 @@ export const LeadsKanbanView: React.FC<LeadsKanbanViewProps> = ({
   };
 
   return (
-    <div
-      className="w-full grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-start"
-      role="region"
-      aria-label="لوحة مراحل العملاء المحتملين (Kanban)"
-    >
-      {LEAD_STAGES.map((stage) => {
+    <div className="space-y-3">
+      {/* Mobile Stage Quick Filter (< md) */}
+      <div className="flex md:hidden items-center gap-1.5 overflow-x-auto pb-1">
+        <button
+          type="button"
+          onClick={() => setMobileStageFilter('ALL')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-colors ${
+            mobileStageFilter === 'ALL'
+              ? 'bg-[#004AC6] text-white shadow-xs'
+              : 'bg-white border border-[#E2E7FF] text-[#434655]'
+          }`}
+        >
+          كل المراحل ({effectiveLeads.length})
+        </button>
+        {LEAD_STAGES.map((st) => {
+          const count = effectiveLeads.filter((l) => l.status === st).length;
+          return (
+            <button
+              key={st}
+              type="button"
+              onClick={() => setMobileStageFilter(st)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-colors ${
+                mobileStageFilter === st
+                  ? 'bg-[#004AC6] text-white shadow-xs'
+                  : 'bg-white border border-[#E2E7FF] text-[#434655]'
+              }`}
+            >
+              {st} ({count})
+            </button>
+          );
+        })}
+      </div>
+
+      <div
+        className="w-full grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-start"
+        role="region"
+        aria-label="لوحة مراحل العملاء المحتملين (Kanban)"
+      >
+        {LEAD_STAGES.filter((st) => mobileStageFilter === 'ALL' || st === mobileStageFilter).map((stage) => {
         const meta = STAGE_META[stage];
         const rawStageLeads = effectiveLeads.filter((l) => l.status === stage);
         const stageLeads = sortByScoreStage[stage]
@@ -626,6 +661,7 @@ export const LeadsKanbanView: React.FC<LeadsKanbanViewProps> = ({
           </section>
         );
       })}
+      </div>
     </div>
   );
 };

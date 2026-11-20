@@ -42,6 +42,11 @@ import type {
 } from '../types/crm';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { formatCurrencySAR } from '../utils/formatters';
+import {
+  downloadZatcaPhase2XmlFile,
+  generateZatcaPhase2ArtifactClient,
+  quotesInvoicesService,
+} from '../services/quotesInvoicesService';
 
 const getTodayDate = () => new Date().toISOString().split('T')[0];
 const getFutureDate = (days: number) =>
@@ -198,6 +203,7 @@ export function FinancialModulePage({
     createSalesOrder,
     updateSalesOrder,
     createInvoice,
+    updateInvoice,
     createPurchaseOrder,
     updatePurchaseOrder,
     recordInvoicePayment,
@@ -228,6 +234,7 @@ export function FinancialModulePage({
   const [currencyFilter, setCurrencyFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [zatcaSubmittingId, setZatcaSubmittingId] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [conversionLoading, setConversionLoading] = useState<string | null>(null);
   const [isSavingDoc, setIsSavingDoc] = useState(false);
@@ -1042,6 +1049,69 @@ export function FinancialModulePage({
     setPaymentModalInvoice(null);
   };
 
+  // =========================================================================
+  // ZATCA PHASE 2: CLEARANCE (B2B) / REPORTING (B2C) + UBL 2.1 XML DOWNLOAD
+  // =========================================================================
+  const handleSubmitZatcaPhase2 = async (inv: Invoice) => {
+    if (zatcaSubmittingId === inv.id) return;
+    setZatcaSubmittingId(inv.id);
+    try {
+      const isSimplified = (inv.invoiceType || '').includes('مبسطة');
+      const result = await quotesInvoicesService.submitInvoiceZatcaPhase2({
+        orgId: currentOrgId,
+        invoice: inv,
+        submissionMode: isSimplified ? 'REPORTING' : 'CLEARANCE',
+        environment: 'SANDBOX',
+      });
+
+      const patch: Partial<Invoice> = {
+        xmlContent: result.xml_content,
+        zatcaHash: result.zatca_hash,
+        zatcaStatus: result.zatca_status,
+        zatcaUuid: result.zatca_uuid,
+        zatcaPih: result.zatca_pih,
+        zatcaSignature: result.zatca_signature,
+        zatcaQrBase64: result.zatca_tlv_base64,
+        zatcaSubmittedAt: result.submitted_at,
+      };
+      await updateInvoice(inv.id, patch);
+
+      if (previewDoc && previewDoc.kind === 'invoice' && previewDoc.record.id === inv.id) {
+        setPreviewDoc({
+          kind: 'invoice',
+          record: { ...(previewDoc.record as Invoice), ...patch },
+        });
+      }
+
+      triggerToast(
+        `${result.clearance_or_reporting_message} (SHA-256 Hash: ${result.zatca_hash.slice(0, 18)}...)`
+      );
+    } catch (err) {
+      console.error(err);
+      triggerToast('حدث خطأ أثناء إرسال الفاتورة إلى بوابة فاتورة (ZATCA Phase 2).');
+    } finally {
+      setZatcaSubmittingId(null);
+    }
+  };
+
+  const handleDownloadZatcaXml = async (inv: Invoice) => {
+    let xml = inv.xmlContent;
+    if (!xml) {
+      const generated = await generateZatcaPhase2ArtifactClient(inv);
+      xml = generated.xml_content;
+      await updateInvoice(inv.id, {
+        xmlContent: generated.xml_content,
+        zatcaHash: generated.zatca_hash,
+        zatcaStatus: inv.zatcaStatus || generated.zatca_status,
+        zatcaUuid: generated.zatca_uuid,
+        zatcaSignature: generated.zatca_signature,
+        zatcaQrBase64: generated.zatca_tlv_base64,
+      });
+    }
+    downloadZatcaPhase2XmlFile(inv.invoiceNumber, xml);
+    triggerToast(`تم تحميل ملف XML المطابق لمعيار UBL 2.1 (${inv.invoiceNumber}-ZATCA-UBL21.xml).`);
+  };
+
   const handleExportCsv = () => {
     const rows: string[][] = [
       [
@@ -1686,6 +1756,8 @@ export function FinancialModulePage({
                   const fin = computeDocumentFinancials(inv);
                   const docCurr = (inv.currency || baseCurrency.code).toUpperCase();
                   const isForeign = docCurr !== baseCurrency.code.toUpperCase();
+                  const zStatus = inv.zatcaStatus || 'PHASE1_READY';
+                  const isZatcaApproved = zStatus === 'CLEARED' || zStatus === 'REPORTED';
                   return (
                     <div
                       key={inv.id}
@@ -1693,10 +1765,23 @@ export function FinancialModulePage({
                     >
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="font-mono font-bold text-[#2563EB]">{inv.invoiceNumber}</span>
                             <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-mono text-[10px] font-bold">
                               {docCurr}
+                            </span>
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                isZatcaApproved
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : 'bg-amber-50 text-amber-700 border border-amber-200'
+                              }`}
+                            >
+                              {zStatus === 'CLEARED'
+                                ? 'ZATCA Phase 2: CLEARED ✓'
+                                : zStatus === 'REPORTED'
+                                  ? 'ZATCA Phase 2: REPORTED ✓'
+                                  : 'ZATCA Phase 1 QR'}
                             </span>
                           </div>
                           <StatusBadge label={inv.status} />
@@ -1705,6 +1790,14 @@ export function FinancialModulePage({
                         <p className="text-xs text-[#64748B]">
                           النوع: <strong>{inv.invoiceType || 'فاتورة ضريبية (B2B)'}</strong>
                         </p>
+                        {inv.zatcaHash && (
+                          <div
+                            className="text-[10px] font-mono text-slate-500 truncate"
+                            title={inv.zatcaHash}
+                          >
+                            SHA-256: {inv.zatcaHash.slice(0, 24)}...
+                          </div>
+                        )}
                       </div>
                       <div className="pt-3 border-t border-[#E2E8F0] space-y-2">
                         <div className="flex items-center justify-between">
@@ -1736,6 +1829,30 @@ export function FinancialModulePage({
                           >
                             <CreditCard className="w-3.5 h-3.5" />
                             تسجيل دفعة
+                          </button>
+                        </div>
+                        <div className="flex items-center justify-between gap-2 pt-1">
+                          <button
+                            type="button"
+                            disabled={zatcaSubmittingId === inv.id}
+                            onClick={() => void handleSubmitZatcaPhase2(inv)}
+                            className="flex-1 py-1.5 px-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer"
+                          >
+                            <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                            <span className="truncate">
+                              {zatcaSubmittingId === inv.id
+                                ? 'جارٍ الاعتماد...'
+                                : 'اعتماد وإرسال لهيئة الزكاة (Phase 2)'}
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleDownloadZatcaXml(inv)}
+                            title="تحميل ملف XML المطابق لمعيار UBL 2.1"
+                            className="py-1.5 px-2.5 rounded-lg border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer shrink-0"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            <span>XML</span>
                           </button>
                         </div>
                       </div>
@@ -2160,6 +2277,8 @@ export function FinancialModulePage({
                     const docCurr = (inv.currency || baseCurrency.code).toUpperCase();
                     const isForeign = docCurr !== baseCurrency.code.toUpperCase();
                     const remaining = Math.max(0, fin.totalAmount - (inv.paidAmount || 0));
+                    const zStatus = inv.zatcaStatus || 'PHASE1_READY';
+                    const isZatcaApproved = zStatus === 'CLEARED' || zStatus === 'REPORTED';
                     return (
                       <tr key={inv.id} className="hover:bg-[#F8FAFC] transition-colors">
                         <td className="px-2.5 py-2.5 text-center">
@@ -2171,7 +2290,7 @@ export function FinancialModulePage({
                           />
                         </td>
                         <td className="px-2.5 py-2.5 font-semibold text-[#2563EB]">
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <button
                               type="button"
                               onClick={() => setPreviewDoc({ kind: 'invoice', record: inv })}
@@ -2179,16 +2298,34 @@ export function FinancialModulePage({
                             >
                               {inv.invoiceNumber}
                             </button>
-                            <span className="px-1 py-0.5 rounded bg-[#ECFDF5] text-[#059669] text-[10px] font-mono">
-                              ZATCA QR ✓
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
+                                isZatcaApproved
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : 'bg-[#ECFDF5] text-[#059669]'
+                              }`}
+                            >
+                              {zStatus === 'CLEARED'
+                                ? 'ZATCA Phase 2: CLEARED ✓'
+                                : zStatus === 'REPORTED'
+                                  ? 'ZATCA Phase 2: REPORTED ✓'
+                                  : 'ZATCA QR ✓'}
                             </span>
                             <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-mono text-[10px] font-bold">
                               {docCurr}
                             </span>
                           </div>
-                          <span className="text-[11px] text-[#64748B] tabular-nums font-normal">
+                          <span className="text-[11px] text-[#64748B] tabular-nums font-normal block">
                             التوريد: {inv.supplyDate || inv.issueDate || '2026-11-16'}
                           </span>
+                          {inv.zatcaHash && (
+                            <span
+                              className="text-[10px] font-mono text-indigo-700 block truncate max-w-[200px]"
+                              title={`SHA-256 Invoice Hash: ${inv.zatcaHash}`}
+                            >
+                              Hash: {inv.zatcaHash.slice(0, 18)}...
+                            </span>
+                          )}
                         </td>
                         <td className="px-2.5 py-2.5 font-semibold text-[#0F172A]">
                           <div>{inv.invoiceType || 'فاتورة ضريبية (B2B)'}</div>
@@ -2231,7 +2368,14 @@ export function FinancialModulePage({
                           )}
                         </td>
                         <td className="px-2.5 py-2.5">
-                          <StatusBadge label={inv.status} />
+                          <div className="space-y-1">
+                            <StatusBadge label={inv.status} />
+                            {isZatcaApproved && (
+                              <div className="text-[10px] font-bold text-emerald-700">
+                                {zStatus === 'CLEARED' ? 'معتمدة B2B (Cleared)' : 'مبلّغ عنها B2C (Reported)'}
+                              </div>
+                            )}
+                          </div>
                         </td>
                         <td className="px-2.5 py-2.5 tabular-nums">
                           <div className="text-[#0F172A] font-semibold">
@@ -2246,7 +2390,34 @@ export function FinancialModulePage({
                           {inv.ownerName || currentUser?.fullName || 'الإدارة المالية'}
                         </td>
                         <td className="px-2.5 py-2.5 text-center">
-                          <div className="flex items-center justify-center gap-1">
+                          <div className="flex flex-wrap items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              disabled={zatcaSubmittingId === inv.id}
+                              onClick={() => void handleSubmitZatcaPhase2(inv)}
+                              title="اعتماد وإرسال لهيئة الزكاة والضريبة والجمارك (ZATCA Phase 2 Clearance / Reporting)"
+                              className={`px-2 py-1 rounded font-bold text-[11px] flex items-center gap-1 cursor-pointer ${
+                                isZatcaApproved
+                                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
+                                  : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                              }`}
+                            >
+                              <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                              <span>
+                                {zatcaSubmittingId === inv.id
+                                  ? 'جارٍ الإرسال...'
+                                  : 'اعتماد وإرسال لهيئة الزكاة (Phase 2)'}
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleDownloadZatcaXml(inv)}
+                              title="تحميل ملف الفاتورة الإلكترونية XML (UBL 2.1)"
+                              className="px-2 py-1 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 font-bold text-[11px] flex items-center gap-1 cursor-pointer"
+                            >
+                              <Download className="w-3 h-3" />
+                              <span>تحميل XML</span>
+                            </button>
                             <button
                               type="button"
                               onClick={() => setPreviewDoc({ kind: 'invoice', record: inv })}
@@ -3361,7 +3532,28 @@ export function FinancialModulePage({
                         : (previewDoc.record as Invoice).invoiceNumber}
                 </span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {previewDoc.kind === 'invoice' && (
+                  <>
+                    <button
+                      type="button"
+                      disabled={zatcaSubmittingId === (previewDoc.record as Invoice).id}
+                      onClick={() => void handleSubmitZatcaPhase2(previewDoc.record as Invoice)}
+                      className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      اعتماد وإرسال لهيئة الزكاة (Phase 2)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleDownloadZatcaXml(previewDoc.record as Invoice)}
+                      className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      تحميل ملف XML (UBL 2.1)
+                    </button>
+                  </>
+                )}
                 <button
                   type="button"
                   onClick={() => window.print()}

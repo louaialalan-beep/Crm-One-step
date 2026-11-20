@@ -41,6 +41,11 @@ import {
 import { doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useCrm } from '../context/CrmContext';
+import {
+  buildSampleRecordForSandbox,
+  executeCustomFunctionInSandbox,
+  getCustomFunctionsForOrg,
+} from '../utils/customFunctionsEngine';
 
 type TriggerMode = 'create_or_edit' | 'create_only' | 'scheduled' | 'on_delete';
 type ModuleTargetKey = 'deals' | 'leads' | 'contacts' | 'accounts';
@@ -77,6 +82,9 @@ interface WorkflowActionItem {
   line2Accent?: 'blue' | 'rose' | 'mono' | 'normal';
   hasTemplatePreview?: boolean;
   hasPayloadInspector?: boolean;
+  functionId?: string;
+  functionName?: string;
+  paramsJson?: string;
 }
 
 const INITIAL_CRITERIA: CriteriaRow[] = [
@@ -383,6 +391,15 @@ export function WorkflowRulesPage() {
   const [newActionTitle, setNewActionTitle] = useState<string>('');
   const [newActionLine1, setNewActionLine1] = useState<string>('');
   const [newActionLine2, setNewActionLine2] = useState<string>('');
+  const [selectedFunctionId, setSelectedFunctionId] = useState<string>('func_1');
+  const [customFunctionParams, setCustomFunctionParams] = useState<string>(
+    '{"minThresholdSAR": 250000, "notifySalesDirector": true}'
+  );
+
+  const savedCustomFunctions = useMemo(
+    () => getCustomFunctionsForOrg(currentOrgId),
+    [currentOrgId, showAddActionModal, showTestSimulationModal]
+  );
 
   // New Rule Modal Form State
   const [newRuleName, setNewRuleName] = useState<string>('');
@@ -392,6 +409,9 @@ export function WorkflowRulesPage() {
   // Simulation Modal State
   const [simSelectedDealId, setSimSelectedDealId] = useState<string>('deal_1');
   const [simStepState, setSimStepState] = useState<'idle' | 'running' | 'passed'>('passed');
+  const [simCustomFunctionResults, setSimCustomFunctionResults] = useState<
+    { functionName: string; returnJson: string; durationMs: number }[]
+  >([]);
 
   // Saving & Toast Feedback
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -705,6 +725,12 @@ export function WorkflowRulesPage() {
     setNewActionTitle(act.title);
     setNewActionLine1(act.line1Value);
     setNewActionLine2(act.line2Value);
+    if (act.kind === 'custom_function') {
+      setSelectedFunctionId(act.functionId || savedCustomFunctions[0]?.id || 'func_1');
+      setCustomFunctionParams(
+        act.paramsJson || act.line2Value || '{"minThresholdSAR": 250000, "notifySalesDirector": true}'
+      );
+    }
     setShowAddActionModal(true);
   };
 
@@ -759,12 +785,28 @@ export function WorkflowRulesPage() {
         badge: 'Custom Function',
         tone: 'purple',
         l1: 'الدالة البرمجية:',
-        l2: 'المخرجات:',
-        accent: 'blue',
+        l2: 'المعاملات (Params):',
+        accent: 'mono',
       },
     };
 
     const meta = kindMeta[newActionKind];
+    const selectedFnObj = savedCustomFunctions.find((f) => f.id === selectedFunctionId) || savedCustomFunctions[0];
+
+    const resolvedTitle =
+      newActionKind === 'custom_function'
+        ? newActionTitle.trim() || `تشغيل دالة مخصصة (${selectedFnObj?.name || 'Custom Function'})`
+        : newActionTitle.trim();
+
+    const resolvedLine1 =
+      newActionKind === 'custom_function'
+        ? `${selectedFnObj?.name || 'verify_vip_enterprise_deal'} (${selectedFnObj?.language || 'Node.js 20'})`
+        : newActionLine1.trim();
+
+    const resolvedLine2 =
+      newActionKind === 'custom_function'
+        ? customFunctionParams.trim() || '{"minThresholdSAR": 250000}'
+        : newActionLine2.trim();
 
     if (editingAction) {
       setActionsList((prev) =>
@@ -775,16 +817,19 @@ export function WorkflowRulesPage() {
                 kind: newActionKind,
                 timing: newActionTiming,
                 delayLabel: newActionTiming === 'scheduled' ? newActionDelay : undefined,
-                title: newActionTitle.trim() || item.title,
+                title: resolvedTitle || item.title,
                 badgeText: meta.badge,
                 badgeTone: meta.tone,
                 line1Label: meta.l1,
-                line1Value: newActionLine1.trim() || item.line1Value,
+                line1Value: resolvedLine1 || item.line1Value,
                 line2Label: meta.l2,
-                line2Value: newActionLine2.trim() || item.line2Value,
+                line2Value: resolvedLine2 || item.line2Value,
                 line2Accent: meta.accent,
                 hasTemplatePreview: newActionKind === 'whatsapp_email',
                 hasPayloadInspector: newActionKind === 'webhook',
+                functionId: newActionKind === 'custom_function' ? selectedFnObj?.id : undefined,
+                functionName: newActionKind === 'custom_function' ? selectedFnObj?.name : undefined,
+                paramsJson: newActionKind === 'custom_function' ? resolvedLine2 : undefined,
               }
             : item
         )
@@ -796,16 +841,19 @@ export function WorkflowRulesPage() {
         kind: newActionKind,
         timing: newActionTiming,
         delayLabel: newActionTiming === 'scheduled' ? newActionDelay : undefined,
-        title: newActionTitle.trim() || 'إجراء أتمتة مخصص جديد',
+        title: resolvedTitle || 'إجراء أتمتة مخصص جديد',
         badgeText: meta.badge,
         badgeTone: meta.tone,
         line1Label: meta.l1,
-        line1Value: newActionLine1.trim() || 'فريق المبيعات والعمليات',
+        line1Value: resolvedLine1 || 'فريق المبيعات والعمليات',
         line2Label: meta.l2,
-        line2Value: newActionLine2.trim() || 'تنفيذ تلقائي عند استيفاء الشرط',
+        line2Value: resolvedLine2 || 'تنفيذ تلقائي عند استيفاء الشرط',
         line2Accent: meta.accent,
         hasTemplatePreview: newActionKind === 'whatsapp_email',
         hasPayloadInspector: newActionKind === 'webhook',
+        functionId: newActionKind === 'custom_function' ? selectedFnObj?.id : undefined,
+        functionName: newActionKind === 'custom_function' ? selectedFnObj?.name : undefined,
+        paramsJson: newActionKind === 'custom_function' ? resolvedLine2 : undefined,
       };
       setActionsList((prev) => [...prev, created]);
       setActionTab(newActionTiming);
@@ -2082,7 +2130,18 @@ export function WorkflowRulesPage() {
                   </label>
                   <select
                     value={newActionKind}
-                    onChange={(e) => setNewActionKind(e.target.value as ActionKind)}
+                    onChange={(e) => {
+                      const nextKind = e.target.value as ActionKind;
+                      setNewActionKind(nextKind);
+                      if (nextKind === 'custom_function') {
+                        const firstFn = savedCustomFunctions[0];
+                        if (firstFn) {
+                          setSelectedFunctionId(firstFn.id);
+                          setNewActionTitle(`تشغيل دالة مخصصة: ${firstFn.name}`);
+                          setNewActionLine1(`${firstFn.name} (${firstFn.language})`);
+                        }
+                      }
+                    }}
                     className="w-full rounded-lg border border-[#CBD5E1] bg-white px-3 py-2 text-xs font-extrabold text-[#0F172A]"
                   >
                     <option value="whatsapp_email">إشعار WhatsApp Business / بريد إلكتروني</option>
@@ -2090,7 +2149,7 @@ export function WorkflowRulesPage() {
                     <option value="create_record">إنشاء سجل مرتبط (مهمة / فاتورة / صفقة)</option>
                     <option value="create_task">إنشاء وتكليف مهمة جديدة (Create Task)</option>
                     <option value="webhook">إطلاق Webhook برمجية (REST API)</option>
-                    <option value="custom_function">تشغيل دالة مخصصة (Custom Function)</option>
+                    <option value="custom_function">تشغيل دالة مخصصة (Execute Custom Function)</option>
                   </select>
                 </div>
 
@@ -2139,31 +2198,77 @@ export function WorkflowRulesPage() {
                 />
               </div>
 
-              <div>
-                <label className="mb-1 block text-xs font-bold text-[#334155]">
-                  الهدف / المستلم / الحقل المراد تحديثه *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={newActionLine1}
-                  onChange={(e) => setNewActionLine1(e.target.value)}
-                  className="w-full rounded-lg border border-[#CBD5E1] px-3 py-2 text-xs font-semibold text-[#0F172A]"
-                />
-              </div>
+              {newActionKind === 'custom_function' ? (
+                <>
+                  <div>
+                    <label className="mb-1 block text-xs font-bold text-[#334155]">
+                      اختر الدالة المخصصة المحفوظة (Saved Custom Function) *
+                    </label>
+                    <select
+                      value={selectedFunctionId}
+                      onChange={(e) => {
+                        const fnId = e.target.value;
+                        setSelectedFunctionId(fnId);
+                        const fnObj = savedCustomFunctions.find((f) => f.id === fnId);
+                        if (fnObj) {
+                          setNewActionTitle(`تشغيل دالة مخصصة: ${fnObj.name}`);
+                          setNewActionLine1(`${fnObj.name} (${fnObj.language})`);
+                        }
+                      }}
+                      className="w-full rounded-lg border border-[#CBD5E1] bg-white px-3 py-2 font-mono text-xs font-extrabold text-[#0F172A]"
+                    >
+                      {savedCustomFunctions.map((fn) => (
+                        <option key={fn.id} value={fn.id}>
+                          {fn.name} — {fn.description} ({fn.language})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-              <div>
-                <label className="mb-1 block text-xs font-bold text-[#334155]">
-                  القيمة الجديدة / القالب / رابط الـ Endpoint *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={newActionLine2}
-                  onChange={(e) => setNewActionLine2(e.target.value)}
-                  className="w-full rounded-lg border border-[#CBD5E1] px-3 py-2 text-xs font-semibold text-[#0F172A]"
-                />
-              </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-bold text-[#334155]">
+                      تمرير المعاملات للدالة (input.params JSON) *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      dir="ltr"
+                      value={customFunctionParams}
+                      onChange={(e) => setCustomFunctionParams(e.target.value)}
+                      placeholder='{"minThresholdSAR": 250000, "notifySalesDirector": true}'
+                      className="w-full rounded-lg border border-[#CBD5E1] px-3 py-2 font-mono text-xs font-semibold text-[#0F172A]"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="mb-1 block text-xs font-bold text-[#334155]">
+                      الهدف / المستلم / الحقل المراد تحديثه *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newActionLine1}
+                      onChange={(e) => setNewActionLine1(e.target.value)}
+                      className="w-full rounded-lg border border-[#CBD5E1] px-3 py-2 text-xs font-semibold text-[#0F172A]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-bold text-[#334155]">
+                      القيمة الجديدة / القالب / رابط الـ Endpoint *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newActionLine2}
+                      onChange={(e) => setNewActionLine2(e.target.value)}
+                      className="w-full rounded-lg border border-[#CBD5E1] px-3 py-2 text-xs font-semibold text-[#0F172A]"
+                    />
+                  </div>
+                </>
+              )}
 
               <div className="flex items-center justify-end gap-2.5 border-t border-[#E2E8F0] pt-4">
                 <button
@@ -2402,6 +2507,26 @@ export function WorkflowRulesPage() {
                 </div>
               )}
 
+              {simCustomFunctionResults.length > 0 && (
+                <div className="space-y-2 rounded-xl border border-[#E9D5FF] bg-[#FAF5FF] p-3.5">
+                  <div className="text-xs font-extrabold text-[#6B21A8]">
+                    مخرجات تشغيل الدوال المخصصة المرتبطة (Sandboxed Custom Functions):
+                  </div>
+                  {simCustomFunctionResults.map((res, idx) => (
+                    <div
+                      key={idx}
+                      className="rounded-lg bg-[#0F172A] p-2.5 text-left font-mono text-[11px] text-[#E2E8F0]"
+                      dir="ltr"
+                    >
+                      <div className="mb-1 font-bold text-[#C084FC]">
+                        fn: {res.functionName} ({res.durationMs}ms)
+                      </div>
+                      <pre className="overflow-x-auto whitespace-pre-wrap">{res.returnJson}</pre>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <div className="flex items-center justify-end gap-2.5 border-t border-[#E2E8F0] pt-4">
                 <button
                   type="button"
@@ -2412,7 +2537,43 @@ export function WorkflowRulesPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
+                    setSimStepState('running');
+                    const sampleRecord = buildSampleRecordForSandbox({
+                      sampleRecordId: simSelectedDealId,
+                      deals,
+                      leads: [],
+                    });
+                    const customFnActions = actionsList.filter((a) => a.kind === 'custom_function');
+                    const fnOutputs: { functionName: string; returnJson: string; durationMs: number }[] = [];
+
+                    for (const act of customFnActions) {
+                      const fnDef =
+                        savedCustomFunctions.find(
+                          (f) => f.id === act.functionId || f.name === act.functionName
+                        ) || savedCustomFunctions[0];
+                      if (fnDef) {
+                        let parsedParams: Record<string, unknown> = {};
+                        try {
+                          parsedParams = JSON.parse(act.paramsJson || act.line2Value || '{}');
+                        } catch {
+                          parsedParams = { raw: act.line2Value };
+                        }
+                        const res = await executeCustomFunctionInSandbox({
+                          func: fnDef,
+                          record: sampleRecord,
+                          params: parsedParams,
+                          orgId: currentOrgId,
+                        });
+                        fnOutputs.push({
+                          functionName: fnDef.name,
+                          returnJson: JSON.stringify(res.output, null, 2),
+                          durationMs: res.durationMs,
+                        });
+                      }
+                    }
+
+                    setSimCustomFunctionResults(fnOutputs);
                     setSimStepState('passed');
                     triggerToast('تم تنفيذ المحاكاة الفورية بنجاح على صفقة الاختبار');
                   }}

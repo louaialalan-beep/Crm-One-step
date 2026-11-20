@@ -103,7 +103,10 @@ export const LeadDetailPage: React.FC = () => {
     sendInboxReply,
     openInboxForLead,
     softDeleteLeads,
+    currentOrgId,
   } = useCrm();
+
+  const [activeTimelineTab, setActiveTimelineTab] = useState<'touchpoints' | 'email'>('touchpoints');
 
   const lead = useMemo(
     () => leads.find((l) => l.id === id || l.unique_id === id) ?? null,

@@ -30,9 +30,27 @@ export type DynamicRuleField =
   | 'phone'
   | 'email'
   | 'notes'
-  | 'aiScore';
+  | 'aiScore'
+  | 'channel'
+  | 'touchpoints_count'
+  | 'campaign_name'
+  | 'ad_id'
+  | 'utm_source'
+  | 'deal_stage'
+  | 'amount'
+  | 'company_name'
+  | 'annual_revenue'
+  | (string & {});
 
-export type DynamicRuleOperator = 'contains' | 'equals' | 'gte' | 'lte';
+export type DynamicRuleOperator =
+  | 'contains'
+  | 'equals'
+  | 'not_equals'
+  | 'greater_than'
+  | 'less_than'
+  | 'empty'
+  | 'gte'
+  | 'lte';
 
 export interface DockedFilterRule {
   id: string;
@@ -240,21 +258,36 @@ export function findLiveDuplicatesForInput(
 
 function evaluateDynamicRule(lead: Lead, rule: DockedFilterRule): boolean {
   const rawVal = rule.value.trim();
-  if (!rawVal) return true;
+  if (rule.operator !== 'empty' && !rawVal) return true;
 
   if (rule.field === 'aiScore') {
     const targetNum = Number(rawVal);
     if (!Number.isFinite(targetNum)) return true;
     const leadNum = lead.aiScore;
-    if (rule.operator === 'gte') return leadNum >= targetNum;
-    if (rule.operator === 'lte') return leadNum <= targetNum;
+    if (rule.operator === 'gte' || rule.operator === 'greater_than') return leadNum >= targetNum;
+    if (rule.operator === 'lte' || rule.operator === 'less_than') return leadNum <= targetNum;
+    if (rule.operator === 'not_equals') return leadNum !== targetNum;
     return leadNum === targetNum;
   }
 
-  const fieldValue = String(lead[rule.field] ?? '').toLowerCase();
+  const recordMap = lead as unknown as Record<string, unknown>;
+  const resolvedRaw =
+    rule.field === 'ad_id'
+      ? lead.adId
+      : rule.field === 'campaign_name'
+        ? lead.campaign
+        : recordMap[rule.field] ?? lead.customValues?.[rule.field] ?? '';
+
+  const fieldValue = String(resolvedRaw ?? '').toLowerCase();
+  if (rule.operator === 'empty') {
+    return fieldValue.trim().length === 0;
+  }
   const needle = rawVal.toLowerCase();
   if (rule.operator === 'equals') {
     return fieldValue === needle;
+  }
+  if (rule.operator === 'not_equals') {
+    return fieldValue !== needle;
   }
   return fieldValue.includes(needle);
 }

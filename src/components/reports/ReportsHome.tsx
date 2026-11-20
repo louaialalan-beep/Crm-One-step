@@ -700,12 +700,12 @@ export const ReportsHome: React.FC<ReportsHomeProps> = ({
                     <th className="w-10 py-3 px-3 text-center">
                       <Star className="h-3.5 w-3.5 mx-auto text-[#94A3B8]" />
                     </th>
-                    <th className="py-3 px-4">اسم التقرير والنوع</th>
-                    <th className="py-3 px-4">الوصف التنفيذي</th>
-                    <th className="py-3 px-4 whitespace-nowrap">المجلد</th>
-                    <th className="py-3 px-4 min-w-[145px] whitespace-nowrap">آخر تشغيل</th>
-                    <th className="py-3 px-4 whitespace-nowrap">المالك</th>
-                    <th className="w-24 py-3 px-4 text-center whitespace-nowrap">الإجراءات</th>
+                    <th className="py-3 px-3">اسم التقرير والنوع</th>
+                    <th className="py-3 px-3">الوصف التنفيذي</th>
+                    <th className="py-3 px-3 whitespace-nowrap">المجلد</th>
+                    <th className="py-3 px-3 min-w-[145px] whitespace-nowrap">آخر تشغيل</th>
+                    <th className="py-3 px-3 whitespace-nowrap">المالك</th>
+                    <th className="min-w-[115px] py-3 pl-4 pr-3 text-center whitespace-nowrap">الإجراءات</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#F1F5F9]">
@@ -750,13 +750,20 @@ export const ReportsHome: React.FC<ReportsHomeProps> = ({
                           </td>
 
                           {/* 2. Report Name + Type Label */}
-                          <td className="py-3 px-4">
+                          <td className="py-3 px-3">
                             <button
                               type="button"
                               onClick={() => handleRunReport(rpt)}
                               className="text-right font-extrabold text-[#0F172A] hover:text-[#2563EB] transition-colors cursor-pointer block"
                             >
-                              {rpt.name}
+                              {rpt.name.includes('Unfollowed Leads > 7 Days') ? (
+                                <>
+                                  {rpt.name.replace('(Unfollowed Leads > 7 Days)', '')}
+                                  (<bdi dir="ltr">Unfollowed Leads &gt; 7 Days</bdi>)
+                                </>
+                              ) : (
+                                rpt.name
+                              )}
                             </button>
                             <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-[#64748B]">
                               <span className="font-bold text-[#2563EB]">
@@ -768,31 +775,33 @@ export const ReportsHome: React.FC<ReportsHomeProps> = ({
                           </td>
 
                           {/* 3. Description */}
-                          <td className="py-3 px-4 max-w-xs">
+                          <td className="py-3 px-3 max-w-xs">
                             <p className="line-clamp-2 text-[11px] text-[#475569] leading-relaxed">
                               {rpt.description}
                             </p>
                           </td>
 
                           {/* 4. Folder Name */}
-                          <td className="py-3 px-4 whitespace-nowrap">
+                          <td className="py-3 px-3 whitespace-nowrap">
                             <span className="text-[11px] font-bold text-[#334155]">
                               {folderName}
                             </span>
                           </td>
 
                           {/* 5. Last Run Timestamp */}
-                          <td className="py-3 px-4 min-w-[145px] whitespace-nowrap text-[11px] text-[#64748B] tabular-nums">
-                            {formatArabicDateTime(rpt.lastRunAt)}
+                          <td className="py-3 px-3 min-w-[145px] whitespace-nowrap text-[11px] text-[#64748B] tabular-nums">
+                            <span dir="ltr" className="inline-block">
+                              {formatArabicDateTime(rpt.lastRunAt)}
+                            </span>
                           </td>
 
                           {/* 6. Owner */}
-                          <td className="py-3 px-4 whitespace-nowrap text-[11px] font-semibold text-[#334155]">
+                          <td className="py-3 px-3 whitespace-nowrap text-[11px] font-semibold text-[#334155]">
                             {rpt.createdBy}
                           </td>
 
                           {/* 7. Actions Dropdown (`⋮`) */}
-                          <td className="py-3 px-4 text-center relative">
+                          <td className="py-3 pl-4 pr-3 min-w-[115px] text-center whitespace-nowrap relative">
                             <div className="inline-flex items-center gap-1">
                               <button
                                 type="button"

@@ -5,6 +5,7 @@ import { CrmProvider, useCrm } from './context/CrmContext';
 import { AppShell } from './components/layout/AppShell';
 import { ActivitiesPage } from './pages/ActivitiesPage';
 import { AnalyticsPage } from './pages/AnalyticsPage';
+import { PredictiveAnalyticsPage } from './pages/PredictiveAnalyticsPage';
 import { BlueprintBuilderPage } from './pages/BlueprintBuilderPage';
 import { ContactDetailPage } from './pages/ContactDetailPage';
 import { ContactsPage } from './pages/ContactsPage';
@@ -41,6 +42,7 @@ import { ReportsPage } from './pages/ReportsPage';
 import { AccountsPage } from './pages/AccountsPage';
 import { AccountDetailPage } from './pages/AccountDetailPage';
 import { CalendarPage } from './pages/CalendarPage';
+import EmailSettingsPage from './pages/EmailSettingsPage';
 import {
   DataDeletionStatusPage,
   PrivacyPolicyPage,
@@ -195,6 +197,8 @@ export default function App() {
                     <Route path="/campaigns" element={<CampaignsPage />} />
                     <Route path="/reports" element={<ReportsPage />} />
                     <Route path="/analytics" element={<AnalyticsPage />} />
+                    <Route path="/predictive-analytics" element={<PredictiveAnalyticsPage />} />
+                    <Route path="/analytics/predictive" element={<PredictiveAnalyticsPage />} />
                     <Route path="/settings" element={<SetupHubPage />} />
                     <Route path="/super-admin" element={<SuperAdminPage />} />
                     <Route path="/settings/super-admin" element={<SuperAdminPage />} />
@@ -223,7 +227,7 @@ export default function App() {
                     <Route path="/settings/currencies" element={<CurrenciesSettingsPage />} />
                     <Route path="/settings/business-hours" element={<SubscriptionPage defaultTab="company" />} />
                     <Route path="/settings/teams" element={<UsersManagementPage />} />
-                    <Route path="/settings/email" element={<TemplatesManagerPage />} />
+                    <Route path="/settings/email" element={<EmailSettingsPage />} />
                     <Route path="/settings/validation-rules" element={<CustomFieldsBuilderPage />} />
                     <Route path="/settings/scheduled-actions" element={<WorkflowRulesPage />} />
                     <Route path="/settings/webhooks" element={<CustomFunctionsPage />} />

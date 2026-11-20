@@ -9,6 +9,15 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.permissions import (
+    PermissionContext,
+    apply_fls_to_response,
+    enforce_fls_on_write,
+    enforce_module_permission,
+    enforce_record_access,
+    filter_records_by_data_sharing,
+    get_permission_context,
+)
 from app.core.quotas import enforce_customer_quota
 from app.core.security import TokenPayload, get_current_token_payload
 from app.db.models import (
@@ -37,19 +46,25 @@ router = APIRouter(prefix="/leads", tags=["Leads & Atomic Conversion (RWQ-xxxxx)
 async def list_leads(
     include_converted: bool = False,
     db: AsyncSession = Depends(get_db),
+    perm_ctx: PermissionContext = Depends(get_permission_context),
 ) -> List[LeadResponse]:
+    enforce_module_permission(perm_ctx, "leads", "read")
     stmt = select(Lead).where(Lead.deleted_at.is_(None)).order_by(Lead.created_at.desc())
     if not include_converted:
         stmt = stmt.where(Lead.is_converted.is_(False))
     rows = (await db.scalars(stmt)).all()
-    return [LeadResponse.model_validate(row) for row in rows]
+    visible_rows = filter_records_by_data_sharing(perm_ctx, rows, owner_attr="owner_id")
+    validated = [LeadResponse.model_validate(row) for row in visible_rows]
+    return apply_fls_to_response(perm_ctx, "leads", validated)
 
 
 @router.get("/{lead_id}", response_model=LeadResponse)
 async def get_lead(
     lead_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    perm_ctx: PermissionContext = Depends(get_permission_context),
 ) -> LeadResponse:
+    enforce_module_permission(perm_ctx, "leads", "read")
     lead = await db.scalar(
         select(Lead).where(Lead.id == lead_id, Lead.deleted_at.is_(None))
     )
@@ -58,7 +73,8 @@ async def get_lead(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="العميل المحتمل غير موجود ضمن هذه المؤسسة.",
         )
-    return LeadResponse.model_validate(lead)
+    enforce_record_access(perm_ctx, lead.owner_id, action="read")
+    return apply_fls_to_response(perm_ctx, "leads", LeadResponse.model_validate(lead))
 
 
 @router.post("", response_model=LeadResponse, status_code=status.HTTP_201_CREATED)
@@ -66,13 +82,15 @@ async def create_lead(
     payload: LeadCreate,
     db: AsyncSession = Depends(get_db),
     token_payload: TokenPayload = Depends(get_current_token_payload),
+    perm_ctx: PermissionContext = Depends(get_permission_context),
     _org: Organization = Depends(enforce_customer_quota),
 ) -> LeadResponse:
     """
     Creates a new Lead with a Permanent Unified Customer Identifier (`RWQ-xxxxx`)
     and automatically records its initial Touchpoint in the same transaction.
-    Enforces server-side Plan Customer Quota (e.g. Free plan max 500 customers).
+    Enforces server-side Plan Customer Quota and Profile FLS/Create permissions.
     """
+    enforce_module_permission(perm_ctx, "leads", "create")
     unified_uid = (
         payload.lead_uid
         or payload.unique_id
@@ -90,7 +108,7 @@ async def create_lead(
         status=payload.status,
         score=payload.score,
         estimated_value=payload.estimated_value,
-        owner_id=payload.owner_id,
+        owner_id=payload.owner_id or perm_ctx.user_id,
         campaign_name=payload.campaign_name,
         ad_id=payload.ad_id,
         utm_source=payload.utm_source,
@@ -115,7 +133,7 @@ async def create_lead(
     db.add(touchpoint)
     await db.flush()
 
-    return LeadResponse.model_validate(lead)
+    return apply_fls_to_response(perm_ctx, "leads", LeadResponse.model_validate(lead))
 
 
 @router.patch("/{lead_id}", response_model=LeadResponse)
@@ -123,7 +141,9 @@ async def update_lead(
     lead_id: uuid.UUID,
     payload: LeadUpdate,
     db: AsyncSession = Depends(get_db),
+    perm_ctx: PermissionContext = Depends(get_permission_context),
 ) -> LeadResponse:
+    enforce_module_permission(perm_ctx, "leads", "update")
     lead = await db.scalar(
         select(Lead).where(Lead.id == lead_id, Lead.deleted_at.is_(None))
     )
@@ -132,13 +152,18 @@ async def update_lead(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="العميل المحتمل غير موجود.",
         )
+    enforce_record_access(perm_ctx, lead.owner_id, action="update")
 
-    update_data = payload.model_dump(exclude_unset=True)
+    update_data = enforce_fls_on_write(
+        perm_ctx,
+        "leads",
+        payload.model_dump(exclude_unset=True),
+    )
     for field, value in update_data.items():
         setattr(lead, field, value)
 
     await db.flush()
-    return LeadResponse.model_validate(lead)
+    return apply_fls_to_response(perm_ctx, "leads", LeadResponse.model_validate(lead))
 
 
 @router.delete("/{lead_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -146,7 +171,9 @@ async def soft_delete_lead(
     lead_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     token_payload: TokenPayload = Depends(get_current_token_payload),
+    perm_ctx: PermissionContext = Depends(get_permission_context),
 ) -> None:
+    enforce_module_permission(perm_ctx, "leads", "delete")
     lead = await db.scalar(
         select(Lead).where(Lead.id == lead_id, Lead.deleted_at.is_(None))
     )
@@ -155,6 +182,7 @@ async def soft_delete_lead(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="العميل المحتمل غير موجود.",
         )
+    enforce_record_access(perm_ctx, lead.owner_id, action="delete")
     lead.deleted_at = datetime.now(timezone.utc)
     lead.deleted_by = token_payload.sub
     await db.flush()

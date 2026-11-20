@@ -304,6 +304,16 @@ export function filterDeals(
   });
 }
 
+export interface BlueprintAfterActionSummary {
+  id: string;
+  type: 'field_update' | 'whatsapp_email' | 'create_task' | 'webhook' | 'custom_function';
+  label: string;
+  targetDetail: string;
+  functionId?: string;
+  functionName?: string;
+  paramsJson?: string;
+}
+
 export interface BlueprintTransitionRequirement {
   requiresModal: boolean;
   blueprintName: string;
@@ -315,11 +325,83 @@ export interface BlueprintTransitionRequirement {
   requireLossReason: boolean;
   requireNextStep: boolean;
   checklistItems: string[];
+  beforeError?: string | null;
+  afterActions?: BlueprintAfterActionSummary[];
+}
+
+interface StoredBlueprintDefinitionShape {
+  id: string;
+  name: string;
+  module: string;
+  active: boolean;
+  stages?: Array<{ id: string; title: string; category?: string }>;
+  transitions?: Array<{
+    id: string;
+    name: string;
+    fromStageId: string;
+    toStageId: string;
+    enabled: boolean;
+    roles?: string[];
+    beforeConditions?: Array<{
+      id: string;
+      fieldLabel: string;
+      operatorLabel: string;
+      valueLabel: string;
+      enabled: boolean;
+    }>;
+    mandatoryFields?: Array<{
+      id: string;
+      fieldName: string;
+      fieldType: string;
+      required: boolean;
+    }>;
+    requireNotes?: boolean;
+    requireAttachment?: boolean;
+    checklist?: Array<{ id: string; title: string; required: boolean }>;
+    afterActions?: Array<{
+      id: string;
+      type: BlueprintAfterActionSummary['type'];
+      label: string;
+      targetDetail: string;
+      enabled: boolean;
+      functionId?: string;
+      functionName?: string;
+      paramsJson?: string;
+    }>;
+  }>;
+}
+
+function readSavedDealsBlueprintFromStorage(orgId?: string): StoredBlueprintDefinitionShape | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const keysToTry = orgId
+      ? [`crm_enterprise_blueprints_v1_${orgId}`, 'crm_enterprise_blueprints_v1_org_riwaq_default']
+      : ['crm_enterprise_blueprints_v1_org_riwaq_default'];
+    for (const k of keysToTry) {
+      const raw = localStorage.getItem(k);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const found = parsed.find(
+          (b: StoredBlueprintDefinitionShape) =>
+            b.active &&
+            (b.module === 'الصفقات والمبيعات' ||
+              b.module?.toLowerCase().includes('deal') ||
+              b.name?.includes('صفقات'))
+        );
+        if (found) return found;
+      }
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return null;
 }
 
 export function getBlueprintTransitionRequirements(
   blueprints: Blueprint[],
-  targetStage: DealStage
+  targetStage: DealStage,
+  options?: { orgId?: string; deal?: Deal }
 ): BlueprintTransitionRequirement {
   const activeDealsBp = blueprints.find(
     (bp) =>
@@ -329,9 +411,62 @@ export function getBlueprintTransitionRequirements(
         bp.name.includes('صفقات'))
   );
 
+  const savedVisualBp = readSavedDealsBlueprintFromStorage(options?.orgId || options?.deal?.org_id);
   const targetCol = getDealColumnForStage(targetStage);
-  const bpName = activeDealsBp?.name ?? 'مخطط إغلاق صفقات المؤسسات الكبرى';
+  const bpName =
+    savedVisualBp?.name ?? activeDealsBp?.name ?? 'مخطط إغلاق صفقات المؤسسات الكبرى';
   const dynamicRule = activeDealsBp?.stageRequirements?.[targetStage];
+
+  // Extract matching visual transition from BlueprintBuilderPage if present
+  let matchedAfterActions: BlueprintAfterActionSummary[] = [];
+  let savedChecklist: string[] = [];
+  let beforeError: string | null = null;
+
+  if (savedVisualBp?.transitions && savedVisualBp.stages) {
+    const targetCategory =
+      targetStage === 'مكتملة' ? 'won' : targetStage === 'خسارة' ? 'lost' : 'normal';
+    const matchedStageNode = savedVisualBp.stages.find(
+      (s) =>
+        s.title.includes(targetStage) ||
+        (targetCategory === 'won' && (s.category === 'won' || s.title.includes('فوز') || s.title.includes('Won'))) ||
+        (targetCategory === 'lost' && (s.category === 'lost' || s.title.includes('خاسر') || s.title.includes('Lost'))) ||
+        (targetStage === 'عرض سعر' && s.title.includes('عرض السعر')) ||
+        (targetStage === 'تفاوض' && s.title.includes('مفاوضات'))
+    );
+    if (matchedStageNode) {
+      const tr = savedVisualBp.transitions.find(
+        (t) => t.enabled && t.toStageId === matchedStageNode.id
+      );
+      if (tr) {
+        matchedAfterActions = (tr.afterActions || [])
+          .filter((a) => a.enabled)
+          .map((a) => ({
+            id: a.id,
+            type: a.type,
+            label: a.label,
+            targetDetail: a.targetDetail,
+            functionId: a.functionId,
+            functionName: a.functionName,
+            paramsJson: a.paramsJson,
+          }));
+        savedChecklist = (tr.checklist || []).filter((c) => c.required).map((c) => c.title);
+
+        if (options?.deal && tr.beforeConditions) {
+          for (const cond of tr.beforeConditions.filter((c) => c.enabled)) {
+            if (
+              (cond.fieldLabel.includes('القيمة') || cond.fieldLabel.includes('الميزانية')) &&
+              cond.operatorLabel.includes('أكبر')
+            ) {
+              const numVal = Number(cond.valueLabel.replace(/[^0-9.]/g, ''));
+              if (Number.isFinite(numVal) && numVal > 0 && options.deal.amount < numVal) {
+                beforeError = `شرط البلوبرينت (Before): يجب أن تكون قيمة الصفقة أكبر من ${numVal.toLocaleString('en-US')} ر.س قبل الانتقال.`;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 
   if (dynamicRule) {
     return {
@@ -345,12 +480,16 @@ export function getBlueprintTransitionRequirements(
       requireLossReason: dynamicRule.requireLossReason ?? (targetStage === 'خسارة'),
       requireNextStep: dynamicRule.requireNextStep ?? false,
       checklistItems:
-        dynamicRule.checklistItems && dynamicRule.checklistItems.length > 0
+        savedChecklist.length > 0
+          ? savedChecklist
+          : dynamicRule.checklistItems && dynamicRule.checklistItems.length > 0
           ? dynamicRule.checklistItems
           : [
               'تم تأكيد واعتماد شروط الدفع وجدولة الدفعات الرسمية',
               'تم مطابقة الفاتورة الضريبية وإصدار أمر الشراء (PO) من العميل',
             ],
+      beforeError,
+      afterActions: matchedAfterActions,
     };
   }
 
@@ -365,15 +504,20 @@ export function getBlueprintTransitionRequirements(
       requireContractPdf: true,
       requireLossReason: false,
       requireNextStep: false,
-      checklistItems: activeDealsBp?.description
-        ? [
-            activeDealsBp.description,
-            'تم مطابقة الفاتورة الضريبية وإصدار أمر الشراء (PO) من العميل',
-          ]
-        : [
-            'تم تأكيد واعتماد شروط الدفع وجدولة الدفعات الرسمية',
-            'تم مطابقة الفاتورة الضريبية وإصدار أمر الشراء (PO) من العميل',
-          ],
+      checklistItems:
+        savedChecklist.length > 0
+          ? savedChecklist
+          : activeDealsBp?.description
+          ? [
+              activeDealsBp.description,
+              'تم مطابقة الفاتورة الضريبية وإصدار أمر الشراء (PO) من العميل',
+            ]
+          : [
+              'تم تأكيد واعتماد شروط الدفع وجدولة الدفعات الرسمية',
+              'تم مطابقة الفاتورة الضريبية وإصدار أمر الشراء (PO) من العميل',
+            ],
+      beforeError,
+      afterActions: matchedAfterActions,
     };
   }
 
@@ -388,15 +532,20 @@ export function getBlueprintTransitionRequirements(
       requireContractPdf: true,
       requireLossReason: false,
       requireNextStep: true,
-      checklistItems: activeDealsBp?.description
-        ? [
-            activeDealsBp.description,
-            'تم مطابقة الفاتورة الضريبية وإصدار أمر الشراء (PO) من العميل',
-          ]
-        : [
-            'تم تأكيد واعتماد شروط الدفع وجدولة الدفعات الرسمية',
-            'تم مطابقة الفاتورة الضريبية وإصدار أمر الشراء (PO) من العميل',
-          ],
+      checklistItems:
+        savedChecklist.length > 0
+          ? savedChecklist
+          : activeDealsBp?.description
+          ? [
+              activeDealsBp.description,
+              'تم مطابقة الفاتورة الضريبية وإصدار أمر الشراء (PO) من العميل',
+            ]
+          : [
+              'تم تأكيد واعتماد شروط الدفع وجدولة الدفعات الرسمية',
+              'تم مطابقة الفاتورة الضريبية وإصدار أمر الشراء (PO) من العميل',
+            ],
+      beforeError,
+      afterActions: matchedAfterActions,
     };
   }
 
@@ -412,6 +561,8 @@ export function getBlueprintTransitionRequirements(
       requireLossReason: true,
       requireNextStep: false,
       checklistItems: [],
+      beforeError,
+      afterActions: matchedAfterActions,
     };
   }
 
@@ -426,6 +577,8 @@ export function getBlueprintTransitionRequirements(
     requireLossReason: false,
     requireNextStep: false,
     checklistItems: [],
+    beforeError,
+    afterActions: matchedAfterActions,
   };
 }
 

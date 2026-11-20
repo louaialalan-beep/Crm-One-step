@@ -564,10 +564,79 @@ class InvoiceResponse(ORMBaseModel):
     vat_amount: Decimal
     total_amount: Decimal
     zatca_tlv_base64: str
+    xml_content: Optional[str] = None
+    zatca_hash: Optional[str] = None
+    zatca_status: str = "PHASE1_READY"
+    zatca_uuid: Optional[str] = None
+    zatca_signature: Optional[str] = None
+    zatca_pih: Optional[str] = None
+    zatca_invoice_type: str = "B2B_STANDARD"
+    zatca_submitted_at: Optional[datetime] = None
     issued_at: datetime
     due_date: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+
+
+class ZatcaPhase2SubmitRequest(BaseModel):
+    submission_mode: str = Field(
+        default="AUTO",
+        pattern="^(AUTO|CLEARANCE|REPORTING)$",
+        description="CLEARANCE للفواتير الضريبية B2B أو REPORTING للفواتير المبسطة B2C أو AUTO لتحديدها تلقائياً",
+    )
+    environment: str = Field(
+        default="SANDBOX",
+        pattern="^(SANDBOX|SIMULATION|PRODUCTION)$",
+    )
+    previous_invoice_hash: Optional[str] = Field(
+        default=None,
+        description="PIH - تجزئة الفاتورة السابقة في سلسلة الفواتير",
+    )
+
+
+class ZatcaPhase2SubmitResponse(BaseModel):
+    invoice_id: uuid.UUID
+    invoice_number: str
+    lead_uid: str
+    submission_type: str
+    environment: str
+    zatca_status: str
+    zatca_uuid: str
+    zatca_hash: str
+    zatca_pih: str
+    zatca_signature: str
+    zatca_tlv_base64: str
+    xml_content: str
+    clearance_or_reporting_message: str
+    submitted_at: datetime
+
+
+class ZatcaCsidOnboardRequest(BaseModel):
+    environment: str = Field(
+        default="SANDBOX",
+        pattern="^(SANDBOX|SIMULATION|PRODUCTION)$",
+    )
+    otp: str = Field(default="123345", min_length=6, max_length=12)
+    common_name: str = Field(default="TST-886431145-310122393500003")
+    organization_name: str = Field(default="Crm-One-step Enterprise")
+    organization_unit_name: str = Field(default="Riyadh Branch")
+    vat_number: str = Field(default="310122393500003")
+    invoice_type_flag: str = Field(default="1100", description="1100 = B2B & B2C")
+    location_address: str = Field(default="RRRD2929")
+    industry_business_category: str = Field(default="Information Technology")
+
+
+class ZatcaCsidOnboardResponse(BaseModel):
+    environment: str
+    request_id: str
+    disposition_message: str
+    csr_base64: str
+    binary_security_token: str
+    secret: str
+    public_key_base64: str
+    certificate_hash_sha256: str
+    endpoints: Dict[str, str]
+    created_at: datetime
 
 
 class OrderAttributionResponse(ORMBaseModel):
@@ -694,6 +763,43 @@ class DealStageTransitionResponse(BaseModel):
     triggered_after_actions: List[Dict[str, Any]] = Field(default_factory=list)
     triggered_workflow_rules: List[str] = Field(default_factory=list)
     capi_purchase_queued: bool = False
+
+
+class LeadStageTransitionRequest(BaseModel):
+    to_stage: str = Field(..., min_length=1)
+    lost_reason: Optional[str] = None
+    review_notes: Optional[str] = None
+    next_step: Optional[str] = None
+    estimated_value: Optional[Decimal] = None
+    checklist_completed: List[str] = Field(default_factory=list)
+    during_fields: Dict[str, Any] = Field(default_factory=dict)
+
+
+class LeadStageTransitionResponse(BaseModel):
+    lead: LeadResponse
+    from_stage: str
+    to_stage: str
+    triggered_after_actions: List[Dict[str, Any]] = Field(default_factory=list)
+    triggered_workflow_rules: List[str] = Field(default_factory=list)
+
+
+class CustomFunctionExecuteRequest(BaseModel):
+    function_name: str = Field(..., min_length=1)
+    record_id: str = Field(..., min_length=1)
+    module: str = Field(default="deals")
+    lead_uid: Optional[str] = None
+    code: str = ""
+    params: Dict[str, Any] = Field(default_factory=dict)
+
+
+class CustomFunctionExecuteResponse(BaseModel):
+    function_name: str
+    record_id: str
+    lead_uid: Optional[str] = None
+    output: Dict[str, Any] = Field(default_factory=dict)
+    logs: List[str] = Field(default_factory=list)
+    updated_fields: Dict[str, Any] = Field(default_factory=dict)
+    created_tasks_count: int = 0
 
 
 class StageBottleneckMetric(BaseModel):
@@ -880,4 +986,107 @@ class SuperAdminOrganizationUpdateRequest(BaseModel):
     seat_limit: Optional[int] = Field(default=None, ge=1)
     payment_status: Optional[str] = None
     is_active: Optional[bool] = None
+
+
+# ============================================================================
+# 8. Phase 5 Schemas: Two-Way Email (IMAP / SMTP)
+# ============================================================================
+
+
+class EmailSettingsUpdateRequest(BaseModel):
+    imap_host: str = Field(default="imap.gmail.com", min_length=2)
+    imap_port: int = Field(default=993, ge=1, le=65535)
+    imap_username: str = Field(default="")
+    imap_password: Optional[str] = Field(
+        default=None,
+        description="تُحفظ مشفّرة في الخادم لكل مؤسسة (Fernet/AES-HMAC)",
+    )
+    imap_use_ssl: bool = True
+    imap_folder: str = "INBOX"
+    smtp_host: str = Field(default="smtp.gmail.com", min_length=2)
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_username: str = Field(default="")
+    smtp_password: Optional[str] = Field(
+        default=None,
+        description="تُحفظ مشفّرة في الخادم لكل مؤسسة",
+    )
+    smtp_use_tls: bool = True
+    from_name: str = Field(default="فريق المبيعات — Crm-One-step")
+    from_email: str = Field(default="sales@crm-one-step.sa")
+    signature_html: Optional[str] = None
+    sync_enabled: bool = True
+    sync_interval_minutes: int = Field(default=5, ge=1, le=120)
+
+
+class EmailSettingsResponse(BaseModel):
+    org_id: uuid.UUID
+    imap_host: str
+    imap_port: int
+    imap_username: str
+    has_imap_password: bool = False
+    imap_password_masked: str = ""
+    imap_use_ssl: bool = True
+    imap_folder: str = "INBOX"
+    smtp_host: str
+    smtp_port: int
+    smtp_username: str
+    has_smtp_password: bool = False
+    smtp_password_masked: str = ""
+    smtp_use_tls: bool = True
+    from_name: str
+    from_email: str
+    signature_html: Optional[str] = None
+    sync_enabled: bool = True
+    sync_interval_minutes: int = 5
+    encryption_algorithm: str = "AES-256-HMAC-SHA256"
+    last_synced_at: Optional[str] = None
+
+
+class EmailConnectionTestResponse(BaseModel):
+    imap_ok: bool
+    smtp_ok: bool
+    imap_status: str
+    smtp_status: str
+    inbox_messages_count: int = 0
+    latency_ms: int = 0
+    tested_at: str
+
+
+class EmailSendReplyRequest(BaseModel):
+    lead_uid: str = Field(..., description="المعرّف الموحد للعميل RWQ-xxxxx")
+    lead_id: Optional[uuid.UUID] = None
+    contact_id: Optional[uuid.UUID] = None
+    deal_id: Optional[uuid.UUID] = None
+    to_email: str = Field(..., min_length=3)
+    cc_email: Optional[str] = None
+    subject: str = Field(..., min_length=1)
+    body_text: str = Field(..., min_length=1)
+    body_html: Optional[str] = None
+    in_reply_to: Optional[str] = None
+    attachments: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class EmailMessageResponse(ORMBaseModel):
+    id: uuid.UUID
+    org_id: uuid.UUID
+    lead_uid: str
+    lead_id: Optional[uuid.UUID] = None
+    contact_id: Optional[uuid.UUID] = None
+    deal_id: Optional[uuid.UUID] = None
+    direction: str
+    from_email: str
+    to_email: str
+    cc_email: Optional[str] = None
+    subject: str
+    body_text: str
+    body_html: Optional[str] = None
+    message_id_header: Optional[str] = None
+    in_reply_to: Optional[str] = None
+    folder: str
+    status: str
+    attachments: List[Dict[str, Any]] = Field(default_factory=list)
+    metadata: Dict[str, Any] = Field(default_factory=dict, alias="metadata_")
+    created_at: datetime
+    updated_at: datetime
+
 

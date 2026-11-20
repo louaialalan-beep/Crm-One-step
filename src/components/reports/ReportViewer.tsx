@@ -423,7 +423,14 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-[18px] sm:text-[20px] font-extrabold text-[#0F172A]">
-                  {report.name}
+                  {report.name.includes('Unfollowed Leads > 7 Days') ? (
+                    <>
+                      {report.name.replace('(Unfollowed Leads > 7 Days)', '')}
+                      (<bdi dir="ltr">Unfollowed Leads &gt; 7 Days</bdi>)
+                    </>
+                  ) : (
+                    report.name
+                  )}
                 </h1>
                 <span className="rounded-lg border border-[#DBEAFE] bg-[#EFF6FF] px-2.5 py-0.5 text-[11px] font-extrabold text-[#2563EB]">
                   {REPORT_TYPE_BADGES[report.reportType]}
